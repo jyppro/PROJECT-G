@@ -101,62 +101,82 @@ protected:
 public:
 
     // --- [던전 설정 변수들] ---
+
+    // 생성할 방 갯수
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     int32 NumberOfRoomsToGenerate = 50;
 
+    // 생성 범위
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     float SpawnRadius = 2000.0f;
 
+    // 그리드 크기
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     float GridSize = 1000.0f;
 
+    // 최소 방 사이즈
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     FVector2D MinRoomSize = FVector2D(1000.0f, 1000.0f);
 
+    // 최대 방 사이즈
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     FVector2D MaxRoomSize = FVector2D(3000.0f, 3000.0f);
 
+    // 디버그 설정
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     bool bShowDebugBoxes = true;
 
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     FVector2D MainRoomSizeThreshold = FVector2D(2000.0f, 2000.0f);
 
+    // 막다른 길 방지를 위한 추가 경로 설정 옵션
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     float AdditionalPathProbability = 0.0f;
 
-    UPROPERTY(EditAnywhere, Category = "Dungeon Spawning")
-    TArray<FRoomPrefabData> MainRoomPrefabs;
-
-    // 복도 에셋 대신, 다시 임시 큐브 스폰용 빈 껍데기 프리팹만 받습니다.
-    UPROPERTY(EditAnywhere, Category = "Dungeon Spawning")
-    TSubclassOf<AActor> CorridorPrefab;
-
+    // 방 사이 거리 유지를 위한 패딩
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     float RoomPadding = 1000.0f;
 
-    // 옛날 코드인 복도 두께(Width)로 완벽 복구!
+    // 복도 두께
     UPROPERTY(EditAnywhere, Category = "Dungeon Settings")
     float CorridorWidth = 500.0f;
 
+    // 던전 방 프리팹
+    UPROPERTY(EditAnywhere, Category = "Dungeon Spawning")
+    TArray<FRoomPrefabData> MainRoomPrefabs;
+
+    // 복도 프리팹
+    UPROPERTY(EditAnywhere, Category = "Dungeon Spawning")
+    TSubclassOf<AActor> CorridorPrefab;
+
+    // 가짜 벽을 대체할 진짜 문 프리팹
+    UPROPERTY(EditAnywhere, Category = "Dungeon Spawning")
+    TSubclassOf<AActor> DoorPrefab;
+
+
     // --- [던전 데이터 관리] ---
+
+    // 방 목록
     UPROPERTY(VisibleAnywhere, Category = "Dungeon Data")
     TArray<FDungeonRoom> RoomList;
 
+    // 최종 복도 경로
     UPROPERTY(VisibleAnywhere, Category = "Dungeon Data")
     TArray<FRoomEdge> FinalPaths;
 
-    // TMap 삭제, 예전 TArray 형태로 완벽 복구!
+    // 복도 바닥
     UPROPERTY(VisibleAnywhere, Category = "Dungeon Data")
     TArray<FVector> CorridorTiles;
 
+
     // --- [핵심 기능 함수들] ---
+
     float SnapToGrid(float Value);
+
+    bool DoRoomsOverlap(const FDungeonRoom& RoomA, const FDungeonRoom& RoomB);
 
     UFUNCTION(BlueprintCallable, Category = "Dungeon Generation")
     void GenerateRandomRooms();
-
-    bool DoRoomsOverlap(const FDungeonRoom& RoomA, const FDungeonRoom& RoomB);
 
     UFUNCTION(BlueprintCallable, Category = "Dungeon Generation")
     void SeparateRooms();

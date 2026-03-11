@@ -246,7 +246,6 @@ void ADungeonGenerator::CreateCorridors()
             {
                 FVector Current = Start;
 
-                // 옛날의 단순하고 완벽했던 이동 로직으로 복구!
                 while (!FMath::IsNearlyEqual(Current.X, End.X, 10.0f))
                 {
                     float MoveAmount = FMath::Min(CorridorWidth, FMath::Abs(End.X - Current.X));
@@ -326,7 +325,7 @@ void ADungeonGenerator::SpawnDungeonActors()
     }
 
     // ---------------------------------------------------------
-    // 2.5) 복도 양옆 벽 스폰 로직 (새로 추가!)
+    // 2.5) 복도 양옆 벽 스폰 로직
     // ---------------------------------------------------------
 
     // 헬퍼 람다 함수: 특정 방향에 다른 복도 타일이 이어져 있는지 확인
@@ -334,7 +333,7 @@ void ADungeonGenerator::SpawnDungeonActors()
         {
             for (const FVector& Tile : CorridorTiles)
             {
-                // 타일 간의 거리가 복도 너비와 비슷하면 길이 이어져 있다고 판단!
+                // 타일 간의 거리가 복도 너비와 비슷하면 길이 이어져 있다고 판단
                 if (FVector::Dist(Tile, CheckPos) < CorridorWidth * 0.9f)
                 {
                     return true;
@@ -353,18 +352,17 @@ void ADungeonGenerator::SpawnDungeonActors()
         FVector EastPos = TilePos + FVector(CorridorWidth, 0.0f, 0.0f);
         FVector WestPos = TilePos + FVector(-CorridorWidth, 0.0f, 0.0f);
 
-        // 원하시는 대로 벽의 두께와 높이를 조절하세요!
         float WallThickness = 50.0f; // 얇은 벽 두께
         float WallHeight = 500.0f;   // 플레이어를 막아줄 높이
 
-        // 북쪽(+Y)에 길이 없고, 방 내부도 아니면 벽 스폰!
+        // 북쪽(+Y)에 길이 없고, 방 내부도 아니면 벽 스폰
         if (!HasAdjacentCorridor(NorthPos) && !IsPointInAnyMainRoom(NorthPos))
         {
             FVector WallPos = TilePos + FVector(0.0f, CorridorWidth * 0.5f, WallHeight * 0.5f);
             AActor* Wall = GetWorld()->SpawnActor<AActor>(CorridorPrefab, WallPos, FRotator::ZeroRotator);
             if (Wall) Wall->SetActorScale3D(FVector(CorridorWidth / 100.0f, WallThickness / 100.0f, WallHeight / 100.0f));
         }
-        // 남쪽(-Y)에 길이 없고, 방 내부도 아니면 벽 스폰!
+        // 남쪽(-Y)에 길이 없고, 방 내부도 아니면 벽 스폰
         if (!HasAdjacentCorridor(SouthPos) && !IsPointInAnyMainRoom(SouthPos))
         {
             FVector WallPos = TilePos + FVector(0.0f, -CorridorWidth * 0.5f, WallHeight * 0.5f);
@@ -388,7 +386,7 @@ void ADungeonGenerator::SpawnDungeonActors()
     }
 
     // ---------------------------------------------------------
-    // 3) 가짜 벽 파괴 로직
+    // 3) 가짜 벽 파괴 및 문(Door) 생성 로직
     // ---------------------------------------------------------
     for (const FVector& TilePos : CorridorTiles)
     {
@@ -415,6 +413,22 @@ void ADungeonGenerator::SpawnDungeonActors()
 
                 if (OverlappedComp && OverlappedComp->ComponentHasTag(FName("FakeWall")))
                 {
+                    // 벽을 부수기 전에, 그 위치와 회전, 크기(Scale)를 모두 복사
+                    FTransform DoorTransform = OverlappedComp->GetComponentTransform();
+
+                    if (DoorPrefab)
+                    {
+                        // 1. 문을 먼저 스폰
+                        AActor* SpawnedDoor = GetWorld()->SpawnActor<AActor>(DoorPrefab, DoorTransform);
+
+                        // 2. 스폰된 문에 가짜 벽의 크기(Scale)를 강제로 덮어씌움
+                        if (SpawnedDoor)
+                        {
+                            SpawnedDoor->SetActorScale3D(DoorTransform.GetScale3D());
+                        }
+                    }
+
+                    // 문을 생성했으니 원래 있던 가짜 큐브 벽은 파괴
                     OverlappedComp->DestroyComponent();
                 }
             }
@@ -493,7 +507,7 @@ void ADungeonGenerator::DrawDebugRooms()
         DrawDebugLine(GetWorld(), StartPoint, EndPoint, FColor::Blue, true, -1.0f, 0, 15.0f);
     }
 
-    // 예전 배열(TArray) 기반의 깔끔한 디버그 코드로 복구!
+    // 예전 배열(TArray) 기반의 깔끔한 디버그 코드로 복구
     for (const FVector& TilePos : CorridorTiles)
     {
         FVector Extent = FVector(GridSize * 0.5f, GridSize * 0.5f, 10.0f);
