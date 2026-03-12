@@ -92,6 +92,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsFiring = false;
 
+	// 반동 및 탄 퍼짐(Spread) 관련 변수들
+
+	// UI(위젯)에서 에임을 벌릴 때 읽어갈 핵심 수치입니다!
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	float CurrentSpread = 0.0f;
+
 protected:
 	// 카메라 줌 관련 설정값
 	float DefaultFOV = 90.0f; // 평소 시야각
@@ -101,4 +107,28 @@ protected:
 	// 타이머를 관리할 핸들과, 사격 자세를 끝내는 함수
 	FTimerHandle FireTimerHandle;
 	void StopFiringPose();
+
+	// 반동 튜닝용 설정값들 (블루프린트에서 쉽게 수치를 바꿀 수 있게 세팅합니다)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	float SpreadPerShot = 1.0f; // 한 발 쏠 때마다 늘어나는 퍼짐 수치
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	float MaxSpread = 5.0f; // 퍼짐 한계선 (에임이 끝도 없이 벌어지는 것 방지)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	float SpreadRecoveryRate = 5.0f; // 초당 퍼짐 회복(에임이 다시 모이는) 속도
+
+	// 1인칭 정조준(FPS) 전환을 위한 변수들
+	// 에디터에서 실시간으로 값을 조절하며 총구에 딱 맞게 세팅할 수 있게 UPROPERTY를 붙입니다!
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float DefaultArmLength = 250.0f; // 평소 카메라 거리 (어깨너머)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	float AimArmLength = -10.0f; // 조준 시 카메라 거리 (0 이하면 캐릭터 안으로 바짝 붙습니다)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	FVector DefaultSocketOffset = FVector(0.0f, 60.0f, 50.0f); // 평소 위치 (우측 어깨)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+	FVector AimSocketOffset = FVector(40.0f, 15.0f, 60.0f); // 조준 시 위치 (눈앞/총구 바로 뒤)
 };

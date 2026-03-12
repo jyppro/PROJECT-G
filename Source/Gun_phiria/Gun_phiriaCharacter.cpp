@@ -54,6 +54,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 void AGun_phiriaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (CameraBoom)
+	{
+		DefaultSocketOffset = CameraBoom->SocketOffset;
+	}
 }
 
 // 매 프레임마다 카메라의 줌 상태를 부드럽게 업데이트
@@ -61,15 +66,30 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (FollowCamera)
+	// FOV 줌인 + 1인칭 위치로 스무스하게 이동하는 로직 통합
+	if (FollowCamera && CameraBoom)
 	{
-		// 조준 중이면 AimFOV(60), 아니면 DefaultFOV(90)를 목표로 삼습니다.
+		// 1. 시야각(FOV) 스무스 줌
 		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
-		float CurrentFOV = FollowCamera->FieldOfView;
-
-		// FInterpTo로 현재 시야각에서 목표 시야각으로 스무스하게 보간합니다.
-		float NewFOV = FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, ZoomInterpSpeed);
+		float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
 		FollowCamera->SetFieldOfView(NewFOV);
+
+		// 2. 카메라 막대기 길이 줄이기 (캐릭터 뒤통수 -> 눈앞으로)
+		float TargetLength = bIsAiming ? AimArmLength : DefaultArmLength;
+		float NewLength = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetLength, DeltaTime, ZoomInterpSpeed);
+		CameraBoom->TargetArmLength = NewLength;
+
+		// 3. 카메라 위치 옮기기 (우측 어깨 -> 총의 가늠자 라인)
+		FVector TargetOffset = bIsAiming ? AimSocketOffset : DefaultSocketOffset;
+		FVector NewOffset = FMath::VInterpTo(CameraBoom->SocketOffset, TargetOffset, DeltaTime, ZoomInterpSpeed);
+		CameraBoom->SocketOffset = NewOffset;
+	}
+
+	// 탄 퍼짐 수치 서서히 회복 (에임 모으기)
+	if (CurrentSpread > 0.0f)
+	{
+		// FInterpTo를 사용해 0.0을 향해 부드럽게 숫자를 줄여줍니다.
+		CurrentSpread = FMath::FInterpTo(CurrentSpread, 0.0f, DeltaTime, SpreadRecoveryRate);
 	}
 }
 
@@ -176,6 +196,25 @@ void AGun_phiriaCharacter::Fire()
 	// 사격 자세 켜기 & 0.2초 뒤에 끄도록 타이머 설정
 	bIsFiring = true;
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
+
+	// 조준 여부에 따른 반동/퍼짐 감소 배수 설정
+	// 조준 중(bIsAiming이 true)이면 0.3 (30% 수준으로 감소), 아니면 1.0 (100% 원본 그대로)
+	float AimMultiplier = bIsAiming ? 0.3f : 1.0f;
+
+	// 1. 물리적 카메라 반동 (화면 튀기)
+	if (Controller != nullptr)
+	{
+		// 원래 랜덤 값에 AimMultiplier를 곱해서 조준 시 반동을 확 줄여줍니다!
+		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * AimMultiplier;
+		float RecoilYaw = FMath::RandRange(-0.5f, 0.5f) * AimMultiplier;
+
+		AddControllerPitchInput(RecoilPitch);
+		AddControllerYawInput(RecoilYaw);
+	}
+
+	// 2. 탄 퍼짐(Spread) 수치 증가
+	// 늘어나는 퍼짐 수치(SpreadPerShot)에도 AimMultiplier를 곱해줍니다.
+	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * AimMultiplier), 0.0f, MaxSpread);
 
 	// 1. 카메라의 현재 위치와 바라보는 방향(정중앙 크로스헤어 방향)을 가져옵니다.
 	FVector StartLocation = FollowCamera->GetComponentLocation();
