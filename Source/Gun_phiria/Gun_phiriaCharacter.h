@@ -143,4 +143,8 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	FVector AimSocketOffset = FVector(40.0f, 15.0f, 60.0f); // 조준 시 위치 (눈앞/총구 바로 뒤)
+
+	/** 조준 전용(1인칭) 카메라 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	class UCameraComponent* ADSCamera;
 };

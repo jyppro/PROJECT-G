@@ -54,6 +54,17 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetupAttachment(GetMesh(), FName("WeaponSocket"));
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 총은 충돌 처리가 필요 없으므로 끔
+
+	// --- [여기에 새 코드 추가] 조준 전용 카메라 생성 및 가늠좌 소켓에 부착 ---
+	ADSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ADSCamera"));
+	// WeaponMesh의 "SightSocket"에 정확히 부착합니다.
+	ADSCamera->SetupAttachment(WeaponMesh, FName("SightSocket"));
+
+	// 카메라는 마우스가 아닌 '총의 애니메이션 흔들림'을 그대로 따라가야 하므로 false로 설정합니다.
+	ADSCamera->bUsePawnControlRotation = false;
+
+	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둡니다.
+	ADSCamera->SetAutoActivate(false);
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -71,14 +82,21 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// 1. 카메라 이동 로직 수정 (카메라는 고정, FOV만 줌인)
-	if (FollowCamera && CameraBoom)
+	if (FollowCamera && ADSCamera) // CameraBoom 대신 ADSCamera 확인
 	{
 		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
-		float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
-		FollowCamera->SetFieldOfView(NewFOV);
 
-		// CameraBoom의 TargetArmLength와 SocketOffset을 변경하는 코드는 모두 삭제하거나 주석 처리하세요!
-		// 카메라는 제자리에 두고 팔(무기)을 카메라로 끌고 와야 완벽한 정조준이 됩니다.
+		// 조준 중일 때는 ADSCamera의 FOV를 좁히고, 아닐 때는 FollowCamera의 FOV를 넓힙니다.
+		if (bIsAiming)
+		{
+			float NewFOV = FMath::FInterpTo(ADSCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
+			ADSCamera->SetFieldOfView(NewFOV);
+		}
+		else
+		{
+			float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
+			FollowCamera->SetFieldOfView(NewFOV);
+		}
 	}
 
 	// 탄 퍼짐 수치 서서히 회복
@@ -195,9 +213,16 @@ void AGun_phiriaCharacter::StartAiming()
 {
 	bIsAiming = true;
 
-	// 슈팅 게임 필수 로직: 조준할 때는 캐릭터가 마우스 방향(카메라 방향)을 바라보며 걷게 만듭니다.
+	// 슈팅 게임 필수 로직: 조준할 때는 캐릭터가 마우스 방향을 바라보며 걷게 만듭니다.
 	bUseControllerRotationYaw = true;
 	GetCharacterMovement()->bOrientRotationToMovement = false;
+
+	// --- [새 코드 추가] 카메라 전환: 3인칭 끄기, 1인칭(가늠좌) 켜기 ---
+	if (FollowCamera && ADSCamera)
+	{
+		FollowCamera->SetActive(false);
+		ADSCamera->SetActive(true);
+	}
 }
 
 // 조준 종료 시 실행되는 로직
@@ -208,6 +233,13 @@ void AGun_phiriaCharacter::StopAiming()
 	// 조준을 풀면 다시 자유롭게 뛰어다니도록 원래 상태로 되돌립니다.
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	// --- [새 코드 추가] 카메라 전환: 1인칭(가늠좌) 끄기, 3인칭 켜기 ---
+	if (FollowCamera && ADSCamera)
+	{
+		ADSCamera->SetActive(false);
+		FollowCamera->SetActive(true);
+	}
 }
 
 // 진짜 사격 로직 (Line Trace)
