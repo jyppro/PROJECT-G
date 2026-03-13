@@ -49,6 +49,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	// 무기 컴포넌트 생성 및 손에 부착 (소켓 이름은 블루프린트와 동일하게 "WeaponSocket")
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(GetMesh(), FName("WeaponSocket"));
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 총은 충돌 처리가 필요 없으므로 끔
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -61,36 +66,53 @@ void AGun_phiriaCharacter::BeginPlay()
 	}
 }
 
-// 매 프레임마다 카메라의 줌 상태를 부드럽게 업데이트
 void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// FOV 줌인 + 1인칭 위치로 스무스하게 이동하는 로직 통합
+	// 1. 카메라 이동 로직 수정 (카메라는 고정, FOV만 줌인)
 	if (FollowCamera && CameraBoom)
 	{
-		// 1. 시야각(FOV) 스무스 줌
 		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
 		float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
 		FollowCamera->SetFieldOfView(NewFOV);
 
-		// 2. 카메라 막대기 길이 줄이기 (캐릭터 뒤통수 -> 눈앞으로)
-		float TargetLength = bIsAiming ? AimArmLength : DefaultArmLength;
-		float NewLength = FMath::FInterpTo(CameraBoom->TargetArmLength, TargetLength, DeltaTime, ZoomInterpSpeed);
-		CameraBoom->TargetArmLength = NewLength;
-
-		// 3. 카메라 위치 옮기기 (우측 어깨 -> 총의 가늠자 라인)
-		FVector TargetOffset = bIsAiming ? AimSocketOffset : DefaultSocketOffset;
-		FVector NewOffset = FMath::VInterpTo(CameraBoom->SocketOffset, TargetOffset, DeltaTime, ZoomInterpSpeed);
-		CameraBoom->SocketOffset = NewOffset;
+		// CameraBoom의 TargetArmLength와 SocketOffset을 변경하는 코드는 모두 삭제하거나 주석 처리하세요!
+		// 카메라는 제자리에 두고 팔(무기)을 카메라로 끌고 와야 완벽한 정조준이 됩니다.
 	}
 
-	// 탄 퍼짐 수치 서서히 회복 (에임 모으기)
+	// 탄 퍼짐 수치 서서히 회복
 	if (CurrentSpread > 0.0f)
 	{
-		// FInterpTo를 사용해 0.0을 향해 부드럽게 숫자를 줄여줍니다.
 		CurrentSpread = FMath::FInterpTo(CurrentSpread, 0.0f, DeltaTime, SpreadRecoveryRate);
 	}
+
+	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 ---
+	if (bIsAiming && FollowCamera && WeaponMesh)
+	{
+		// 1. 가늠좌(Sight)가 위치해야 할 화면 정중앙의 월드 좌표
+		FVector CameraLocation = FollowCamera->GetComponentLocation();
+		FVector CameraForward = FollowCamera->GetForwardVector();
+		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * AimDistance);
+
+		// 2. 가늠좌에서 무기 손잡이(오른손)까지의 고정된 오프셋 벡터 구하기
+		// 무기 메쉬의 루트 위치 = 오른손이 쥐고 있는 위치입니다.
+		FVector HandWorldLoc = WeaponMesh->GetComponentLocation();
+		FVector SightWorldLoc = WeaponMesh->GetSocketLocation(FName("SightSocket"));
+		FVector SightToHandOffset = HandWorldLoc - SightWorldLoc;
+
+		// 3. 목표 가늠좌 위치에 오프셋을 더해 '오른손이 도달해야 할 최종 월드 좌표' 산출
+		FVector TargetHandWorldLoc = TargetSightWorldLoc + SightToHandOffset;
+
+		// 4. 캐릭터 기준(Component Space)으로 변환하여 AnimBP가 이해할 수 있게 함
+		FTransform MeshTransform = GetMesh()->GetComponentTransform();
+		FVector TargetHandCS = MeshTransform.InverseTransformPosition(TargetHandWorldLoc);
+
+		// 5. 프레임 제한 해제 시에도 안전하도록 Interp 적용 (기존에 잘 짜두신 부분 활용)
+		DynamicAimOffset = FMath::VInterpTo(DynamicAimOffset, TargetHandCS, DeltaTime, 20.0f);
+	}
+	// else문에서 ZeroVector로 되돌리는 로직은 삭제하세요. 
+	// (0,0,0)은 캐릭터의 발밑이기 때문에, 조준을 풀 때 AnimBP의 Alpha 값으로 조절하는 것이 맞습니다.
 }
 
 //////////////////////////////////////////////////////////////////////////

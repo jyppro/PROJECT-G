@@ -98,6 +98,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	float CurrentSpread = 0.0f;
 
+	// C++에서 관리할 무기 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (AllowPrivateAccess = "true"))
+	class UStaticMeshComponent* WeaponMesh;
+
+	// 이 변수가 계산된 오프셋 값을 들고 애니메이션 블루프린트로 넘어갑니다!
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aiming")
+	FVector DynamicAimOffset;
+
+	// 카메라 정중앙에서 총이 얼마나 떨어져 있을지 결정하는 거리 (조절 가능)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aiming")
+	float AimDistance = 40.0f;
+
 protected:
 	// 카메라 줌 관련 설정값
 	float DefaultFOV = 90.0f; // 평소 시야각
