@@ -84,6 +84,9 @@ public:
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
+	// HUD에서 크로스헤어 간격을 계산하기 위해 퍼짐 수치를 가져오는 함수
+	float GetCurrentSpread() const { return CurrentSpread; }
+
 	// 이 변수가 켜지면 애니메이션 블루프린트에서 조준 자세를 잡습니다!
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsAiming = false;

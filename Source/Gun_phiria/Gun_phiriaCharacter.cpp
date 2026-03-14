@@ -8,29 +8,25 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
-#include "DrawDebugHelpers.h"  // 총알 궤적(레이저)을 눈으로 보기 위해 필수!
+#include "DrawDebugHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
-//////////////////////////////////////////////////////////////////////////
-// AGun_phiriaCharacter
-
 AGun_phiriaCharacter::AGun_phiriaCharacter()
 {
-	// Tick 함수가 작동하도록 설정 (카메라 스무스 줌을 위해 필수!)
+	// Tick 함수 작동 - 카메라 스무스 줌
 	PrimaryActorTick.bCanEverTick = true;
 
-	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
-	// Don't rotate when the controller rotates. Let that just affect the camera.
+	// 마우스(컨트롤러)가 회전할 때 캐릭터도 같이 좌우로 회전
 	bUseControllerRotationPitch = false;
-	bUseControllerRotationYaw = false;
+	bUseControllerRotationYaw = true;  // false에서 true로 변경
 	bUseControllerRotationRoll = false;
 
-	// Configure character movement
-	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...	
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f); // ...at this rotation rate
+	// 캐릭터가 입력 방향을 바라보며 뛰어가는 기능 끄기 (게걸음, 뒷걸음질 활성화)
+	GetCharacterMovement()->bOrientRotationToMovement = false; // true에서 false로 변경
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 
 	GetCharacterMovement()->JumpZVelocity = 700.f;
 	GetCharacterMovement()->AirControl = 0.35f;
@@ -39,13 +35,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
-	// Create a camera boom
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
 	CameraBoom->bUsePawnControlRotation = true;
 
-	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
@@ -53,17 +47,17 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// 무기 컴포넌트 생성 및 손에 부착 (소켓 이름은 블루프린트와 동일하게 "WeaponSocket")
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetupAttachment(GetMesh(), FName("WeaponSocket"));
-	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 총은 충돌 처리가 필요 없으므로 끔
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 총은 충돌 처리 X
 
-	// --- [여기에 새 코드 추가] 조준 전용 카메라 생성 및 가늠좌 소켓에 부착 ---
+	// --- 조준 전용 카메라 생성 및 가늠좌 소켓에 부착 ---
 	ADSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ADSCamera"));
 	// WeaponMesh의 "SightSocket"에 정확히 부착합니다.
 	ADSCamera->SetupAttachment(WeaponMesh, FName("SightSocket"));
 
-	// 카메라는 마우스가 아닌 '총의 애니메이션 흔들림'을 그대로 따라가야 하므로 false로 설정합니다.
+	// 카메라는 마우스가 아닌 '총의 애니메이션 흔들림'을 그대로 따라가야 하므로 false로 설정
 	ADSCamera->bUsePawnControlRotation = false;
 
-	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둡니다.
+	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둠
 	ADSCamera->SetAutoActivate(false);
 }
 
@@ -81,12 +75,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 1. 카메라 이동 로직 수정 (카메라는 고정, FOV만 줌인)
-	if (FollowCamera && ADSCamera) // CameraBoom 대신 ADSCamera 확인
+	// 1. 카메라 이동 로직 (기존 코드 유지)
+	if (FollowCamera && ADSCamera)
 	{
 		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
-
-		// 조준 중일 때는 ADSCamera의 FOV를 좁히고, 아닐 때는 FollowCamera의 FOV를 넓힙니다.
 		if (bIsAiming)
 		{
 			float NewFOV = FMath::FInterpTo(ADSCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
@@ -99,38 +91,58 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		}
 	}
 
-	// 탄 퍼짐 수치 서서히 회복
-	if (CurrentSpread > 0.0f)
+	// =========================================================================
+	// [수정된 로직] 플레이어 상태(이동, 점프)에 따른 탄 퍼짐 기본값 설정
+	// =========================================================================
+	float CurrentSpeed = GetVelocity().Size2D();
+	bool bIsFalling = GetCharacterMovement()->IsFalling(); // 공중에 떠 있는지 확인
+
+	float TargetMinSpread = 0.0f; // 기본 수치
+
+	if (bIsFalling)
 	{
-		CurrentSpread = FMath::FInterpTo(CurrentSpread, 0.0f, DeltaTime, SpreadRecoveryRate);
+		// 1순위: 공중에 떠 있을 때 (가장 큰 페널티)
+		TargetMinSpread = bIsAiming ? 4.0f : 8.0f;
+	}
+	else if (CurrentSpeed > 10.0f)
+	{
+		// 2순위: 땅에 있지만 걷거나 뛸 때
+		TargetMinSpread = bIsAiming ? 1.5f : 4.0f;
+	}
+	else
+	{
+		// 3순위: 땅에서 가만히 서 있을 때
+		TargetMinSpread = bIsAiming ? 0.0f : 1.0f; // 서 있을 때도 비조준 시 약간의 퍼짐 유지
 	}
 
-	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 ---
+	// 탄 퍼짐 수치 서서히 회복
+	CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
+	// =========================================================================
+
+
+	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 (기존 코드 유지) ---
 	if (bIsAiming && FollowCamera && WeaponMesh)
 	{
-		// 1. 가늠좌(Sight)가 위치해야 할 화면 정중앙의 월드 좌표
 		FVector CameraLocation = FollowCamera->GetComponentLocation();
 		FVector CameraForward = FollowCamera->GetForwardVector();
-		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * AimDistance);
 
-		// 2. 가늠좌에서 무기 손잡이(오른손)까지의 고정된 오프셋 벡터 구하기
-		// 무기 메쉬의 루트 위치 = 오른손이 쥐고 있는 위치입니다.
+		FVector CamToChar = GetActorLocation() - CameraLocation;
+		float ActualDistance = FVector::DotProduct(CamToChar, CameraForward);
+		float TotalDistance = ActualDistance + AimDistance;
+
+		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * TotalDistance);
+
 		FVector HandWorldLoc = WeaponMesh->GetComponentLocation();
 		FVector SightWorldLoc = WeaponMesh->GetSocketLocation(FName("SightSocket"));
 		FVector SightToHandOffset = HandWorldLoc - SightWorldLoc;
 
-		// 3. 목표 가늠좌 위치에 오프셋을 더해 '오른손이 도달해야 할 최종 월드 좌표' 산출
 		FVector TargetHandWorldLoc = TargetSightWorldLoc + SightToHandOffset;
 
-		// 4. 캐릭터 기준(Component Space)으로 변환하여 AnimBP가 이해할 수 있게 함
 		FTransform MeshTransform = GetMesh()->GetComponentTransform();
 		FVector TargetHandCS = MeshTransform.InverseTransformPosition(TargetHandWorldLoc);
 
-		// 5. 프레임 제한 해제 시에도 안전하도록 Interp 적용 (기존에 잘 짜두신 부분 활용)
 		DynamicAimOffset = FMath::VInterpTo(DynamicAimOffset, TargetHandCS, DeltaTime, 20.0f);
 	}
-	// else문에서 ZeroVector로 되돌리는 로직은 삭제하세요. 
-	// (0,0,0)은 캐릭터의 발밑이기 때문에, 조준을 풀 때 AnimBP의 Alpha 값으로 조절하는 것이 맞습니다.
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -213,11 +225,11 @@ void AGun_phiriaCharacter::StartAiming()
 {
 	bIsAiming = true;
 
-	// 슈팅 게임 필수 로직: 조준할 때는 캐릭터가 마우스 방향을 바라보며 걷게 만듭니다.
-	bUseControllerRotationYaw = true;
-	GetCharacterMovement()->bOrientRotationToMovement = false;
+	// [수정] 이제 기본적으로 설정되어 있으므로 아래 두 줄은 지워도 돼! (주석 처리함)
+	// bUseControllerRotationYaw = true;
+	// GetCharacterMovement()->bOrientRotationToMovement = false;
 
-	// --- [새 코드 추가] 카메라 전환: 3인칭 끄기, 1인칭(가늠좌) 켜기 ---
+	// 카메라 전환: 3인칭 끄기, 1인칭(가늠좌) 켜기
 	if (FollowCamera && ADSCamera)
 	{
 		FollowCamera->SetActive(false);
@@ -230,11 +242,11 @@ void AGun_phiriaCharacter::StopAiming()
 {
 	bIsAiming = false;
 
-	// 조준을 풀면 다시 자유롭게 뛰어다니도록 원래 상태로 되돌립니다.
-	bUseControllerRotationYaw = false;
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	// [핵심 수정] 조준을 풀어도 배그 시점을 유지해야 하므로 아래 두 줄을 반드시 삭제하거나 주석 처리해야 해!
+	// bUseControllerRotationYaw = false;
+	// GetCharacterMovement()->bOrientRotationToMovement = true;
 
-	// --- [새 코드 추가] 카메라 전환: 1인칭(가늠좌) 끄기, 3인칭 켜기 ---
+	// 카메라 전환: 1인칭(가늠좌) 끄기, 3인칭 켜기
 	if (FollowCamera && ADSCamera)
 	{
 		ADSCamera->SetActive(false);
@@ -242,71 +254,92 @@ void AGun_phiriaCharacter::StopAiming()
 	}
 }
 
-// 진짜 사격 로직 (Line Trace)
 void AGun_phiriaCharacter::Fire()
 {
-	if (!FollowCamera) return;
+	if (!FollowCamera || !ADSCamera || !WeaponMesh) return;
 
-	// 사격 자세 켜기 & 0.2초 뒤에 끄도록 타이머 설정
 	bIsFiring = true;
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
 
-	// 조준 여부에 따른 반동/퍼짐 감소 배수 설정
-	// 조준 중(bIsAiming이 true)이면 0.3 (30% 수준으로 감소), 아니면 1.0 (100% 원본 그대로)
-	float AimMultiplier = bIsAiming ? 0.3f : 1.0f;
+	// =========================================================================
+	// [수정] 조준, 이동, 점프 상태를 모두 조합한 최종 페널티 계산
+	// =========================================================================
+	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
+	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
 
-	// 1. 물리적 카메라 반동 (화면 튀기)
+	// 공중에 떠 있다면 퍼짐/반동 수치를 2배(혹은 그 이상)로 뻥튀기합니다!
+	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
+
+	// 최종 배수 = (조준 배수) * (이동 배수) * (점프 배수)
+	// 움직이면서(+1.5배) 점프까지(+2.5배) 했다면 엄청난 수치가 곱해집니다.
+	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier;
+	// =========================================================================
+
+	// 1. 물리적 카메라 반동 (화면 튀기) - TotalMultiplier 적용
 	if (Controller != nullptr)
 	{
-		// 원래 랜덤 값에 AimMultiplier를 곱해서 조준 시 반동을 확 줄여줍니다!
-		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * AimMultiplier;
-		float RecoilYaw = FMath::RandRange(-0.5f, 0.5f) * AimMultiplier;
+		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier;
+		float RecoilYaw = FMath::RandRange(-0.5f, 0.5f) * TotalMultiplier;
 
 		AddControllerPitchInput(RecoilPitch);
 		AddControllerYawInput(RecoilYaw);
 	}
 
-	// 2. 탄 퍼짐(Spread) 수치 증가
-	// 늘어나는 퍼짐 수치(SpreadPerShot)에도 AimMultiplier를 곱해줍니다.
-	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * AimMultiplier), 0.0f, MaxSpread);
+	// 2. 탄 퍼짐(Spread) 수치 증가 - TotalMultiplier 적용
+	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
 
-	// 1. 카메라의 현재 위치와 바라보는 방향(정중앙 크로스헤어 방향)을 가져옵니다.
-	FVector StartLocation = FollowCamera->GetComponentLocation();
-	FVector ForwardVector = FollowCamera->GetForwardVector();
+	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
 
-	// 2. 사거리 설정 (예: 50미터 = 5000 유닛)
-	float TraceDistance = 5000.0f;
+	// STEP 1: 화면 정중앙(카메라)이 가리키는 최종 타겟 지점 찾기
+	FVector CameraLocation = ActiveCamera->GetComponentLocation();
+	FVector CameraForward = ActiveCamera->GetForwardVector();
+	float TraceDistance = 5000.0f; // 50미터
+	FVector CameraEndLocation = CameraLocation + (CameraForward * TraceDistance);
 
-	// 시작점에서 앞으로 5000만큼 나아간 끝 지점 계산
-	FVector EndLocation = StartLocation + (ForwardVector * TraceDistance);
-
-	// 3. 충돌 결과를 저장할 구조체
-	FHitResult HitResult;
+	FHitResult CameraHit;
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // 아주 중요: 내가 쏜 총알에 내 뒤통수가 맞는 걸 방지!
+	QueryParams.AddIgnoredActor(this); // 내 캐릭터 무시
 
-	// 4. 보이지 않는 레이저(Line Trace) 발사!
-	bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
-		StartLocation,
-		EndLocation,
-		ECC_Visibility, // 시야(Visibility)에 걸리는 모든 물체와 충돌
-		QueryParams
+	bool bCameraHit = GetWorld()->LineTraceSingleByChannel(
+		CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams
 	);
 
-	// 5. 디버그 선으로 총알 궤적 그리기
-	if (bHit)
-	{
-		// 어딘가에 맞았다면: 총구부터 맞은 곳(ImpactPoint)까지만 빨간 선을 그립니다.
-		DrawDebugLine(GetWorld(), StartLocation, HitResult.ImpactPoint, FColor::Red, false, 2.0f, 0, 2.0f);
+	FVector TargetLocation = bCameraHit ? CameraHit.ImpactPoint : CameraEndLocation;
 
-		// 화면 왼쪽 위에 명중한 물체의 이름을 띄워줍니다.
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *HitResult.GetActor()->GetName()));
+
+	// STEP 2: 실제 총구(Muzzle)에서 타겟 지점을 향해 총알(Line Trace) 발사
+	FVector MuzzleLocation = WeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
+
+	// 총구에서 타겟 지점을 향하는 '기준' 방향 벡터 구하기
+	FVector BaseDirection = (TargetLocation - MuzzleLocation).GetSafeNormal();
+
+	// =========================================================================
+	// [핵심 추가] 실제 총알 궤적에 탄 퍼짐(CurrentSpread) 적용하기!
+	// CurrentSpread 수치를 바탕으로 원뿔(Cone) 형태의 무작위 궤적을 생성합니다.
+	// 0.5f는 퍼짐 감도를 조절하는 값입니다. (숫자를 키우면 더 미친 듯이 퍼집니다)
+	float HalfConeAngle = FMath::DegreesToRadians(CurrentSpread * 0.5f);
+	FVector SpreadDirection = FMath::VRandCone(BaseDirection, HalfConeAngle);
+	// =========================================================================
+
+	// 기본 방향이 아닌, '퍼짐이 적용된 방향'으로 최종 목적지를 구함
+	FVector BulletEndLocation = MuzzleLocation + (SpreadDirection * TraceDistance);
+
+	FHitResult BulletHit;
+
+	// 실제 총알 발사!
+	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(
+		BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams
+	);
+
+	// 5. 디버그 선으로 총알 궤적 그리기 (총구에서 나가는 선)
+	if (bBulletHit)
+	{
+		DrawDebugLine(GetWorld(), MuzzleLocation, BulletHit.ImpactPoint, FColor::Red, false, 2.0f, 0, 2.0f);
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *BulletHit.GetActor()->GetName()));
 	}
 	else
 	{
-		// 아무것도 안 맞았다면: 허공을 가르는 초록색 선을 그립니다.
-		DrawDebugLine(GetWorld(), StartLocation, EndLocation, FColor::Green, false, 2.0f, 0, 2.0f);
+		DrawDebugLine(GetWorld(), MuzzleLocation, BulletEndLocation, FColor::Green, false, 2.0f, 0, 2.0f);
 	}
 }
 
