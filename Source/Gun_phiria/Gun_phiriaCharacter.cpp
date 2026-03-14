@@ -17,6 +17,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// Tick 함수 작동 - 카메라 스무스 줌
 	PrimaryActorTick.bCanEverTick = true;
 
+	// 변수 초기화
+	PreviousActorYaw = 0.0f;
+	MovementDirectionAngle = 0.0f;
+	YawRotationSpeed = 0.0f;
+
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
 	// 마우스(컨트롤러)가 회전할 때 캐릭터도 같이 좌우로 회전
@@ -116,7 +121,15 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	}
 
 	// 탄 퍼짐 수치 서서히 회복
-	CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
+	// CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
+
+	float CurrentTime = GetWorld()->GetTimeSeconds(); // 현재 게임 플레이 시간 가져오기
+
+	if (CurrentTime - LastFireTime > SpreadRecoveryDelay)
+	{
+		// 사격한 지 SpreadRecoveryDelay(예: 0.2초)가 지났을 때만 서서히 회복
+		CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
+	}
 	// =========================================================================
 
 
@@ -143,6 +156,41 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 
 		DynamicAimOffset = FMath::VInterpTo(DynamicAimOffset, TargetHandCS, DeltaTime, 20.0f);
 	}
+
+	// =========================================================================
+	// [새로운 로직 1] 대각선 이동 애니메이션을 위한 '이동 방향 각도(Direction)' 계산
+	// =========================================================================
+	FVector Velocity = GetVelocity();
+	if (Velocity.Size2D() > 1.0f) // 캐릭터가 조금이라도 움직이고 있다면
+	{
+		// 월드 기준의 속도 벡터를 캐릭터 기준(Local) 벡터로 변환합니다.
+		FVector LocalVelocity = GetActorTransform().InverseTransformVectorNoScale(Velocity);
+
+		// 변환된 벡터가 가리키는 각도(Yaw)를 구합니다. 
+		// (정면 W=0, 우측 D=90, 좌측 A=-90, 후진 S=180)
+		MovementDirectionAngle = LocalVelocity.Rotation().Yaw;
+	}
+	else
+	{
+		MovementDirectionAngle = 0.0f;
+	}
+
+	// =========================================================================
+	// [새로운 로직 2] 제자리 회전 시 발을 움직이기 위한 '초당 회전 속도(Yaw Speed)' 계산
+	// =========================================================================
+	float CurrentYaw = GetActorRotation().Yaw;
+	float YawDelta = CurrentYaw - PreviousActorYaw;
+
+	// 캐릭터가 180도에서 -180도로 순간적으로 넘어갈 때(Wrap) 값이 튀는 현상 방지
+	if (YawDelta > 180.0f) YawDelta -= 360.0f;
+	if (YawDelta < -180.0f) YawDelta += 360.0f;
+
+	// 초당 회전 속도 산출 (양수면 오른쪽으로 도는 중, 음수면 왼쪽으로 도는 중)
+	YawRotationSpeed = YawDelta / DeltaTime;
+
+	// 다음 프레임 계산을 위해 현재 각도 저장
+	PreviousActorYaw = CurrentYaw;
+	// =========================================================================
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -225,10 +273,6 @@ void AGun_phiriaCharacter::StartAiming()
 {
 	bIsAiming = true;
 
-	// [수정] 이제 기본적으로 설정되어 있으므로 아래 두 줄은 지워도 돼! (주석 처리함)
-	// bUseControllerRotationYaw = true;
-	// GetCharacterMovement()->bOrientRotationToMovement = false;
-
 	// 카메라 전환: 3인칭 끄기, 1인칭(가늠좌) 켜기
 	if (FollowCamera && ADSCamera)
 	{
@@ -241,10 +285,6 @@ void AGun_phiriaCharacter::StartAiming()
 void AGun_phiriaCharacter::StopAiming()
 {
 	bIsAiming = false;
-
-	// [핵심 수정] 조준을 풀어도 배그 시점을 유지해야 하므로 아래 두 줄을 반드시 삭제하거나 주석 처리해야 해!
-	// bUseControllerRotationYaw = false;
-	// GetCharacterMovement()->bOrientRotationToMovement = true;
 
 	// 카메라 전환: 1인칭(가늠좌) 끄기, 3인칭 켜기
 	if (FollowCamera && ADSCamera)
@@ -261,21 +301,21 @@ void AGun_phiriaCharacter::Fire()
 	bIsFiring = true;
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
 
+	LastFireTime = GetWorld()->GetTimeSeconds();
+
+
 	// =========================================================================
-	// [수정] 조준, 이동, 점프 상태를 모두 조합한 최종 페널티 계산
+	// 1. 상태에 따른 최종 페널티 계산 (기존 동일)
 	// =========================================================================
 	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
 	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
-
-	// 공중에 떠 있다면 퍼짐/반동 수치를 2배(혹은 그 이상)로 뻥튀기합니다!
 	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
 
-	// 최종 배수 = (조준 배수) * (이동 배수) * (점프 배수)
-	// 움직이면서(+1.5배) 점프까지(+2.5배) 했다면 엄청난 수치가 곱해집니다.
 	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier;
-	// =========================================================================
 
-	// 1. 물리적 카메라 반동 (화면 튀기) - TotalMultiplier 적용
+	// =========================================================================
+	// 2. 물리적 카메라 반동 (Recoil)
+	// =========================================================================
 	if (Controller != nullptr)
 	{
 		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier;
@@ -285,7 +325,9 @@ void AGun_phiriaCharacter::Fire()
 		AddControllerYawInput(RecoilYaw);
 	}
 
-	// 2. 탄 퍼짐(Spread) 수치 증가 - TotalMultiplier 적용
+	// =========================================================================
+	// 3. 탄 퍼짐(Spread) 누적
+	// =========================================================================
 	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
 
 	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
@@ -306,36 +348,50 @@ void AGun_phiriaCharacter::Fire()
 
 	FVector TargetLocation = bCameraHit ? CameraHit.ImpactPoint : CameraEndLocation;
 
-
-	// STEP 2: 실제 총구(Muzzle)에서 타겟 지점을 향해 총알(Line Trace) 발사
+	// STEP 2: 실제 총구(Muzzle)에서 타겟 지점을 향해 총알 발사
 	FVector MuzzleLocation = WeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
-
-	// 총구에서 타겟 지점을 향하는 '기준' 방향 벡터 구하기
 	FVector BaseDirection = (TargetLocation - MuzzleLocation).GetSafeNormal();
 
 	// =========================================================================
-	// [핵심 추가] 실제 총알 궤적에 탄 퍼짐(CurrentSpread) 적용하기!
-	// CurrentSpread 수치를 바탕으로 원뿔(Cone) 형태의 무작위 궤적을 생성합니다.
-	// 0.5f는 퍼짐 감도를 조절하는 값입니다. (숫자를 키우면 더 미친 듯이 퍼집니다)
-	float HalfConeAngle = FMath::DegreesToRadians(CurrentSpread * 0.5f);
-	FVector SpreadDirection = FMath::VRandCone(BaseDirection, HalfConeAngle);
+	// [수정 및 확인 포인트] 실제 총알 궤적에 탄 퍼짐 적용하기
 	// =========================================================================
+	// 기존 0.5f 대신 눈에 확실히 띄게 수치를 올려봅니다. (테스트용)
+	// 만약 잘 흩어진다면 이 SpreadMultiplier 값을 조정하여 알맞은 감도를 찾으세요!
+	float SpreadMultiplier = 3.0f;
+	float FinalSpreadAngle = CurrentSpread * SpreadMultiplier;
 
-	// 기본 방향이 아닌, '퍼짐이 적용된 방향'으로 최종 목적지를 구함
+	// 각도를 라디안으로 변환
+	float HalfConeAngle = FMath::DegreesToRadians(FinalSpreadAngle);
+
+	// BaseDirection을 중심으로 HalfConeAngle만큼 무작위 원뿔 형태로 흩어집니다.
+	FVector SpreadDirection = FMath::VRandCone(BaseDirection, HalfConeAngle);
+
+	// 퍼짐이 적용된 최종 목적지 구하기
 	FVector BulletEndLocation = MuzzleLocation + (SpreadDirection * TraceDistance);
+
+	// 디버그용: 현재 내 총알이 몇 도의 각도로 흩어지고 있는지 화면 좌측 상단에 출력
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
+			FString::Printf(TEXT("적용된 퍼짐 각도: %.2f도 (현재 Spread값: %.2f)"), FinalSpreadAngle, CurrentSpread));
+	}
+	// =========================================================================
 
 	FHitResult BulletHit;
 
-	// 실제 총알 발사!
+	// 실제 총알 발사 (Line Trace)
 	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(
 		BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams
 	);
 
-	// 5. 디버그 선으로 총알 궤적 그리기 (총구에서 나가는 선)
+	// 디버그 선 그리기 (총구에서 나가는 선)
 	if (bBulletHit)
 	{
 		DrawDebugLine(GetWorld(), MuzzleLocation, BulletHit.ImpactPoint, FColor::Red, false, 2.0f, 0, 2.0f);
-		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *BulletHit.GetActor()->GetName()));
+		if (GEngine && BulletHit.GetActor())
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *BulletHit.GetActor()->GetName()));
+		}
 	}
 	else
 	{

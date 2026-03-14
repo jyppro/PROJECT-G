@@ -113,6 +113,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aiming")
 	float AimDistance = 40.0f;
 
+	// 애니메이션 블루프린트에서 가져다 쓸 수 있도록 노출하는 변수
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float MovementDirectionAngle; // 이동 방향 각도 (-180 ~ 180)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float YawRotationSpeed; // 마우스 회전 속도 (제자리 회전 애니메이션용)
+
+	float LastFireTime = 0.0f;          // 마지막으로 사격한 시간
+	float SpreadRecoveryDelay = 0.1f;   // 사격 후 에임이 회복되기까지의 대기 시간
+
 protected:
 	// 카메라 줌 관련 설정값
 	float DefaultFOV = 90.0f; // 평소 시야각
@@ -128,7 +138,7 @@ protected:
 	float SpreadPerShot = 1.0f; // 한 발 쏠 때마다 늘어나는 퍼짐 수치
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
-	float MaxSpread = 5.0f; // 퍼짐 한계선 (에임이 끝도 없이 벌어지는 것 방지)
+	float MaxSpread = 6.0f; // 퍼짐 한계선 (에임이 끝도 없이 벌어지는 것 방지)
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	float SpreadRecoveryRate = 5.0f; // 초당 퍼짐 회복(에임이 다시 모이는) 속도
@@ -150,4 +160,8 @@ protected:
 	/** 조준 전용(1인칭) 카메라 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* ADSCamera;
+
+private:
+	// 이전 프레임의 Yaw 각도를 저장해두기 위한 변수 (회전 속도 계산용)
+	float PreviousActorYaw;
 };
