@@ -10,14 +10,14 @@ void AGun_phiriaHUD::DrawHUD()
 	// 캔버스가 없으면 그릴 수 없으므로 안전 장치 추가
 	if (!Canvas) return;
 
-	// 1. 화면의 정중앙 좌표 구하기
+	// 화면의 정중앙 좌표 구하기
 	FVector2D Center(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.5f);
 
-	// 2. 플레이어 캐릭터 찾아오기
+	// 플레이어 캐릭터 찾아오기
 	AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
 	if (!PlayerChar) return;
 
-	// 3. 퍼짐(Spread) 수치를 가져와서 픽셀 단위 오프셋으로 변환
+	// 퍼짐(Spread) 수치를 가져와서 픽셀 단위 오프셋으로 변환
 	float SpreadOffset = PlayerChar->GetCurrentSpread() * CrosshairSpreadMultiplier;
 	float FinalOffset = BaseSpread + SpreadOffset; // 최종적으로 중앙에서 떨어질 거리
 
@@ -25,9 +25,8 @@ void AGun_phiriaHUD::DrawHUD()
 	FLinearColor CrosshairColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
 
 	// ==========================================
-	// 4. 크로스헤어 그리기 (중앙 점 1개 + 주변 선 4개)
-	// ==========================================
 
+	// // 크로스헤어 그리기 (중앙 점 1개 + 주변 선 4개)
 	// 중앙 점 (2x2 픽셀 크기)
 	DrawRect(CrosshairColor, Center.X - 1, Center.Y - 1, 2, 2);
 

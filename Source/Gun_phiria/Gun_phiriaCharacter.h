@@ -5,10 +5,13 @@
 #include "Logging/LogMacros.h"
 #include "Gun_phiriaCharacter.generated.h"
 
+// 전방 선언 (Forward Declarations)
 class USpringArmComponent;
 class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
+class UStaticMeshComponent;
+class UNiagaraSystem;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -18,122 +21,83 @@ class AGun_phiriaCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
-	/** Camera boom positioning the camera behind the character */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	USpringArmComponent* CameraBoom;
-
-	/** Follow camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	UCameraComponent* FollowCamera;
-
-	/** MappingContext */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputMappingContext* DefaultMappingContext;
-
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* JumpAction;
-
-	/** Move Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* MoveAction;
-
-	/** Look Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* LookAction;
-
-	// 조준(Aim) 입력 액션
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* AimAction;
-
-	// 사격(Fire) 입력 액션
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	class UInputAction* FireAction;
-
 public:
 	AGun_phiriaCharacter();
 
-	// 매 프레임 카메라 줌을 부드럽게 처리할 Tick 함수
+	// Public 오버라이드 함수
 	virtual void Tick(float DeltaTime) override;
 
-protected:
+	// =========================================================
 
-	/** Called for movement input */
-	void Move(const FInputActionValue& Value);
-
-	/** Called for looking input */
-	void Look(const FInputActionValue& Value);
-
-	// 조준 시작 / 종료 함수
-	void StartAiming();
-	void StopAiming();
-
-	// 마우스 좌클릭 시 실행될 사격 함수
-	void Fire();
+	// Getters (외부에서 컴포넌트나 상태를 가져갈 때 사용)
+	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
 
 protected:
-	// APawn interface
+	// Protected 오버라이드 함수
+	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	// To add mapping context
-	virtual void BeginPlay();
+	// =========================================================
 
-public:
-	/** Returns CameraBoom subobject **/
-	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
-	/** Returns FollowCamera subobject **/
-	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	// 컴포넌트 (Components)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USpringArmComponent> CameraBoom;
 
-	// HUD에서 크로스헤어 간격을 계산하기 위해 퍼짐 수치를 가져오는 함수
-	float GetCurrentSpread() const { return CurrentSpread; }
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraComponent> FollowCamera;
 
-	// 이 변수가 켜지면 애니메이션 블루프린트에서 조준 자세를 잡습니다!
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraComponent> ADSCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+	// =========================================================
+
+	// 입력 (Input)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> JumpAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> LookAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> AimAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> FireAction;
+
+	// =========================================================
+
+	// 입력 처리 함수
+	void Move(const FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+
+	// =========================================================
+
+	// 전투 및 무기 (Combat & Weapon)
+	void StartAiming();
+	void StopAiming();
+	void Fire();
+	void StopFiringPose();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsAiming = false;
 
-	// 사격 중인지 확인하는 변수
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsFiring = false;
 
-	// 반동 및 탄 퍼짐(Spread) 관련 변수들
-
-	// UI(위젯)에서 에임을 벌릴 때 읽어갈 핵심 수치입니다!
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	float CurrentSpread = 0.0f;
 
-	// C++에서 관리할 무기 컴포넌트
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (AllowPrivateAccess = "true"))
-	class UStaticMeshComponent* WeaponMesh;
-
-	// 이 변수가 계산된 오프셋 값을 들고 애니메이션 블루프린트로 넘어갑니다!
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aiming")
-	FVector DynamicAimOffset;
-
-	// 카메라 정중앙에서 총이 얼마나 떨어져 있을지 결정하는 거리 (조절 가능)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aiming")
-	float AimDistance = 40.0f;
-
-	// 애니메이션 블루프린트에서 가져다 쓸 수 있도록 노출하는 변수
-	UPROPERTY(BlueprintReadOnly, Category = "Animation")
-	float MovementDirectionAngle; // 이동 방향 각도 (-180 ~ 180)
-
-	UPROPERTY(BlueprintReadOnly, Category = "Animation")
-	float YawRotationSpeed; // 마우스 회전 속도 (제자리 회전 애니메이션용)
-
-	float LastFireTime = 0.0f;          // 마지막으로 사격한 시간
-	float SpreadRecoveryDelay = 0.1f;   // 사격 후 에임이 회복되기까지의 대기 시간
-
-protected:
-	// 카메라 줌 관련 설정값
-	float DefaultFOV = 90.0f; // 평소 시야각
-	float AimFOV = 60.0f;     // 조준 시 좁아지는 시야각 (확대)
-	float ZoomInterpSpeed = 20.0f; // 줌인되는 속도
-
-	// 타이머를 관리할 핸들과, 사격 자세를 끝내는 함수
-	FTimerHandle FireTimerHandle;
-	void StopFiringPose();
-
-	// 반동 튜닝용 설정값들 (블루프린트에서 쉽게 수치를 바꿀 수 있게 세팅합니다)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	float SpreadPerShot = 1.0f; // 한 발 쏠 때마다 늘어나는 퍼짐 수치
 
@@ -143,37 +107,45 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	float SpreadRecoveryRate = 5.0f; // 초당 퍼짐 회복(에임이 다시 모이는) 속도
 
-	// 1인칭 정조준(FPS) 전환을 위한 변수들
-	// 에디터에서 실시간으로 값을 조절하며 총구에 딱 맞게 세팅할 수 있게 UPROPERTY를 붙입니다!
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	float DefaultArmLength = 250.0f; // 평소 카메라 거리 (어깨너머)
+	float SpreadRecoveryDelay = 0.1f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	float AimArmLength = -10.0f; // 조준 시 카메라 거리 (0 이하면 캐릭터 안으로 바짝 붙습니다)
+	// =========================================================
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	FVector DefaultSocketOffset = FVector(0.0f, 60.0f, 50.0f); // 평소 위치 (우측 어깨)
+	// 카메라 및 조준 세팅 (Camera & Aiming Settings)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aiming")
+	FVector DynamicAimOffset;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	FVector AimSocketOffset = FVector(40.0f, 15.0f, 60.0f); // 조준 시 위치 (눈앞/총구 바로 뒤)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Aiming")
+	float AimDistance = 40.0f;
 
-	/** 조준 전용(1인칭) 카메라 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	class UCameraComponent* ADSCamera;
+	float DefaultFOV = 90.0f;      // 평소 시야각
+	float AimFOV = 60.0f;          // 조준 시 좁아지는 시야각 (확대)
+	float ZoomInterpSpeed = 20.0f; // 줌인되는 속도
 
-	// 총을 쏠 때 총구에서 빛나는 화염 이펙트 (Muzzle Flash)
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	class UNiagaraSystem* MuzzleFlashEffect;
+	// =========================================================
 
-	// 총구에서 목표물로 날아가는 궤적 이펙트 (Tracer)
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	UNiagaraSystem* BulletTracerEffect;
+	// 애니메이션 (Animation)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
+	float MovementDirectionAngle = 0.0f;
 
-	// 총알이 벽이나 적에게 맞았을 때 터지는 이펙트 (Impact)
-	UPROPERTY(EditAnywhere, Category = "Effects")
-	UNiagaraSystem* ImpactEffect;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
+	float YawRotationSpeed = 0.0f;
+
+	// =========================================================
+
+	// 이펙트 (Effects)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	TObjectPtr<UNiagaraSystem> MuzzleFlashEffect; // 총구 화염
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	TObjectPtr<UNiagaraSystem> BulletTracerEffect; // 궤적
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	TObjectPtr<UNiagaraSystem> ImpactEffect; // 피격 이펙트
 
 private:
-	// 이전 프레임의 Yaw 각도를 저장해두기 위한 변수 (회전 속도 계산용)
-	float PreviousActorYaw;
+	// 내부 사용 변수 (Internal Use Only)
+	FTimerHandle FireTimerHandle;
+	float PreviousActorYaw = 0.0f;
+	float LastFireTime = 0.0f;
 };
