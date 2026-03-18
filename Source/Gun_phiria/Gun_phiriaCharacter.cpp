@@ -1,4 +1,5 @@
 #include "Gun_phiriaCharacter.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -9,6 +10,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "DrawDebugHelpers.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -379,23 +383,58 @@ void AGun_phiriaCharacter::Fire()
 
 	FHitResult BulletHit;
 
-	// 실제 총알 발사 (Line Trace)
+	/// 실제 총알 발사 (Line Trace)
 	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(
 		BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams
 	);
 
-	// 디버그 선 그리기 (총구에서 나가는 선)
+	// =========================================================================
+	// [새로운 로직] 시각적 이펙트(나이아가라) 스폰하기
+	// =========================================================================
+
+	// 1. 총구 화염 (Muzzle Flash) 터뜨리기
+	if (MuzzleFlashEffect)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(
+			MuzzleFlashEffect, WeaponMesh, FName("MuzzleSocket"),
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true
+		);
+	}
+
+	// 2. 총알 궤적 (Tracer) 그리기
+	if (BulletTracerEffect)
+	{
+		// 총구에서 이펙트를 생성합니다.
+		UNiagaraComponent* TracerComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			GetWorld(), BulletTracerEffect, MuzzleLocation
+		);
+
+		if (TracerComponent)
+		{
+			// 이펙트의 끝점(도착점)을 설정해줍니다. (나이아가라 변수 이름이 "Target"이라고 가정)
+			FVector TracerEnd = bBulletHit ? BulletHit.ImpactPoint : BulletEndLocation;
+			TracerComponent->SetVectorParameter(FName("Target"), TracerEnd);
+		}
+	}
+
+	// 3. 충돌 결과 처리
 	if (bBulletHit)
 	{
-		DrawDebugLine(GetWorld(), MuzzleLocation, BulletHit.ImpactPoint, FColor::Red, false, 2.0f, 0, 2.0f);
+		// 디버그용 (나중엔 지우셔도 됩니다)
 		if (GEngine && BulletHit.GetActor())
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *BulletHit.GetActor()->GetName()));
 		}
-	}
-	else
-	{
-		DrawDebugLine(GetWorld(), MuzzleLocation, BulletEndLocation, FColor::Green, false, 2.0f, 0, 2.0f);
+
+		// 벽이나 적에 맞았을 때 피격 이펙트 (Impact) 터뜨리기
+		if (ImpactEffect)
+		{
+			// 맞은 표면의 방향(Normal)을 바라보게 이펙트를 회전시켜 생성합니다.
+			FRotator ImpactRotation = BulletHit.ImpactNormal.Rotation();
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				GetWorld(), ImpactEffect, BulletHit.ImpactPoint, ImpactRotation
+			);
+		}
 	}
 }
 

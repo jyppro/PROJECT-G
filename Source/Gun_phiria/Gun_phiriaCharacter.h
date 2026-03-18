@@ -161,6 +161,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* ADSCamera;
 
+	// 총을 쏠 때 총구에서 빛나는 화염 이펙트 (Muzzle Flash)
+	UPROPERTY(EditAnywhere, Category = "Effects")
+	class UNiagaraSystem* MuzzleFlashEffect;
+
+	// 총구에서 목표물로 날아가는 궤적 이펙트 (Tracer)
+	UPROPERTY(EditAnywhere, Category = "Effects")
+	UNiagaraSystem* BulletTracerEffect;
+
+	// 총알이 벽이나 적에게 맞았을 때 터지는 이펙트 (Impact)
+	UPROPERTY(EditAnywhere, Category = "Effects")
+	UNiagaraSystem* ImpactEffect;
+
 private:
 	// 이전 프레임의 Yaw 각도를 저장해두기 위한 변수 (회전 속도 계산용)
 	float PreviousActorYaw;
