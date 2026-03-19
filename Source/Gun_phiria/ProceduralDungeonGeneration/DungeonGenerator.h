@@ -98,8 +98,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dungeon Generation")
 	void TeleportPlayerToRandomRoom();
 
+	// 스폰할 적 클래스 (BP_Enemy를 여기에 넣게 됩니다)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning|Enemy")
+	TSubclassOf<class AEnemyCharacter> EnemyPrefab;
+
+	// 한 방에 스폰될 적의 최소 마릿수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning|Enemy")
+	int32 MinEnemiesPerRoom = 1;
+
+	// 한 방에 스폰될 적의 최대 마릿수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning|Enemy")
+	int32 MaxEnemiesPerRoom = 3;
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 적들을 방마다 스폰하는 함수
+	void SpawnEnemies();
+
+	bool IsSpawnLocationValid(FVector Location);
 
 	// =========================================================
 
@@ -155,4 +172,14 @@ private:
 	bool DoRoomsOverlap(const FDungeonRoom& RoomA, const FDungeonRoom& RoomB);
 	bool IsPointInAnyMainRoom(FVector Point);
 	void DrawDebugRooms();
+
+	// 플레이어가 스폰된 시작 방의 인덱스를 저장 (기본값 -1)
+	int32 PlayerSpawnRoomIndex;
+
+	// 스폰된 문들을 기억해둘 배열
+	UPROPERTY()
+	TArray<AActor*> SpawnedDoors;
+
+	// 시작 방의 문을 제거하는 함수
+	void RemoveStartingRoomDoors();
 };
