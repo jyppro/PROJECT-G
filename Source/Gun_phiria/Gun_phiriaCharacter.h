@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
+#include "Weapon/WeaponBase.h"
 #include "Gun_phiriaCharacter.generated.h"
 
 // 전방 선언 (Forward Declarations)
@@ -33,6 +34,7 @@ public:
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
+	FORCEINLINE class AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon; }
 
 protected:
 	// Protected 오버라이드 함수
@@ -51,8 +53,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> ADSCamera;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UStaticMeshComponent> WeaponMesh;
+	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;*/
 
 	// =========================================================
 
@@ -109,6 +111,13 @@ protected:
 
 	float SpreadRecoveryDelay = 0.1f;
 
+	// 장착할 기본 무기 클래스 및 현재 무기 포인터
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+	TSubclassOf<AWeaponBase> DefaultWeaponClass;
+
+	UPROPERTY()
+	AWeaponBase* CurrentWeapon;
+
 	// =========================================================
 
 	// 카메라 및 조준 세팅 (Camera & Aiming Settings)
@@ -134,14 +143,14 @@ protected:
 	// =========================================================
 
 	// 이펙트 (Effects)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	TObjectPtr<UNiagaraSystem> MuzzleFlashEffect; // 총구 화염
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	//TObjectPtr<UNiagaraSystem> MuzzleFlashEffect; // 총구 화염
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	TObjectPtr<UNiagaraSystem> BulletTracerEffect; // 궤적
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	//TObjectPtr<UNiagaraSystem> BulletTracerEffect; // 궤적
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	TObjectPtr<UNiagaraSystem> ImpactEffect; // 피격 이펙트
+	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	//TObjectPtr<UNiagaraSystem> ImpactEffect; // 피격 이펙트
 
 private:
 	// 내부 사용 변수 (Internal Use Only)

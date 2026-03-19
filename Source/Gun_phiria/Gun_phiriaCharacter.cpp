@@ -47,16 +47,8 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// 무기 컴포넌트 생성 및 손에 부착 (소켓 이름은 블루프린트와 동일하게 "WeaponSocket")
-	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
-	WeaponMesh->SetupAttachment(GetMesh(), FName("WeaponSocket"));
-	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 총은 충돌 처리 X
-
 	// --- 조준 전용 카메라 생성 및 가늠좌 소켓에 부착 ---
 	ADSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ADSCamera"));
-
-	// WeaponMesh의 "SightSocket"에 정확히 부착합니다.
-	ADSCamera->SetupAttachment(WeaponMesh, FName("SightSocket"));
 
 	// 카메라는 마우스가 아닌 '총의 애니메이션 흔들림'을 그대로 따라가야 하므로 false로 설정
 	ADSCamera->bUsePawnControlRotation = false;
@@ -68,6 +60,23 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 void AGun_phiriaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 게임 시작 시 무기 스폰 및 장착
+	if (DefaultWeaponClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+		if (CurrentWeapon)
+		{
+			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
+			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
+
+			// 기존의 ADSCamera 부착 로직을 무기가 스폰된 직후로 이동
+			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
+		}
+	}
 }
 
 void AGun_phiriaCharacter::Tick(float DeltaTime)
@@ -125,7 +134,8 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	// =========================================================================
 
 	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 ---
-	if (bIsAiming && FollowCamera && WeaponMesh)
+	// 조건문에 CurrentWeapon이 유효한지 확인하는 로직 추가
+	if (bIsAiming && FollowCamera && CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
 		FVector CameraLocation = FollowCamera->GetComponentLocation();
 		FVector CameraForward = FollowCamera->GetForwardVector();
@@ -136,8 +146,9 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 
 		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * TotalDistance);
 
-		FVector HandWorldLoc = WeaponMesh->GetComponentLocation();
-		FVector SightWorldLoc = WeaponMesh->GetSocketLocation(FName("SightSocket"));
+		// WeaponMesh 대신 CurrentWeapon->GetWeaponMesh()를 사용합니다!
+		FVector HandWorldLoc = CurrentWeapon->GetWeaponMesh()->GetComponentLocation();
+		FVector SightWorldLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("SightSocket"));
 		FVector SightToHandOffset = HandWorldLoc - SightWorldLoc;
 
 		FVector TargetHandWorldLoc = TargetSightWorldLoc + SightToHandOffset;
@@ -286,31 +297,28 @@ void AGun_phiriaCharacter::StopAiming()
 
 void AGun_phiriaCharacter::Fire()
 {
-	if (!FollowCamera || !ADSCamera || !WeaponMesh) return;
+	// 무기가 없거나 카메라가 없으면 쏘지 않음
+	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
 
 	bIsFiring = true;
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
-
 	LastFireTime = GetWorld()->GetTimeSeconds();
-
 
 	// =========================================================================
 
-	// 상태에 따른 최종 페널티 계산
+	// 상태에 따른 최종 페널티 계산 (기존과 동일)
 	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
 	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
 	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
-
 	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier;
 
 	// =========================================================================
 
-	// 물리적 카메라 반동 (Recoil)
+	// 물리적 카메라 반동 (Recoil) (기존과 동일)
 	if (Controller != nullptr)
 	{
 		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier;
 		float RecoilYaw = FMath::RandRange(-0.5f, 0.5f) * TotalMultiplier;
-
 		AddControllerPitchInput(RecoilPitch);
 		AddControllerYawInput(RecoilYaw);
 	}
@@ -320,106 +328,55 @@ void AGun_phiriaCharacter::Fire()
 	// 탄 퍼짐(Spread) 누적
 	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
 
-	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
+	// =========================================================================
 
-	// 화면 정중앙(카메라)이 가리키는 최종 타겟 지점 찾기
+	// 목표 지점 계산
+	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
 	FVector CameraLocation = ActiveCamera->GetComponentLocation();
 	FVector CameraForward = ActiveCamera->GetForwardVector();
-	float TraceDistance = 5000.0f; // 50미터
+	float TraceDistance = 5000.0f;
 	FVector CameraEndLocation = CameraLocation + (CameraForward * TraceDistance);
 
 	FHitResult CameraHit;
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // 내 캐릭터 무시
+	QueryParams.AddIgnoredActor(this);
 
-	bool bCameraHit = GetWorld()->LineTraceSingleByChannel(
-		CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams
-	);
-
+	bool bCameraHit = GetWorld()->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams);
 	FVector TargetLocation = bCameraHit ? CameraHit.ImpactPoint : CameraEndLocation;
 
-	// 실제 총구(Muzzle)에서 타겟 지점을 향해 총알 발사
-	FVector MuzzleLocation = WeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
-	FVector BaseDirection = (TargetLocation - MuzzleLocation).GetSafeNormal();
-
 	// =========================================================================
+	// ★ 수정된 부분: 고정 거리가 아닌, 실제 타겟까지의 거리를 기준으로 탄 퍼짐 적용
 
-	// 실제 총알 궤적에 탄 퍼짐 적용하기
-	float SpreadMultiplier = 3.0f;
+	// 무기에서 무기 고유의 퍼짐 배수를 가져옵니다.
+	float SpreadMultiplier = CurrentWeapon->WeaponSpreadMultiplier;
 	float FinalSpreadAngle = CurrentSpread * SpreadMultiplier;
 
-	// 각도를 라디안으로 변환
-	float HalfConeAngle = FMath::DegreesToRadians(FinalSpreadAngle);
+	FVector CameraRight = ActiveCamera->GetRightVector();
+	FVector CameraUp = ActiveCamera->GetUpVector();
 
-	// BaseDirection을 중심으로 HalfConeAngle만큼 무작위 원뿔 형태로 흩어짐
-	FVector SpreadDirection = FMath::VRandCone(BaseDirection, HalfConeAngle);
+	// [중요] 카메라 위치에서 실제 타겟(벽, 적, 혹은 허공)까지의 거리를 구합니다.
+	float ActualDistanceToTarget = FVector::Distance(CameraLocation, TargetLocation);
 
-	// 퍼짐이 적용된 최종 목적지 구하기
-	FVector BulletEndLocation = MuzzleLocation + (SpreadDirection * TraceDistance);
+	// 이 실제 거리를 바탕으로 퍼짐 원판의 반지름을 계산해야, 거리에 맞게 정확히 흩어집니다!
+	float SpreadRadius = FMath::Tan(FMath::DegreesToRadians(FinalSpreadAngle)) * ActualDistanceToTarget;
 
-	// 디버그용: 현재 내 총알이 몇 도의 각도로 흩어지고 있는지 화면 좌측 상단에 출력
+	float RandomAngle = FMath::RandRange(0.0f, PI * 2.0f);
+	float RandomRadius = FMath::RandRange(0.0f, SpreadRadius);
+
+	FVector SpreadOffset = (CameraRight * FMath::Cos(RandomAngle) * RandomRadius) + (CameraUp * FMath::Sin(RandomAngle) * RandomRadius);
+
+	// 최종 타겟 지점에 스프레드 오프셋을 더합니다.
+	TargetLocation += SpreadOffset;
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
-			FString::Printf(TEXT("적용된 퍼짐 각도: %.2f도 (현재 Spread값: %.2f)"), FinalSpreadAngle, CurrentSpread));
+			FString::Printf(TEXT("무기 배수: %.1f | 적용된 각도: %.2f도"), SpreadMultiplier, FinalSpreadAngle));
 	}
 
 	// =========================================================================
 
-	FHitResult BulletHit;
-
-	// 실제 총알 발사 (Line Trace)
-	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(
-		BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams
-	);
-
-	// =========================================================================
-
-	// 시각적 이펙트(나이아가라) 스폰하기
-	// 총구 화염 (Muzzle Flash) 터뜨리기
-	if (MuzzleFlashEffect)
-	{
-		UNiagaraFunctionLibrary::SpawnSystemAttached(
-			MuzzleFlashEffect, WeaponMesh, FName("MuzzleSocket"),
-			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true
-		);
-	}
-
-	// 총알 궤적 (Tracer) 그리기
-	if (BulletTracerEffect)
-	{
-		// 총구에서 이펙트를 생성
-		UNiagaraComponent* TracerComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			GetWorld(), BulletTracerEffect, MuzzleLocation
-		);
-
-		if (TracerComponent)
-		{
-			// 이펙트의 끝점(도착점)을 설정 (나이아가라 변수 이름이 "Target"이라고 가정)
-			FVector TracerEnd = bBulletHit ? BulletHit.ImpactPoint : BulletEndLocation;
-			TracerComponent->SetVectorParameter(FName("Target"), TracerEnd);
-		}
-	}
-
-	// 충돌 결과 처리
-	if (bBulletHit)
-	{
-		// 디버그용
-		if (GEngine && BulletHit.GetActor())
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("명중: %s"), *BulletHit.GetActor()->GetName()));
-		}
-
-		// 벽이나 적에 맞았을 때 피격 이펙트 (Impact) 터뜨리기
-		if (ImpactEffect)
-		{
-			// 맞은 표면의 방향(Normal)을 바라보게 이펙트를 회전시켜 생성
-			FRotator ImpactRotation = BulletHit.ImpactNormal.Rotation();
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-				GetWorld(), ImpactEffect, BulletHit.ImpactPoint, ImpactRotation
-			);
-		}
-	}
+	CurrentWeapon->Fire(TargetLocation);
 }
 
 // 0.2초 뒤에 사격 자세를 푸는 함수

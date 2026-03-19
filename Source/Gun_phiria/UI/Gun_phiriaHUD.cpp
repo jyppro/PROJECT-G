@@ -1,56 +1,51 @@
 #include "Gun_phiriaHUD.h"
 #include "Engine/Canvas.h"
-#include "Gun_phiria\Gun_phiriaCharacter.h"
 #include "Kismet/GameplayStatics.h"
+#include "../Gun_phiriaCharacter.h"
+#include "../Weapon/WeaponBase.h"
 
 void AGun_phiriaHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
-	// 캔버스가 없으면 그릴 수 없으므로 안전 장치 추가
 	if (!Canvas) return;
-
-	// 화면의 정중앙 좌표 구하기
 	FVector2D Center(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.5f);
 
-	// 플레이어 캐릭터 찾아오기
 	AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
 	if (!PlayerChar) return;
 
-	// 퍼짐(Spread) 수치를 가져와서 픽셀 단위 오프셋으로 변환
-	float SpreadOffset = PlayerChar->GetCurrentSpread() * CrosshairSpreadMultiplier;
-	float FinalOffset = BaseSpread + SpreadOffset; // 최종적으로 중앙에서 떨어질 거리
-
-	// 크로스헤어 색상
-	FLinearColor CrosshairColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	// [새로 추가된 부분] 현재 장착된 무기를 가져옵니다. 무기가 없으면 그리지 않습니다.
+	AWeaponBase* CurrentWeapon = PlayerChar->GetCurrentWeapon();
+	if (!CurrentWeapon) return;
 
 	// ==========================================
 
-	// // 크로스헤어 그리기 (중앙 점 1개 + 주변 선 4개)
-	// 중앙 점 (2x2 픽셀 크기)
+	float CurrentFOV = 90.0f;
+	APlayerController* PC = GetOwningPlayerController();
+	if (PC && PC->PlayerCameraManager)
+	{
+		CurrentFOV = PC->PlayerCameraManager->GetFOVAngle();
+	}
+
+	// 캐릭터 코드에서처럼 무기 고유의 배수를 가져와서 똑같이 곱해줍니다.
+	float SpreadAngle = PlayerChar->GetCurrentSpread() * CurrentWeapon->WeaponSpreadMultiplier;
+
+	float HalfFOVRadian = FMath::DegreesToRadians(CurrentFOV * 0.5f);
+	float SpreadRadian = FMath::DegreesToRadians(SpreadAngle);
+
+	float SpreadOffset = Center.X * (FMath::Tan(SpreadRadian) / FMath::Tan(HalfFOVRadian));
+
+	// ==========================================
+
+	// 무기 고유의 기본 크로스헤어 벌어짐 수치를 사용합니다.
+	float FinalOffset = CurrentWeapon->WeaponBaseSpreadHUD + SpreadOffset;
+
+	FLinearColor CrosshairColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
+
+	// ... (이하 DrawRect로 크로스헤어 선 4개 그리는 코드는 기존과 완벽히 동일하게 유지) ...
 	DrawRect(CrosshairColor, Center.X - 1, Center.Y - 1, 2, 2);
-
-	// 위쪽 선 (Top)
-	DrawRect(CrosshairColor,
-		Center.X - (CrosshairThickness * 0.5f),
-		Center.Y - FinalOffset - CrosshairLength,
-		CrosshairThickness, CrosshairLength);
-
-	// 아래쪽 선 (Bottom)
-	DrawRect(CrosshairColor,
-		Center.X - (CrosshairThickness * 0.5f),
-		Center.Y + FinalOffset,
-		CrosshairThickness, CrosshairLength);
-
-	// 왼쪽 선 (Left)
-	DrawRect(CrosshairColor,
-		Center.X - FinalOffset - CrosshairLength,
-		Center.Y - (CrosshairThickness * 0.5f),
-		CrosshairLength, CrosshairThickness);
-
-	// 오른쪽 선 (Right)
-	DrawRect(CrosshairColor,
-		Center.X + FinalOffset,
-		Center.Y - (CrosshairThickness * 0.5f),
-		CrosshairLength, CrosshairThickness);
+	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y - FinalOffset - CrosshairLength, CrosshairThickness, CrosshairLength);
+	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y + FinalOffset, CrosshairThickness, CrosshairLength);
+	DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
+	DrawRect(CrosshairColor, Center.X + FinalOffset, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
 }
