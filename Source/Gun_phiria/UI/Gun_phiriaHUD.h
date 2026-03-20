@@ -12,6 +12,8 @@ class GUN_PHIRIA_API AGun_phiriaHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 
+	void ShowMissionClearMessage();
+
 private:
 	// 크로스헤어 시각적 설정값
 	float BaseSpread = 5.0f;                 // 기본 상태일 때 선과 중앙 점 사이의 최소 거리
@@ -20,4 +22,7 @@ private:
 
 	// 캐릭터 코드의 Fire()에서 사용한 스프레드 배수와 동일해야 함
 	float SpreadAngleMultiplier = 3.0f;
+
+	bool bIsShowingClearMessage = false;
+	float ClearMessageTimer = 0.0f;
 };

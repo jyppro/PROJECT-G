@@ -3,6 +3,8 @@
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "../Enemy/EnemyCharacter.h" 
+#include "../UI/Gun_phiriaHUD.h"
+#include "GameFramework/PlayerController.h"
 
 ADungeonRoomManager::ADungeonRoomManager()
 {
@@ -156,11 +158,20 @@ void ADungeonRoomManager::OnEnemyDied()
 		bIsCleared = true;
 		UnlockDoors(); // 다시 문이 스르륵 열립니다.
 
+		// ★ [새로 추가] 플레이어의 HUD를 찾아서 클리어 메세지를 띄웁니다!
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC)
+		{
+			AGun_phiriaHUD* PlayerHUD = Cast<AGun_phiriaHUD>(PC->GetHUD());
+			if (PlayerHUD)
+			{
+				PlayerHUD->ShowMissionClearMessage();
+			}
+		}
+
 		if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, TEXT("MISSION CLEAR! Doors Opened."));
 		}
-
-		// 맵에 흩어진 아이템 드랍, 다음 방 오픈 효과 등 추후 확장 가능!
 	}
 }

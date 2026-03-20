@@ -87,4 +87,43 @@ void AGun_phiriaHUD::DrawHUD()
 
 	// 현재 체력만큼 흰색 바 그리기
 	DrawRect(HealthColor, BarPosX, BarPosY, CurrentBarWidth, BarHeight);
+
+	if(bIsShowingClearMessage)
+	{
+		// 1. 시간(DeltaTime)을 빼서 타이머를 감소시킵니다.
+		float DeltaTime = GetWorld()->GetDeltaSeconds();
+		ClearMessageTimer -= DeltaTime;
+
+		// 2. 타이머가 0 이하가 되면 메세지를 끕니다.
+		if (ClearMessageTimer <= 0.0f)
+		{
+			bIsShowingClearMessage = false;
+		}
+		else
+		{
+			// 3. 화면 중앙 위쪽에 큼지막한 배경 박스 그리기
+			float BoxWidth = 800.0f;
+			float BoxHeight = 150.0f;
+			float BoxPosX = Center.X - (BoxWidth * 0.5f);
+			float BoxPosY = Center.Y - 250.0f; // 크로스헤어보다 살짝 위쪽
+
+			// 짙은 파란색 반투명 배경 (알파값 0.7)
+			FLinearColor BgColor = FLinearColor(0.0f, 0.1f, 0.4f, 0.7f);
+			DrawRect(BgColor, BoxPosX, BoxPosY, BoxWidth, BoxHeight);
+
+			// 4. 배경 박스 위에 텍스트 그리기
+			// 기본 폰트를 사용하되, 스케일(Scale)을 4.0으로 엄청 키워서 출력합니다.
+			FString ClearText = TEXT("MISSION CLEAR!");
+			FLinearColor TextColor = FLinearColor::Yellow;
+
+			// DrawText(내용, 색상, X좌표, Y좌표, 폰트(null이면 기본), 크기배수)
+			DrawText(ClearText, TextColor, BoxPosX + 150.0f, BoxPosY + 40.0f, nullptr, 4.0f);
+		}
+	}
+}
+
+void AGun_phiriaHUD::ShowMissionClearMessage()
+{
+	bIsShowingClearMessage = true;
+	ClearMessageTimer = 3.0f; // 3초 동안 화면에 표시
 }

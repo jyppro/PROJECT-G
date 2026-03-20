@@ -113,11 +113,6 @@ protected:
 
 	void SetupRoomManagers();
 
-	//// 적들을 방마다 스폰하는 함수
-	//void SpawnEnemies();
-
-	//bool IsSpawnLocationValid(FVector Location);
-
 	// =========================================================
 
 	// 던전 설정 (Dungeon Settings)
@@ -183,7 +178,4 @@ private:
 	// 스폰된 문들을 기억해둘 배열
 	UPROPERTY()
 	TArray<AActor*> SpawnedDoors;
-
-	// 시작 방의 문을 제거하는 함수
-	//void RemoveStartingRoomDoors();
 };
