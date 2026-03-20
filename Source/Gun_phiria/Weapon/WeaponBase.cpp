@@ -3,6 +3,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/Character.h"
 
 AWeaponBase::AWeaponBase()
 {
@@ -29,7 +30,7 @@ void AWeaponBase::Fire(FVector TargetLocation)
 
 	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams);
 
-	// 이펙트 생성 (작성해주신 코드와 동일)
+	// 1. 총구 화염 및 총알 궤적 이펙트 스폰 (무조건 생성)
 	if (MuzzleFlashEffect)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAttached(MuzzleFlashEffect, WeaponMesh, FName("MuzzleSocket"), FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true);
@@ -45,9 +46,59 @@ void AWeaponBase::Fire(FVector TargetLocation)
 		}
 	}
 
-	if (bBulletHit && ImpactEffect)
+	// 2. 총알이 어딘가에 맞았을 때의 처리 (데미지 및 피격 이펙트)
+	if (bBulletHit)
 	{
 		FRotator ImpactRotation = BulletHit.ImpactNormal.Rotation();
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactEffect, BulletHit.ImpactPoint, ImpactRotation);
+		AActor* HitActor = BulletHit.GetActor();
+
+		// 맞은 대상이 캐릭터인지 확인
+		if (HitActor && Cast<ACharacter>(HitActor))
+		{
+			// =========================================================
+			// ★ [수정된 부분] 소수점 없는 깔끔한 정수 데미지 뽑기
+
+			// 1. float로 되어있는 최소/최대 데미지를 정수(int32)로 변환 (반올림)
+			int32 MinDamageInt = FMath::RoundToInt(MinWeaponDamage);
+			int32 MaxDamageInt = FMath::RoundToInt(MaxWeaponDamage);
+
+			// 2. 정수 기반의 RandRange를 사용하여 10 ~ 20 사이의 깔끔한 정수를 뽑아냅니다.
+			int32 RandomIntDamage = FMath::RandRange(MinDamageInt, MaxDamageInt);
+
+			// 3. 데미지 적용 함수(ApplyPointDamage)는 float를 요구하므로 다시 float로 형변환(Cast) 해줍니다.
+			float RandomDamage = static_cast<float>(RandomIntDamage);
+			// =========================================================
+
+			UGameplayStatics::ApplyPointDamage(
+				HitActor,
+				RandomDamage, // 이제 14.0f, 17.0f 처럼 소수점 없는 깔끔한 데미지가 들어갑니다!
+				BaseDirection,
+				BulletHit,
+				GetInstigatorController(),
+				this,
+				UDamageType::StaticClass()
+			);
+
+			// 플레이어가 쐈을 때만 명중 로그 출력
+			APlayerController* PC = Cast<APlayerController>(GetInstigatorController());
+			if (PC && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("Hit Actor: %s"), *HitActor->GetName()));
+			}
+
+			// 피 튀김 등 적 전용 이펙트 생성
+			if (EnemyHitEffect)
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), EnemyHitEffect, BulletHit.ImpactPoint, ImpactRotation);
+			}
+		}
+		else
+		{
+			// 벽이나 엄폐물을 맞췄을 때의 일반 이펙트
+			if (ImpactEffect)
+			{
+				UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactEffect, BulletHit.ImpactPoint, ImpactRotation);
+			}
+		}
 	}
 }

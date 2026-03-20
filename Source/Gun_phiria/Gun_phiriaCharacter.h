@@ -36,6 +36,10 @@ public:
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
 	FORCEINLINE class AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon; }
 
+	// HUD에서 읽어갈 수 있도록 public에 선언합니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crosshair")
+	bool bIsAimingAtHead = false;
+
 protected:
 	// Protected 오버라이드 함수
 	virtual void BeginPlay() override;
@@ -52,9 +56,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> ADSCamera;
-
-	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UStaticMeshComponent> WeaponMesh;*/
 
 	// =========================================================
 

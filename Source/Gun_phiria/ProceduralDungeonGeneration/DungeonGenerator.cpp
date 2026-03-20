@@ -535,15 +535,28 @@ void ADungeonGenerator::SpawnEnemies()
 				float RandomX = FMath::RandRange(MinX, MaxX);
 				float RandomY = FMath::RandRange(MinY, MaxY);
 
-				// ★ [수정된 부분] Z값을 120.0f로 넉넉하게 올립니다. 
-				// 몬스터의 몸통 중간 높이가 대략 96.0f이므로, 120.0f에서 소환하면 허공에 아주 살짝 뜬 채로 시작하여 자연스럽게 바닥에 착지합니다.
-				SpawnLocation = FVector(RandomX, RandomY, Room.CenterLocation.Z + 120.0f);
+				// =========================================================================
+				// ★ [새로 추가된 로직] 하늘에서 바닥으로 수직 레이저를 쏴서 지형의 실제 높이를 찾습니다!
+				FVector TraceStart = FVector(RandomX, RandomY, Room.CenterLocation.Z + 2000.0f); // 방의 아주 높은 곳
+				FVector TraceEnd = FVector(RandomX, RandomY, Room.CenterLocation.Z - 500.0f);  // 방의 바닥 아래
 
-				// 구체 겹침 검사 실행!
-				if (IsSpawnLocationValid(SpawnLocation))
+				FHitResult HitResult;
+				FCollisionQueryParams TraceParams;
+				TraceParams.AddIgnoredActor(this);
+
+				// 레이저가 무언가(계단, 바닥, 단상 등)에 부딪혔는지 검사합니다.
+				if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
 				{
-					bValidPointFound = true;
+					// 부딪힌 실제 표면(ImpactPoint)에서, 위로 몬스터의 몸통 절반(약 100.0f)만큼 띄워줍니다.
+					SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
+
+					// 이 정확한 높이의 좌표를 기준으로 공간이 넉넉한지 최종 검사!
+					if (IsSpawnLocationValid(SpawnLocation))
+					{
+						bValidPointFound = true;
+					}
 				}
+				// =========================================================================
 			}
 
 			if (bValidPointFound)
@@ -561,31 +574,28 @@ void ADungeonGenerator::SpawnEnemies()
 
 bool ADungeonGenerator::IsSpawnLocationValid(FVector Location)
 {
-	// 몬스터의 몸통(캡슐 반지름이 보통 42)보다 여유 있는 크기(반지름 60)의 가상 구체를 만듭니다.
-	float CheckRadius = 60.0f;
+	// 몬스터의 몸통에 맞게 반경을 약간 줄여줍니다 (60 -> 45)
+	float CheckRadius = 45.0f;
 	FCollisionShape CheckSphere = FCollisionShape::MakeSphere(CheckRadius);
 
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // 맵 생성기 자신은 무시
+	QueryParams.AddIgnoredActor(this);
 
-	// [핵심] 지정된 위치에 구체를 생성했을 때, 엄폐물/벽(Visibility 채널)과 겹치는 게 하나라도 있는지 검사합니다.
+	// [수정된 부분] Visibility 대신 지형(벽, 계단 등)을 가장 잘 감지하는 WorldStatic 채널 사용
 	bool bIsOverlapping = GetWorld()->OverlapAnyTestByChannel(
 		Location,
 		FQuat::Identity,
-		ECC_Visibility,
+		ECC_WorldStatic,
 		CheckSphere,
 		QueryParams
 	);
 
-	// 디버그용 구체 그리기 (테스트 후 삭제하셔도 됩니다)
 	if (bIsOverlapping)
 	{
-		// 겹치는 장애물이 있으면 빨간색 구체를 그립니다. (스폰 불가)
 		DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Red, false, 5.0f);
 		return false;
 	}
 
-	// 주변에 겹치는 장애물이 없으면 초록색 구체를 그립니다. (스폰 가능!)
 	DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Green, false, 5.0f);
 	return true;
 }

@@ -87,19 +87,20 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	if (FollowCamera && ADSCamera)
 	{
 		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
-		if (bIsAiming)
+		UCameraComponent* CurrentActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+
+		// 현재 FOV와 목표 FOV의 차이가 작을 때만 업데이트
+		if (!FMath::IsNearlyEqual(CurrentActiveCam->FieldOfView, TargetFOV, 0.5f))
 		{
-			float NewFOV = FMath::FInterpTo(ADSCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
-			ADSCamera->SetFieldOfView(NewFOV);
+			float NewFOV = FMath::FInterpTo(CurrentActiveCam->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
+			CurrentActiveCam->SetFieldOfView(NewFOV);
 		}
 		else
 		{
-			float NewFOV = FMath::FInterpTo(FollowCamera->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
-			FollowCamera->SetFieldOfView(NewFOV);
+			// 목표값에 완전히 고정하여 불필요한 연산 방지
+			CurrentActiveCam->SetFieldOfView(TargetFOV);
 		}
 	}
-
-	// =========================================================================
 
 	// 플레이어 상태(이동, 점프)에 따른 탄 퍼짐 기본값 설정
 	float CurrentSpeed = GetVelocity().Size2D();
@@ -110,12 +111,12 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	if (bIsFalling)
 	{
 		// 공중에 떠 있을 때 (가장 큰 페널티)
-		TargetMinSpread = bIsAiming ? 4.0f : 8.0f;
+		TargetMinSpread = bIsAiming ? 3.0f : 6.0f;
 	}
 	else if (CurrentSpeed > 10.0f)
 	{
 		// 땅에 있지만 걷거나 뛸 때
-		TargetMinSpread = bIsAiming ? 1.5f : 4.0f;
+		TargetMinSpread = bIsAiming ? 1.5f : 3.0f;
 	}
 	else
 	{
@@ -130,8 +131,6 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		// 사격한 지 SpreadRecoveryDelay(예: 0.2초)가 지났을 때만 서서히 회복
 		CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
 	}
-
-	// =========================================================================
 
 	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 ---
 	// 조건문에 CurrentWeapon이 유효한지 확인하는 로직 추가
@@ -159,8 +158,6 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		DynamicAimOffset = FMath::VInterpTo(DynamicAimOffset, TargetHandCS, DeltaTime, 20.0f);
 	}
 
-	// =========================================================================
-
 	// 대각선 이동 애니메이션을 위한 '이동 방향 각도(Direction)' 계산
 	FVector Velocity = GetVelocity();
 	if (Velocity.Size2D() > 1.0f) // 캐릭터가 조금이라도 움직이고 있다면
@@ -177,8 +174,6 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		MovementDirectionAngle = 0.0f;
 	}
 
-	// =========================================================================
-
 	// 제자리 회전 시 발을 움직이기 위한 '초당 회전 속도(Yaw Speed)' 계산
 	float CurrentYaw = GetActorRotation().Yaw;
 	float YawDelta = CurrentYaw - PreviousActorYaw;
@@ -192,6 +187,44 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 
 	// 다음 프레임 계산을 위해 현재 각도 저장
 	PreviousActorYaw = CurrentYaw;
+
+	// ==========================================================
+	// ★ [새로 추가된 부분] 헤드샷 조준 판별 로직
+	bIsAimingAtHead = false; // 매 프레임 일단 false로 초기화
+
+	// 컨트롤러가 유효한지(플레이어가 조종 중인지) 확인
+	if (Controller != nullptr)
+	{
+		FVector CameraLocation;
+		FRotator CameraRotation;
+		// 현재 활성화된 카메라(조준 카메라든 기본 카메라든)의 정확한 시점을 가져옵니다!
+		Controller->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+		FVector CameraForward = CameraRotation.Vector();
+
+		// 화면 정중앙에서 50m(5000.0f) 앞까지 레이저를 쏩니다.
+		FVector TraceEnd = CameraLocation + (CameraForward * 5000.0f);
+
+		FHitResult HitResult;
+		FCollisionQueryParams TraceParams;
+		TraceParams.AddIgnoredActor(this); // 나 자신은 무시
+
+		if (CurrentWeapon)
+		{
+			TraceParams.AddIgnoredActor(CurrentWeapon); // 무기도 무시
+		}
+
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, TraceParams))
+		{
+			if (HitResult.GetActor() && Cast<ACharacter>(HitResult.GetActor()))
+			{
+				if (HitResult.BoneName == FName("head"))
+				{
+					bIsAimingAtHead = true; // 머리 조준 중!
+				}
+			}
+		}
+	}
 }
 
 // =========================================================================
@@ -371,7 +404,7 @@ void AGun_phiriaCharacter::Fire()
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
-			FString::Printf(TEXT("무기 배수: %.1f | 적용된 각도: %.2f도"), SpreadMultiplier, FinalSpreadAngle));
+			FString::Printf(TEXT("Spread Multiplier: %.1f | Spread Angle: %.2f deg"), SpreadMultiplier, FinalSpreadAngle));
 	}
 
 	// =========================================================================

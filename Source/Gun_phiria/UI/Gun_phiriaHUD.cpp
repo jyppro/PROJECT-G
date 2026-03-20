@@ -40,10 +40,25 @@ void AGun_phiriaHUD::DrawHUD()
 	// 무기 고유의 기본 크로스헤어 벌어짐 수치를 사용합니다.
 	float FinalOffset = CurrentWeapon->WeaponBaseSpreadHUD + SpreadOffset;
 
-	FLinearColor CrosshairColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f);
+	// 평상시 크로스헤어 색상
+	FLinearColor CrosshairColor = FLinearColor::Black;
+	float DotSize = 2.0f; // 기본 점 크기
 
-	// ... (이하 DrawRect로 크로스헤어 선 4개 그리는 코드는 기존과 완벽히 동일하게 유지) ...
-	DrawRect(CrosshairColor, Center.X - 1, Center.Y - 1, 2, 2);
+	// 캐릭터가 적의 머리를 조준하고 있다면?
+	if (PlayerChar->bIsAimingAtHead)
+	{
+		// 크로스헤어 "전체" 색상을 빨간색으로 바꿉니다!
+		CrosshairColor = FLinearColor::Red;
+		// 중앙 점의 크기도 확 키워줍니다.
+		DotSize = 10.0f;
+	}
+
+	float HalfDot = DotSize * 0.5f;
+
+	// 1. 중앙 점 그리기 (변경된 크기와 통합된 색상 적용)
+	DrawRect(CrosshairColor, Center.X - HalfDot, Center.Y - HalfDot, DotSize, DotSize);
+
+	// 2. 십자선의 4방향 선 그리기 (점과 동일하게 변경된 CrosshairColor 적용!)
 	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y - FinalOffset - CrosshairLength, CrosshairThickness, CrosshairLength);
 	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y + FinalOffset, CrosshairThickness, CrosshairLength);
 	DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Components/CapsuleComponent.h"
 #include "EnemyCharacter.generated.h"
 
 class AWeaponBase;
@@ -30,10 +31,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI")
 	float FireRate = 2.0f;
 
+	// 최대 체력
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
+	float MaxHealth = 100.0f;
+
+	// 현재 체력
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
+	float CurrentHealth;
+
+	// 언리얼 내장 데미지 처리 함수 오버라이드 (누군가 ApplyDamage를 호출하면 이게 실행됨)
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
 private:
 	// 사격을 반복하기 위한 타이머
 	FTimerHandle AIFireTimer;
 
 	// 실제 사격을 수행할 함수
 	void FireAtPlayer();
+
+	// 사망 처리 함수
+	void Die();
+
+	// 죽었는지 여부 확인
+	bool bIsDead = false;
 };
