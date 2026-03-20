@@ -6,6 +6,7 @@
 #include "EnemyCharacter.generated.h"
 
 class AWeaponBase;
+class ADungeonRoomManager;
 
 UCLASS()
 class GUN_PHIRIA_API AEnemyCharacter : public ACharacter
@@ -41,6 +42,9 @@ public:
 
 	// 언리얼 내장 데미지 처리 함수 오버라이드 (누군가 ApplyDamage를 호출하면 이게 실행됨)
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
+	UPROPERTY()
+	ADungeonRoomManager* ParentRoom;
 
 private:
 	// 사격을 반복하기 위한 타이머

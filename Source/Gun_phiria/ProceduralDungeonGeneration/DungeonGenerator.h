@@ -111,10 +111,12 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// 적들을 방마다 스폰하는 함수
-	void SpawnEnemies();
+	void SetupRoomManagers();
 
-	bool IsSpawnLocationValid(FVector Location);
+	//// 적들을 방마다 스폰하는 함수
+	//void SpawnEnemies();
+
+	//bool IsSpawnLocationValid(FVector Location);
 
 	// =========================================================
 
@@ -152,6 +154,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon Spawning")
 	TSubclassOf<AActor> DoorPrefab;
 
+	// ★ [새로 추가] 방 관리자(Room Manager) 프리팹
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon Spawning")
+	TSubclassOf<class ADungeonRoomManager> RoomManagerPrefab;
+
 	// =========================================================
 
 	// 내부 데이터 (Internal Data)
@@ -179,5 +185,5 @@ private:
 	TArray<AActor*> SpawnedDoors;
 
 	// 시작 방의 문을 제거하는 함수
-	void RemoveStartingRoomDoors();
+	//void RemoveStartingRoomDoors();
 };

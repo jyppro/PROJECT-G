@@ -6,6 +6,7 @@
 #include "Engine/DamageEvents.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "../ProceduralDungeonGeneration/DungeonRoomManager.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -140,6 +141,11 @@ void AEnemyCharacter::Die()
 	// 래그돌 적용
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	GetMesh()->SetSimulatePhysics(true);
+
+	if (ParentRoom)
+	{
+		ParentRoom->OnEnemyDied();
+	}
 
 	// 시체가 너무 많이 쌓이지 않도록 5초 뒤에 액터 완전 삭제
 	SetLifeSpan(5.0f);

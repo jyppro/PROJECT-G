@@ -8,6 +8,8 @@
 #include "CollisionQueryParams.h"
 #include "WorldCollision.h"
 #include "Engine/World.h"
+#include "DungeonRoomManager.h"
+#include "Components/BoxComponent.h"
 
 ADungeonGenerator::ADungeonGenerator()
 {
@@ -27,8 +29,11 @@ void ADungeonGenerator::BeginPlay()
 	SpawnDungeonActors();
 	TeleportPlayerToRandomRoom();
 
-	SpawnEnemies();
-	RemoveStartingRoomDoors();
+	//RemoveStartingRoomDoors();
+	SetupRoomManagers(); // 기존 SpawnEnemies() 대체
+
+	//SpawnEnemies();
+	//RemoveStartingRoomDoors();
 
 	if (bShowDebugBoxes)
 	{
@@ -401,7 +406,11 @@ void ADungeonGenerator::SpawnDungeonActors()
 						{
 							SpawnedDoor->SetActorScale3D(DoorTransform.GetScale3D());
 
-							// 나중에 지울 수 있도록 배열에 기억
+							// ★ [새로 추가된 부분] 던전의 모든 문을 기본적으로 '열림' 상태로 만듭니다!
+							SpawnedDoor->SetActorHiddenInGame(true);
+							SpawnedDoor->SetActorEnableCollision(false);
+
+							// 나중에 찾을 수 있도록 배열에 기억
 							SpawnedDoors.Add(SpawnedDoor);
 						}
 					}
@@ -500,179 +509,239 @@ void ADungeonGenerator::DrawDebugRooms()
 	}
 }
 
-void ADungeonGenerator::SpawnEnemies()
+//void ADungeonGenerator::SpawnEnemies()
+//{
+//	if (!EnemyPrefab) return;
+//
+//	for (int32 i = 0; i < RoomList.Num(); i++)
+//	{
+//		const FDungeonRoom& Room = RoomList[i];
+//
+//		if (!Room.bIsMainRoom || i == PlayerSpawnRoomIndex) continue;
+//
+//		int32 NumEnemiesToSpawn = FMath::RandRange(MinEnemiesPerRoom, MaxEnemiesPerRoom);
+//
+//		for (int32 j = 0; j < NumEnemiesToSpawn; j++)
+//		{
+//			FVector SpawnLocation;
+//			bool bValidPointFound = false;
+//
+//			int32 MaxTries = 10;
+//			int32 CurrentTries = 0;
+//
+//			while (!bValidPointFound && CurrentTries < MaxTries)
+//			{
+//				CurrentTries++;
+//
+//				float Padding = 150.0f;
+//				float MinX = Room.CenterLocation.X - (Room.Size.X * 0.5f) + Padding;
+//				float MaxX = Room.CenterLocation.X + (Room.Size.X * 0.5f) - Padding;
+//				float MinY = Room.CenterLocation.Y - (Room.Size.Y * 0.5f) + Padding;
+//				float MaxY = Room.CenterLocation.Y + (Room.Size.Y * 0.5f) - Padding;
+//
+//				float RandomX = FMath::RandRange(MinX, MaxX);
+//				float RandomY = FMath::RandRange(MinY, MaxY);
+//
+//				// 하늘에서 바닥으로 수직 레이저를 쏴서 지형의 실제 높이를 찾기
+//				FVector TraceStart = FVector(RandomX, RandomY, Room.CenterLocation.Z + 2000.0f); // 방의 아주 높은 곳
+//				FVector TraceEnd = FVector(RandomX, RandomY, Room.CenterLocation.Z - 500.0f);  // 방의 바닥 아래
+//
+//				FHitResult HitResult;
+//				FCollisionQueryParams TraceParams;
+//				TraceParams.AddIgnoredActor(this);
+//
+//				// 레이저가 무언가(계단, 바닥, 단상 등)에 부딪혔는지 검사
+//				if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+//				{
+//					// 부딪힌 실제 표면(ImpactPoint)에서, 위로 몬스터의 몸통 절반(약 100.0f)만큼 띄워줌
+//					SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
+//
+//					// 이 정확한 높이의 좌표를 기준으로 공간이 넉넉한지 최종 검사
+//					if (IsSpawnLocationValid(SpawnLocation))
+//					{
+//						bValidPointFound = true;
+//					}
+//				}
+//			}
+//
+//			if (bValidPointFound)
+//			{
+//				FRotator SpawnRotation = FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
+//				FActorSpawnParameters SpawnParams;
+//				// 스폰 시 약간의 충돌이 있어도 위치를 조정하며 무조건 스폰되게 하는 옵션
+//				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+//
+//				GetWorld()->SpawnActor<AEnemyCharacter>(EnemyPrefab, SpawnLocation, SpawnRotation, SpawnParams);
+//			}
+//		}
+//	}
+//}
+
+//bool ADungeonGenerator::IsSpawnLocationValid(FVector Location)
+//{
+//	// 몬스터의 몸통에 맞게 반경을 약간 줄여줍니다 (60 -> 45)
+//	float CheckRadius = 45.0f;
+//	FCollisionShape CheckSphere = FCollisionShape::MakeSphere(CheckRadius);
+//
+//	FCollisionQueryParams QueryParams;
+//	QueryParams.AddIgnoredActor(this);
+//
+//	// Visibility 대신 지형(벽, 계단 등)을 가장 잘 감지하는 WorldStatic 채널 사용
+//	bool bIsOverlapping = GetWorld()->OverlapAnyTestByChannel(
+//		Location,
+//		FQuat::Identity,
+//		ECC_WorldStatic,
+//		CheckSphere,
+//		QueryParams
+//	);
+//
+//	if (bIsOverlapping)
+//	{
+//		DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Red, false, 5.0f);
+//		return false;
+//	}
+//
+//	DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Green, false, 5.0f);
+//	return true;
+//}
+
+//void ADungeonGenerator::RemoveStartingRoomDoors()
+//{
+//	// 인덱스가 유효한지 확인
+//	if (PlayerSpawnRoomIndex < 0 || PlayerSpawnRoomIndex >= RoomList.Num()) return;
+//
+//	// 시작 방과 연결된 모든 '통로(Edge)' 데이터를 찾아냄
+//	TArray<FRoomEdge> ConnectedEdges;
+//	for (const FRoomEdge& Edge : FinalPaths)
+//	{
+//		// 시작 방이 A이거나 B인 모든 연결선을 수집
+//		if (Edge.RoomAIndex == PlayerSpawnRoomIndex || Edge.RoomBIndex == PlayerSpawnRoomIndex)
+//		{
+//			ConnectedEdges.Add(Edge);
+//		}
+//	}
+//
+//	// 특정 좌표(문)가 선분(통로) 위에 있는지 확인하는 도우미 람다 함수
+//	auto IsPointOnSegment = [](FVector P, FVector Start, FVector End, float Tolerance) -> bool
+//		{
+//			float MinX = FMath::Min(Start.X, End.X) - Tolerance;
+//			float MaxX = FMath::Max(Start.X, End.X) + Tolerance;
+//			float MinY = FMath::Min(Start.Y, End.Y) - Tolerance;
+//			float MaxY = FMath::Max(Start.Y, End.Y) + Tolerance;
+//
+//			// 문이 통로 선을 기준으로 Tolerance(오차 범위) 안에 들어오면 true 반환
+//			return (P.X >= MinX && P.X <= MaxX && P.Y >= MinY && P.Y <= MaxY);
+//		};
+//
+//	// 배열의 뒤에서부터 앞으로 거꾸로 검사하며 문을 파괴
+//	for (int32 i = SpawnedDoors.Num() - 1; i >= 0; --i)
+//	{
+//		AActor* Door = SpawnedDoors[i];
+//		if (!Door) continue;
+//
+//		FVector DoorLoc = Door->GetActorLocation();
+//		bool bShouldDestroy = false;
+//
+//		// 이 문이 '시작 방과 연결된 통로' 중 하나에 겹쳐있는지 검사
+//		for (const FRoomEdge& Edge : ConnectedEdges)
+//		{
+//			FVector PosA = RoomList[Edge.RoomAIndex].CenterLocation;
+//			FVector PosB = RoomList[Edge.RoomBIndex].CenterLocation;
+//
+//			float dX = PosB.X - PosA.X;
+//			float dY = PosB.Y - PosA.Y;
+//
+//			// 문의 좌표가 완벽하게 중앙이 아닐 수 있으므로 넉넉한 오차 범위를 줌
+//			float Tol = FMath::Max(CorridorWidth, 300.0f);
+//
+//			// CreateCorridors에서 사용했던 L자 통로 그리기와 완벽히 동일한 궤적을 검사
+//			if (FMath::Abs(dX) > FMath::Abs(dY))
+//			{
+//				float MidX = (PosA.X + PosB.X) / 2.0f;
+//				if (IsPointOnSegment(DoorLoc, PosA, FVector(MidX, PosA.Y, 0), Tol) ||
+//					IsPointOnSegment(DoorLoc, PosB, FVector(MidX, PosB.Y, 0), Tol) ||
+//					IsPointOnSegment(DoorLoc, FVector(MidX, PosA.Y, 0), FVector(MidX, PosB.Y, 0), Tol))
+//				{
+//					bShouldDestroy = true; break;
+//				}
+//			}
+//			else
+//			{
+//				float MidY = (PosA.Y + PosB.Y) / 2.0f;
+//				if (IsPointOnSegment(DoorLoc, PosA, FVector(PosA.X, MidY, 0), Tol) ||
+//					IsPointOnSegment(DoorLoc, PosB, FVector(PosB.X, MidY, 0), Tol) ||
+//					IsPointOnSegment(DoorLoc, FVector(PosA.X, MidY, 0), FVector(PosB.X, MidY, 0), Tol))
+//				{
+//					bShouldDestroy = true; break;
+//				}
+//			}
+//		}
+//
+//		// 검사 결과, 통로 위에 있는 문이라면(양쪽 끝 문 모두 포함) 즉시 파괴
+//		if (bShouldDestroy)
+//		{
+//			Door->Destroy();
+//			SpawnedDoors.RemoveAt(i);
+//		}
+//	}
+//}
+
+// ★ [새로 추가된 함수] 각 방 중앙에 관리자를 스폰하고 문을 연결해 줍니다.
+void ADungeonGenerator::SetupRoomManagers()
 {
-	if (!EnemyPrefab) return;
+	if (!RoomManagerPrefab) return;
 
 	for (int32 i = 0; i < RoomList.Num(); i++)
 	{
 		const FDungeonRoom& Room = RoomList[i];
 
+		// 시작 방이거나 메인 방이 아니면 스킵합니다.
 		if (!Room.bIsMainRoom || i == PlayerSpawnRoomIndex) continue;
 
-		int32 NumEnemiesToSpawn = FMath::RandRange(MinEnemiesPerRoom, MaxEnemiesPerRoom);
+		// 방 바닥에서 살짝 띄워 트리거 박스 중앙을 맞춥니다.
+		FVector SpawnLocation = Room.CenterLocation;
+		SpawnLocation.Z += 200.0f;
 
-		for (int32 j = 0; j < NumEnemiesToSpawn; j++)
+		// 1. 방 관리자 스폰
+		ADungeonRoomManager* RoomManager = GetWorld()->SpawnActor<ADungeonRoomManager>(RoomManagerPrefab, SpawnLocation, FRotator::ZeroRotator);
+
+		if (RoomManager)
 		{
-			FVector SpawnLocation;
-			bool bValidPointFound = false;
+			// 2. 방 크기와 에너미 프리팹 전달
+			RoomManager->RoomSize = FVector(Room.Size.X, Room.Size.Y, 1000.0f);
+			RoomManager->EnemyPrefab = EnemyPrefab; // Generator에 할당된 적 프리팹을 넘겨줌
 
-			int32 MaxTries = 10;
-			int32 CurrentTries = 0;
-
-			while (!bValidPointFound && CurrentTries < MaxTries)
+			// 3. 플레이어 감지용 트리거 박스 크기를 '방 크기에 딱 맞게' 자동 조절!
+			// (복도를 지나가다 실수로 발동되지 않도록 방 크기보다 살짝(150) 작게 설정)
+			if (UBoxComponent* Trigger = RoomManager->RoomTrigger)
 			{
-				CurrentTries++;
+				Trigger->SetBoxExtent(FVector((Room.Size.X * 0.5f) - 150.0f, (Room.Size.Y * 0.5f) - 150.0f, 500.0f));
+			}
 
-				float Padding = 150.0f;
-				float MinX = Room.CenterLocation.X - (Room.Size.X * 0.5f) + Padding;
-				float MaxX = Room.CenterLocation.X + (Room.Size.X * 0.5f) - Padding;
-				float MinY = Room.CenterLocation.Y - (Room.Size.Y * 0.5f) + Padding;
-				float MaxY = Room.CenterLocation.Y + (Room.Size.Y * 0.5f) - Padding;
+			// 4. 이 방의 경계선(둘레)에 위치한 문(Door)들을 찾아 관리자에게 귀속시킵니다.
+			float Tolerance = CorridorWidth; // 오차 범위
+			float MinX = Room.CenterLocation.X - (Room.Size.X * 0.5f) - Tolerance;
+			float MaxX = Room.CenterLocation.X + (Room.Size.X * 0.5f) + Tolerance;
+			float MinY = Room.CenterLocation.Y - (Room.Size.Y * 0.5f) - Tolerance;
+			float MaxY = Room.CenterLocation.Y + (Room.Size.Y * 0.5f) + Tolerance;
 
-				float RandomX = FMath::RandRange(MinX, MaxX);
-				float RandomY = FMath::RandRange(MinY, MaxY);
+			for (AActor* Door : SpawnedDoors)
+			{
+				// RemoveStartingRoomDoors에서 지워진 문은 무시(IsValid 검사)
+				if (!IsValid(Door)) continue;
 
-				// 하늘에서 바닥으로 수직 레이저를 쏴서 지형의 실제 높이를 찾기
-				FVector TraceStart = FVector(RandomX, RandomY, Room.CenterLocation.Z + 2000.0f); // 방의 아주 높은 곳
-				FVector TraceEnd = FVector(RandomX, RandomY, Room.CenterLocation.Z - 500.0f);  // 방의 바닥 아래
+				FVector DoorLoc = Door->GetActorLocation();
 
-				FHitResult HitResult;
-				FCollisionQueryParams TraceParams;
-				TraceParams.AddIgnoredActor(this);
-
-				// 레이저가 무언가(계단, 바닥, 단상 등)에 부딪혔는지 검사
-				if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+				// 문의 위치가 이 방의 둘레 안에 들어온다면?
+				if (DoorLoc.X >= MinX && DoorLoc.X <= MaxX && DoorLoc.Y >= MinY && DoorLoc.Y <= MaxY)
 				{
-					// 부딪힌 실제 표면(ImpactPoint)에서, 위로 몬스터의 몸통 절반(약 100.0f)만큼 띄워줌
-					SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
+					RoomManager->ConnectedDoors.Add(Door); // 이 방의 문으로 등록!
 
-					// 이 정확한 높이의 좌표를 기준으로 공간이 넉넉한지 최종 검사
-					if (IsSpawnLocationValid(SpawnLocation))
-					{
-						bValidPointFound = true;
-					}
+					// 게임 시작 시점에서는 당연히 모든 문이 열려있어야 합니다.
+					Door->SetActorHiddenInGame(true);
+					Door->SetActorEnableCollision(false);
 				}
 			}
-
-			if (bValidPointFound)
-			{
-				FRotator SpawnRotation = FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
-				FActorSpawnParameters SpawnParams;
-				// 스폰 시 약간의 충돌이 있어도 위치를 조정하며 무조건 스폰되게 하는 옵션
-				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-				GetWorld()->SpawnActor<AEnemyCharacter>(EnemyPrefab, SpawnLocation, SpawnRotation, SpawnParams);
-			}
-		}
-	}
-}
-
-bool ADungeonGenerator::IsSpawnLocationValid(FVector Location)
-{
-	// 몬스터의 몸통에 맞게 반경을 약간 줄여줍니다 (60 -> 45)
-	float CheckRadius = 45.0f;
-	FCollisionShape CheckSphere = FCollisionShape::MakeSphere(CheckRadius);
-
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
-
-	// Visibility 대신 지형(벽, 계단 등)을 가장 잘 감지하는 WorldStatic 채널 사용
-	bool bIsOverlapping = GetWorld()->OverlapAnyTestByChannel(
-		Location,
-		FQuat::Identity,
-		ECC_WorldStatic,
-		CheckSphere,
-		QueryParams
-	);
-
-	if (bIsOverlapping)
-	{
-		DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Red, false, 5.0f);
-		return false;
-	}
-
-	DrawDebugSphere(GetWorld(), Location, CheckRadius, 12, FColor::Green, false, 5.0f);
-	return true;
-}
-
-void ADungeonGenerator::RemoveStartingRoomDoors()
-{
-	// 인덱스가 유효한지 확인
-	if (PlayerSpawnRoomIndex < 0 || PlayerSpawnRoomIndex >= RoomList.Num()) return;
-
-	// 시작 방과 연결된 모든 '통로(Edge)' 데이터를 찾아냄
-	TArray<FRoomEdge> ConnectedEdges;
-	for (const FRoomEdge& Edge : FinalPaths)
-	{
-		// 시작 방이 A이거나 B인 모든 연결선을 수집
-		if (Edge.RoomAIndex == PlayerSpawnRoomIndex || Edge.RoomBIndex == PlayerSpawnRoomIndex)
-		{
-			ConnectedEdges.Add(Edge);
-		}
-	}
-
-	// 특정 좌표(문)가 선분(통로) 위에 있는지 확인하는 도우미 람다 함수
-	auto IsPointOnSegment = [](FVector P, FVector Start, FVector End, float Tolerance) -> bool
-		{
-			float MinX = FMath::Min(Start.X, End.X) - Tolerance;
-			float MaxX = FMath::Max(Start.X, End.X) + Tolerance;
-			float MinY = FMath::Min(Start.Y, End.Y) - Tolerance;
-			float MaxY = FMath::Max(Start.Y, End.Y) + Tolerance;
-
-			// 문이 통로 선을 기준으로 Tolerance(오차 범위) 안에 들어오면 true 반환
-			return (P.X >= MinX && P.X <= MaxX && P.Y >= MinY && P.Y <= MaxY);
-		};
-
-	// 배열의 뒤에서부터 앞으로 거꾸로 검사하며 문을 파괴
-	for (int32 i = SpawnedDoors.Num() - 1; i >= 0; --i)
-	{
-		AActor* Door = SpawnedDoors[i];
-		if (!Door) continue;
-
-		FVector DoorLoc = Door->GetActorLocation();
-		bool bShouldDestroy = false;
-
-		// 이 문이 '시작 방과 연결된 통로' 중 하나에 겹쳐있는지 검사
-		for (const FRoomEdge& Edge : ConnectedEdges)
-		{
-			FVector PosA = RoomList[Edge.RoomAIndex].CenterLocation;
-			FVector PosB = RoomList[Edge.RoomBIndex].CenterLocation;
-
-			float dX = PosB.X - PosA.X;
-			float dY = PosB.Y - PosA.Y;
-
-			// 문의 좌표가 완벽하게 중앙이 아닐 수 있으므로 넉넉한 오차 범위를 줌
-			float Tol = FMath::Max(CorridorWidth, 300.0f);
-
-			// CreateCorridors에서 사용했던 L자 통로 그리기와 완벽히 동일한 궤적을 검사
-			if (FMath::Abs(dX) > FMath::Abs(dY))
-			{
-				float MidX = (PosA.X + PosB.X) / 2.0f;
-				if (IsPointOnSegment(DoorLoc, PosA, FVector(MidX, PosA.Y, 0), Tol) ||
-					IsPointOnSegment(DoorLoc, PosB, FVector(MidX, PosB.Y, 0), Tol) ||
-					IsPointOnSegment(DoorLoc, FVector(MidX, PosA.Y, 0), FVector(MidX, PosB.Y, 0), Tol))
-				{
-					bShouldDestroy = true; break;
-				}
-			}
-			else
-			{
-				float MidY = (PosA.Y + PosB.Y) / 2.0f;
-				if (IsPointOnSegment(DoorLoc, PosA, FVector(PosA.X, MidY, 0), Tol) ||
-					IsPointOnSegment(DoorLoc, PosB, FVector(PosB.X, MidY, 0), Tol) ||
-					IsPointOnSegment(DoorLoc, FVector(PosA.X, MidY, 0), FVector(PosB.X, MidY, 0), Tol))
-				{
-					bShouldDestroy = true; break;
-				}
-			}
-		}
-
-		// 검사 결과, 통로 위에 있는 문이라면(양쪽 끝 문 모두 포함) 즉시 파괴
-		if (bShouldDestroy)
-		{
-			Door->Destroy();
-			SpawnedDoors.RemoveAt(i);
 		}
 	}
 }
