@@ -25,13 +25,10 @@ class AGun_phiriaCharacter : public ACharacter
 public:
 	AGun_phiriaCharacter();
 
-	// Public 오버라이드 함수
 	virtual void Tick(float DeltaTime) override;
 
 	// 데미지 수신 오버라이드 함수
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
-
-	// =========================================================
 
 	// Getters (외부에서 컴포넌트나 상태를 가져갈 때 사용)
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -39,7 +36,7 @@ public:
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
 	FORCEINLINE class AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon; }
 
-	// HUD에서 읽어갈 수 있도록 public에 선언합니다.
+	// HUD에서 읽어갈 수 있도록 public에 선언
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crosshair")
 	bool bIsAimingAtHead = false;
 
@@ -51,16 +48,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentHealth;
 
-	// 플레이어가 맞았을 때 튀길 피격 이펙트 (나이아가라)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	class UNiagaraSystem* PlayerHitEffect;
-
 protected:
-	// Protected 오버라이드 함수
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-	// =========================================================
 
 	// 컴포넌트 (Components)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
@@ -71,8 +61,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> ADSCamera;
-
-	// =========================================================
 
 	// 입력 (Input)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -93,13 +81,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> FireAction;
 
-	// =========================================================
-
 	// 입력 처리 함수
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
-
-	// =========================================================
 
 	// 전투 및 무기 (Combat & Weapon)
 	void StartAiming();
@@ -134,8 +118,6 @@ protected:
 	UPROPERTY()
 	AWeaponBase* CurrentWeapon;
 
-	// =========================================================
-
 	// 카메라 및 조준 세팅 (Camera & Aiming Settings)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aiming")
 	FVector DynamicAimOffset;
@@ -147,8 +129,6 @@ protected:
 	float AimFOV = 60.0f;          // 조준 시 좁아지는 시야각 (확대)
 	float ZoomInterpSpeed = 20.0f; // 줌인되는 속도
 
-	// =========================================================
-
 	// 애니메이션 (Animation)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
 	float MovementDirectionAngle = 0.0f;
@@ -156,20 +136,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
 	float YawRotationSpeed = 0.0f;
 
-	// =========================================================
-
-	// 이펙트 (Effects)
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	//TObjectPtr<UNiagaraSystem> MuzzleFlashEffect; // 총구 화염
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	//TObjectPtr<UNiagaraSystem> BulletTracerEffect; // 궤적
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
-	//TObjectPtr<UNiagaraSystem> ImpactEffect; // 피격 이펙트
-
 private:
-	// 내부 사용 변수 (Internal Use Only)
 	FTimerHandle FireTimerHandle;
 	float PreviousActorYaw = 0.0f;
 	float LastFireTime = 0.0f;

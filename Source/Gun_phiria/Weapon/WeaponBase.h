@@ -1,4 +1,3 @@
-// WeaponBase.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -39,7 +38,7 @@ public:
 	float MaxWeaponDamage = 20.0f;
 
 protected:
-	// 기존 캐릭터 코드에 있던 무기 메시와 이펙트들을 이쪽으로 옮깁니다.
+	// 기존 캐릭터 코드에 있던 무기 메시와 이펙트들을 이쪽으로 옮김
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WeaponMesh;
 
@@ -52,11 +51,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
 	TObjectPtr<UNiagaraSystem> ImpactEffect;
 
-	// [새로 추가] 적 캐릭터를 맞췄을 때 나올 이펙트 (피 튀김 등)
+	// 적 캐릭터를 맞췄을 때 나올 이펙트 (피 튀김 등)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
 	TObjectPtr<class UNiagaraSystem> EnemyHitEffect;
 
-	// 탄 퍼짐 관련 변수 (무기마다 퍼짐 정도가 다를 수 있으므로 무기가 가집니다)
+	// 탄 퍼짐 관련 변수 (무기마다 퍼짐 정도가 다르게 하기 위해 무기가 가짐)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	float SpreadPerShot = 1.0f;
 };

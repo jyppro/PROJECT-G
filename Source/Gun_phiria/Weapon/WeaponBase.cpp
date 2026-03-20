@@ -1,4 +1,3 @@
-// WeaponBase.cpp
 #include "WeaponBase.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
@@ -14,7 +13,6 @@ AWeaponBase::AWeaponBase()
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
-// 기존 캐릭터의 Fire 함수 뒷부분(라인 트레이스 및 이펙트)이 이곳으로 옵니다.
 void AWeaponBase::Fire(FVector TargetLocation)
 {
 	FVector MuzzleLocation = WeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
@@ -30,7 +28,7 @@ void AWeaponBase::Fire(FVector TargetLocation)
 
 	bool bBulletHit = GetWorld()->LineTraceSingleByChannel(BulletHit, MuzzleLocation, BulletEndLocation, ECC_Visibility, QueryParams);
 
-	// 1. 총구 화염 및 총알 궤적 이펙트 스폰 (무조건 생성)
+	// 총구 화염 및 총알 궤적 이펙트 스폰
 	if (MuzzleFlashEffect)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAttached(MuzzleFlashEffect, WeaponMesh, FName("MuzzleSocket"), FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true);
@@ -46,7 +44,7 @@ void AWeaponBase::Fire(FVector TargetLocation)
 		}
 	}
 
-	// 2. 총알이 어딘가에 맞았을 때의 처리 (데미지 및 피격 이펙트)
+	// 총알이 어딘가에 맞았을 때의 처리 (데미지 및 피격 이펙트)
 	if (bBulletHit)
 	{
 		FRotator ImpactRotation = BulletHit.ImpactNormal.Rotation();
@@ -55,23 +53,19 @@ void AWeaponBase::Fire(FVector TargetLocation)
 		// 맞은 대상이 캐릭터인지 확인
 		if (HitActor && Cast<ACharacter>(HitActor))
 		{
-			// =========================================================
-			// ★ [수정된 부분] 소수점 없는 깔끔한 정수 데미지 뽑기
-
-			// 1. float로 되어있는 최소/최대 데미지를 정수(int32)로 변환 (반올림)
+			// float로 되어있는 최소/최대 데미지를 정수(int32)로 변환 (반올림)
 			int32 MinDamageInt = FMath::RoundToInt(MinWeaponDamage);
 			int32 MaxDamageInt = FMath::RoundToInt(MaxWeaponDamage);
 
-			// 2. 정수 기반의 RandRange를 사용하여 10 ~ 20 사이의 깔끔한 정수를 뽑아냅니다.
+			// 정수 기반의 RandRange를 사용하여 10 ~ 20 사이의 깔끔한 정수를 뽑아냄
 			int32 RandomIntDamage = FMath::RandRange(MinDamageInt, MaxDamageInt);
 
-			// 3. 데미지 적용 함수(ApplyPointDamage)는 float를 요구하므로 다시 float로 형변환(Cast) 해줍니다.
+			// 데미지 적용 함수(ApplyPointDamage)는 float를 요구하므로 다시 float로 형변환(Cast)
 			float RandomDamage = static_cast<float>(RandomIntDamage);
-			// =========================================================
 
 			UGameplayStatics::ApplyPointDamage(
 				HitActor,
-				RandomDamage, // 이제 14.0f, 17.0f 처럼 소수점 없는 깔끔한 데미지가 들어갑니다!
+				RandomDamage, // 이제 14.0f, 17.0f 처럼 소수점 없는 깔끔한 데미지가 들어감
 				BaseDirection,
 				BulletHit,
 				GetInstigatorController(),

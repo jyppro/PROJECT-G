@@ -18,6 +18,6 @@ private:
 	float CrosshairLength = 12.0f;           // 선의 길이
 	float CrosshairThickness = 2.0f;         // 선의 두께
 
-	// 캐릭터 코드의 Fire()에서 사용한 스프레드 배수와 동일해야 합니다!
+	// 캐릭터 코드의 Fire()에서 사용한 스프레드 배수와 동일해야 함
 	float SpreadAngleMultiplier = 3.0f;
 };

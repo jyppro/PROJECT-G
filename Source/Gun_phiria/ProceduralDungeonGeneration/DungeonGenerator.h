@@ -4,8 +4,6 @@
 #include "GameFramework/Actor.h"
 #include "DungeonGenerator.generated.h"
 
-// ==========================================
-
 // 구조체 정의 (Structs)
 
 // 개별 방의 데이터를 담을 구조체

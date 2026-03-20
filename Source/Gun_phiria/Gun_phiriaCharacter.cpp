@@ -13,7 +13,6 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Engine/DamageEvents.h"
-#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 
 
@@ -59,12 +58,10 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둠
 	ADSCamera->SetAutoActivate(false);
 
-	// ★ [콜리전 자동화] 블루프린트에서 하던 설정을 C++로 고정!
-
-	// 1. 캡슐 컴포넌트는 총알(Visibility)을 무시(Ignore)하게 만듭니다.
+	// 캡슐 컴포넌트는 총알(Visibility)을 무시(Ignore)
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 
-	// 2. 스켈레탈 메시는 충돌 연산을 켜주고, 총알(Visibility)을 막아내게(Block) 만듭니다.
+	// 스켈레탈 메시는 충돌 연산을 켜주고, 총알(Visibility)을 Block
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
@@ -86,8 +83,6 @@ void AGun_phiriaCharacter::BeginPlay()
 		{
 			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
-
-			// 기존의 ADSCamera 부착 로직을 무기가 스폰된 직후로 이동
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
 		}
 	}
@@ -159,7 +154,6 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 
 		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * TotalDistance);
 
-		// WeaponMesh 대신 CurrentWeapon->GetWeaponMesh()를 사용합니다!
 		FVector HandWorldLoc = CurrentWeapon->GetWeaponMesh()->GetComponentLocation();
 		FVector SightWorldLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("SightSocket"));
 		FVector SightToHandOffset = HandWorldLoc - SightWorldLoc;
@@ -202,8 +196,7 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	// 다음 프레임 계산을 위해 현재 각도 저장
 	PreviousActorYaw = CurrentYaw;
 
-	// ==========================================================
-	// ★ [새로 추가된 부분] 헤드샷 조준 판별 로직
+	// 헤드샷 조준 판별 로직
 	bIsAimingAtHead = false; // 매 프레임 일단 false로 초기화
 
 	// 컨트롤러가 유효한지(플레이어가 조종 중인지) 확인
@@ -211,12 +204,12 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	{
 		FVector CameraLocation;
 		FRotator CameraRotation;
-		// 현재 활성화된 카메라(조준 카메라든 기본 카메라든)의 정확한 시점을 가져옵니다!
+		// 현재 활성화된 카메라(조준 카메라든 기본 카메라든)의 정확한 시점을 가져옴
 		Controller->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
 		FVector CameraForward = CameraRotation.Vector();
 
-		// 화면 정중앙에서 50m(5000.0f) 앞까지 레이저를 쏩니다.
+		// 화면 정중앙에서 50m(5000.0f) 앞까지 레이저 쏘기
 		FVector TraceEnd = CameraLocation + (CameraForward * 5000.0f);
 
 		FHitResult HitResult;
@@ -234,19 +227,16 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 			{
 				if (HitResult.BoneName == FName("head"))
 				{
-					bIsAimingAtHead = true; // 머리 조준 중!
+					bIsAimingAtHead = true; // 머리 조준 중
 				}
 			}
 		}
 	}
 }
 
-// =========================================================================
-
 // Input
 void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	// Add Input Mapping Context
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
@@ -255,7 +245,6 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		}
 	}
 
-	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// 모든 액션에 대해 일관되게 안전 검사(Null Check) 적용
@@ -351,17 +340,13 @@ void AGun_phiriaCharacter::Fire()
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
 	LastFireTime = GetWorld()->GetTimeSeconds();
 
-	// =========================================================================
-
-	// 상태에 따른 최종 페널티 계산 (기존과 동일)
+	// 상태에 따른 최종 페널티 계산
 	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
 	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
 	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
 	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier;
 
-	// =========================================================================
-
-	// 물리적 카메라 반동 (Recoil) (기존과 동일)
+	// 물리적 카메라 반동 (Recoil)
 	if (Controller != nullptr)
 	{
 		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier;
@@ -370,12 +355,8 @@ void AGun_phiriaCharacter::Fire()
 		AddControllerYawInput(RecoilYaw);
 	}
 
-	// =========================================================================
-
 	// 탄 퍼짐(Spread) 누적
 	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
-
-	// =========================================================================
 
 	// 목표 지점 계산
 	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
@@ -391,20 +372,17 @@ void AGun_phiriaCharacter::Fire()
 	bool bCameraHit = GetWorld()->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams);
 	FVector TargetLocation = bCameraHit ? CameraHit.ImpactPoint : CameraEndLocation;
 
-	// =========================================================================
-	// ★ 수정된 부분: 고정 거리가 아닌, 실제 타겟까지의 거리를 기준으로 탄 퍼짐 적용
-
-	// 무기에서 무기 고유의 퍼짐 배수를 가져옵니다.
+	// 무기에서 무기 고유의 퍼짐 배수를 가져옴
 	float SpreadMultiplier = CurrentWeapon->WeaponSpreadMultiplier;
 	float FinalSpreadAngle = CurrentSpread * SpreadMultiplier;
 
 	FVector CameraRight = ActiveCamera->GetRightVector();
 	FVector CameraUp = ActiveCamera->GetUpVector();
 
-	// [중요] 카메라 위치에서 실제 타겟(벽, 적, 혹은 허공)까지의 거리를 구합니다.
+	// 카메라 위치에서 실제 타겟(벽, 적, 혹은 허공)까지의 거리를 구함
 	float ActualDistanceToTarget = FVector::Distance(CameraLocation, TargetLocation);
 
-	// 이 실제 거리를 바탕으로 퍼짐 원판의 반지름을 계산해야, 거리에 맞게 정확히 흩어집니다!
+	// 이 실제 거리를 바탕으로 퍼짐 원판의 반지름을 계산해야, 거리에 맞게 정확히 흩어짐
 	float SpreadRadius = FMath::Tan(FMath::DegreesToRadians(FinalSpreadAngle)) * ActualDistanceToTarget;
 
 	float RandomAngle = FMath::RandRange(0.0f, PI * 2.0f);
@@ -412,7 +390,7 @@ void AGun_phiriaCharacter::Fire()
 
 	FVector SpreadOffset = (CameraRight * FMath::Cos(RandomAngle) * RandomRadius) + (CameraUp * FMath::Sin(RandomAngle) * RandomRadius);
 
-	// 최종 타겟 지점에 스프레드 오프셋을 더합니다.
+	// 최종 타겟 지점에 스프레드 오프셋을 더함
 	TargetLocation += SpreadOffset;
 
 	if (GEngine)
@@ -420,8 +398,6 @@ void AGun_phiriaCharacter::Fire()
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan,
 			FString::Printf(TEXT("Spread Multiplier: %.1f | Spread Angle: %.2f deg"), SpreadMultiplier, FinalSpreadAngle));
 	}
-
-	// =========================================================================
 
 	CurrentWeapon->Fire(TargetLocation);
 }
@@ -444,16 +420,10 @@ float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
 		const FPointDamageEvent* PointDamageEvent = static_cast<const FPointDamageEvent*>(&DamageEvent);
 		FName HitBoneName = PointDamageEvent->HitInfo.BoneName;
 
-		// 적이 나를 헤드샷 맞췄을 때 2.5배 데미지!
+		// 적이 나를 헤드샷 맞췄을 때 2.5배 데미지
 		if (HitBoneName == FName("head"))
 		{
 			ActualDamage *= 2.5f;
-		}
-
-		// 플레이어 피격 이펙트 재생 (적과 동일하게 피 튀김)
-		if (PlayerHitEffect)
-		{
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), PlayerHitEffect, PointDamageEvent->HitInfo.ImpactPoint, PointDamageEvent->HitInfo.ImpactNormal.Rotation());
 		}
 	}
 

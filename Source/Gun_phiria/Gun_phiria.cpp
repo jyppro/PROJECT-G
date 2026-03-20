@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #include "Gun_phiria.h"
 #include "Modules/ModuleManager.h"
 

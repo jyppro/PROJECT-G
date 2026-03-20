@@ -5,7 +5,6 @@
 #include "Engine/OverlapResult.h"
 #include "Kismet/GameplayStatics.h"
 #include "../Enemy/EnemyCharacter.h"
-
 #include "CollisionQueryParams.h"
 #include "WorldCollision.h"
 #include "Engine/World.h"
@@ -13,7 +12,6 @@
 ADungeonGenerator::ADungeonGenerator()
 {
 	PrimaryActorTick.bCanEverTick = false;
-
 	PlayerSpawnRoomIndex = -1;
 }
 
@@ -403,7 +401,7 @@ void ADungeonGenerator::SpawnDungeonActors()
 						{
 							SpawnedDoor->SetActorScale3D(DoorTransform.GetScale3D());
 
-							// [추가된 부분] 나중에 지울 수 있도록 배열에 기억해 둡니다.
+							// 나중에 지울 수 있도록 배열에 기억
 							SpawnedDoors.Add(SpawnedDoor);
 						}
 					}
@@ -435,7 +433,7 @@ bool ADungeonGenerator::IsPointInAnyMainRoom(FVector Point)
 
 void ADungeonGenerator::TeleportPlayerToRandomRoom()
 {
-	// 기존의 복사본 배열 대신, 실제 RoomList의 인덱스들을 저장합니다.
+	// 기존의 복사본 배열 대신, 실제 RoomList의 인덱스들을 저장
 	TArray<int32> AvailableMainRoomIndices;
 	for (int32 i = 0; i < RoomList.Num(); i++)
 	{
@@ -447,17 +445,17 @@ void ADungeonGenerator::TeleportPlayerToRandomRoom()
 
 	if (AvailableMainRoomIndices.IsEmpty()) return;
 
-	// 인덱스 배열에서 랜덤으로 하나를 고릅니다.
+	// 인덱스 배열에서 랜덤으로 하나를 고름
 	int32 RandomIdxIdx = FMath::RandRange(0, AvailableMainRoomIndices.Num() - 1);
 
-	// [핵심] 선택된 실제 RoomList 인덱스를 저장합니다.
+	// 선택된 실제 RoomList 인덱스를 저장
 	PlayerSpawnRoomIndex = AvailableMainRoomIndices[RandomIdxIdx];
 
-	// 저장된 인덱스로 실제 방 데이터를 가져옵니다.
+	// 저장된 인덱스로 실제 방 데이터를 가져옴
 	FDungeonRoom SelectedRoom = RoomList[PlayerSpawnRoomIndex];
 
 	FVector SpawnLocation = SelectedRoom.CenterLocation;
-	SpawnLocation.Z += 1000.0f; // (플레이어는 공중에서 떨어지는 게 안전합니다)
+	SpawnLocation.Z += 1000.0f; // 플레이어는 공중에서 떨어지는 게 안전
 
 	APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 	if (PlayerPawn)
@@ -535,8 +533,7 @@ void ADungeonGenerator::SpawnEnemies()
 				float RandomX = FMath::RandRange(MinX, MaxX);
 				float RandomY = FMath::RandRange(MinY, MaxY);
 
-				// =========================================================================
-				// ★ [새로 추가된 로직] 하늘에서 바닥으로 수직 레이저를 쏴서 지형의 실제 높이를 찾습니다!
+				// 하늘에서 바닥으로 수직 레이저를 쏴서 지형의 실제 높이를 찾기
 				FVector TraceStart = FVector(RandomX, RandomY, Room.CenterLocation.Z + 2000.0f); // 방의 아주 높은 곳
 				FVector TraceEnd = FVector(RandomX, RandomY, Room.CenterLocation.Z - 500.0f);  // 방의 바닥 아래
 
@@ -544,19 +541,18 @@ void ADungeonGenerator::SpawnEnemies()
 				FCollisionQueryParams TraceParams;
 				TraceParams.AddIgnoredActor(this);
 
-				// 레이저가 무언가(계단, 바닥, 단상 등)에 부딪혔는지 검사합니다.
+				// 레이저가 무언가(계단, 바닥, 단상 등)에 부딪혔는지 검사
 				if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
 				{
-					// 부딪힌 실제 표면(ImpactPoint)에서, 위로 몬스터의 몸통 절반(약 100.0f)만큼 띄워줍니다.
+					// 부딪힌 실제 표면(ImpactPoint)에서, 위로 몬스터의 몸통 절반(약 100.0f)만큼 띄워줌
 					SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
 
-					// 이 정확한 높이의 좌표를 기준으로 공간이 넉넉한지 최종 검사!
+					// 이 정확한 높이의 좌표를 기준으로 공간이 넉넉한지 최종 검사
 					if (IsSpawnLocationValid(SpawnLocation))
 					{
 						bValidPointFound = true;
 					}
 				}
-				// =========================================================================
 			}
 
 			if (bValidPointFound)
@@ -581,7 +577,7 @@ bool ADungeonGenerator::IsSpawnLocationValid(FVector Location)
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 
-	// [수정된 부분] Visibility 대신 지형(벽, 계단 등)을 가장 잘 감지하는 WorldStatic 채널 사용
+	// Visibility 대신 지형(벽, 계단 등)을 가장 잘 감지하는 WorldStatic 채널 사용
 	bool bIsOverlapping = GetWorld()->OverlapAnyTestByChannel(
 		Location,
 		FQuat::Identity,
@@ -605,18 +601,18 @@ void ADungeonGenerator::RemoveStartingRoomDoors()
 	// 인덱스가 유효한지 확인
 	if (PlayerSpawnRoomIndex < 0 || PlayerSpawnRoomIndex >= RoomList.Num()) return;
 
-	// 1. 시작 방과 연결된 모든 '통로(Edge)' 데이터를 찾아냅니다.
+	// 시작 방과 연결된 모든 '통로(Edge)' 데이터를 찾아냄
 	TArray<FRoomEdge> ConnectedEdges;
 	for (const FRoomEdge& Edge : FinalPaths)
 	{
-		// 시작 방이 A이거나 B인 모든 연결선을 수집합니다.
+		// 시작 방이 A이거나 B인 모든 연결선을 수집
 		if (Edge.RoomAIndex == PlayerSpawnRoomIndex || Edge.RoomBIndex == PlayerSpawnRoomIndex)
 		{
 			ConnectedEdges.Add(Edge);
 		}
 	}
 
-	// 2. 수학 공식: 특정 좌표(문)가 선분(통로) 위에 있는지 확인하는 도우미 람다 함수
+	// 특정 좌표(문)가 선분(통로) 위에 있는지 확인하는 도우미 람다 함수
 	auto IsPointOnSegment = [](FVector P, FVector Start, FVector End, float Tolerance) -> bool
 		{
 			float MinX = FMath::Min(Start.X, End.X) - Tolerance;
@@ -628,7 +624,7 @@ void ADungeonGenerator::RemoveStartingRoomDoors()
 			return (P.X >= MinX && P.X <= MaxX && P.Y >= MinY && P.Y <= MaxY);
 		};
 
-	// 3. 배열의 뒤에서부터 앞으로 거꾸로 검사하며 문을 파괴합니다.
+	// 배열의 뒤에서부터 앞으로 거꾸로 검사하며 문을 파괴
 	for (int32 i = SpawnedDoors.Num() - 1; i >= 0; --i)
 	{
 		AActor* Door = SpawnedDoors[i];
@@ -637,7 +633,7 @@ void ADungeonGenerator::RemoveStartingRoomDoors()
 		FVector DoorLoc = Door->GetActorLocation();
 		bool bShouldDestroy = false;
 
-		// 4. 이 문이 '시작 방과 연결된 통로' 중 하나에 겹쳐있는지 검사합니다.
+		// 이 문이 '시작 방과 연결된 통로' 중 하나에 겹쳐있는지 검사
 		for (const FRoomEdge& Edge : ConnectedEdges)
 		{
 			FVector PosA = RoomList[Edge.RoomAIndex].CenterLocation;
@@ -646,10 +642,10 @@ void ADungeonGenerator::RemoveStartingRoomDoors()
 			float dX = PosB.X - PosA.X;
 			float dY = PosB.Y - PosA.Y;
 
-			// 문의 좌표가 완벽하게 중앙이 아닐 수 있으므로 넉넉한 오차 범위를 줍니다.
+			// 문의 좌표가 완벽하게 중앙이 아닐 수 있으므로 넉넉한 오차 범위를 줌
 			float Tol = FMath::Max(CorridorWidth, 300.0f);
 
-			// CreateCorridors에서 사용했던 L자 통로 그리기와 완벽히 동일한 궤적을 검사합니다.
+			// CreateCorridors에서 사용했던 L자 통로 그리기와 완벽히 동일한 궤적을 검사
 			if (FMath::Abs(dX) > FMath::Abs(dY))
 			{
 				float MidX = (PosA.X + PosB.X) / 2.0f;
@@ -672,7 +668,7 @@ void ADungeonGenerator::RemoveStartingRoomDoors()
 			}
 		}
 
-		// 5. 검사 결과, 통로 위에 있는 문이라면(양쪽 끝 문 모두 포함) 즉시 파괴합니다!
+		// 검사 결과, 통로 위에 있는 문이라면(양쪽 끝 문 모두 포함) 즉시 파괴
 		if (bShouldDestroy)
 		{
 			Door->Destroy();
