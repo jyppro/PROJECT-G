@@ -16,6 +16,11 @@ class GUN_PHIRIA_API AEnemyCharacter : public ACharacter
 public:
 	AEnemyCharacter();
 
+	virtual void Tick(float DeltaTime) override;
+
+	// 실제 사격을 수행할 함수
+	void FireAtPlayer();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -46,12 +51,21 @@ public:
 	UPROPERTY()
 	ADungeonRoomManager* ParentRoom;
 
+	// 애니메이션 블루프린트에서 "지금 조준 자세를 취해야 하는지" 읽어갈 변수
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Animation")
+	bool bIsAiming = false;
+
+	// 총을 쏠 때 재생할 사격 반동 애니메이션 몽타주
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	class UAnimMontage* FireMontage;
+
+	// 애니메이션 블루프린트로 넘겨줄 위/아래 쳐다보는 각도 (Pitch)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Animation")
+	float AimPitch = 0.0f;
+
 private:
 	// 사격을 반복하기 위한 타이머
-	FTimerHandle AIFireTimer;
-
-	// 실제 사격을 수행할 함수
-	void FireAtPlayer();
+	//FTimerHandle AIFireTimer;
 
 	// 사망 처리 함수
 	void Die();

@@ -1,6 +1,7 @@
 #include "EnemyCharacter.h"
 #include "../Weapon/WeaponBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "GameFramework/Character.h"
 #include "TimerManager.h"
 #include "Engine/DamageEvents.h"
@@ -25,6 +26,8 @@ void AEnemyCharacter::BeginPlay()
 
 	CurrentHealth = MaxHealth;
 
+	bIsAiming = false;
+
 	// 무기 스폰 및 장착 (플레이어와 동일)
 	if (DefaultWeaponClass)
 	{
@@ -41,7 +44,43 @@ void AEnemyCharacter::BeginPlay()
 	}
 
 	// 게임이 시작되면 FireRate(예: 2초) 간격으로 FireAtPlayer 함수를 무한 반복 실행
-	GetWorldTimerManager().SetTimer(AIFireTimer, this, &AEnemyCharacter::FireAtPlayer, FireRate, true);
+	// GetWorldTimerManager().SetTimer(AIFireTimer, this, &AEnemyCharacter::FireAtPlayer, FireRate, true);
+}
+
+void AEnemyCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!bIsDead)
+	{
+		ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
+		if (PlayerCharacter)
+		{
+			FVector StartLoc = GetActorLocation();
+			FVector TargetLoc = PlayerCharacter->GetActorLocation();
+
+			// 플레이어를 향하는 절대적인 회전값을 구합니다.
+			FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(StartLoc, TargetLoc);
+
+			// 1. [상하 조준] 에임 오프셋을 위한 Pitch 계산 (기존 코드 유지)
+			FRotator DeltaRot = UKismetMathLibrary::NormalizedDeltaRotator(LookAtRot, GetActorRotation());
+			AimPitch = FMath::FInterpTo(AimPitch, DeltaRot.Pitch, DeltaTime, 15.0f);
+			AimPitch = FMath::Clamp(AimPitch, -90.0f, 90.0f);
+
+			// ==========================================================
+			// ★ [새로 추가] 2. [좌우 회전] 몸통(Actor) 전체를 플레이어 쪽으로 부드럽게 돌립니다!
+
+			// 현재 내 회전값에서 좌우(Yaw)만 플레이어 방향(LookAtRot.Yaw)으로 바꾼 목표 회전값을 만듭니다.
+			FRotator TargetRotation = FRotator(GetActorRotation().Pitch, LookAtRot.Yaw, GetActorRotation().Roll);
+
+			// RInterpTo를 사용해 한 번에 홱! 돌지 않고 자연스럽게 스윽~ 돌아보게 만듭니다. (5.0f는 회전 속도)
+			FRotator SmoothRotation = FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, 5.0f);
+
+			// 계산된 부드러운 회전값을 캐릭터에게 적용합니다.
+			SetActorRotation(SmoothRotation);
+			// ==========================================================
+		}
+	}
 }
 
 void AEnemyCharacter::FireAtPlayer()
@@ -70,6 +109,11 @@ void AEnemyCharacter::FireAtPlayer()
 
 		// 내 손에 들려있는 무기에게 '오차가 적용된 엉뚱한 위치'를 향해 쏘라고 명령
 		CurrentWeapon->Fire(TargetLocation);
+
+		if (FireMontage)
+		{
+			PlayAnimMontage(FireMontage);
+		}
 	}
 }
 
@@ -127,7 +171,7 @@ void AEnemyCharacter::Die()
 	bIsDead = true;
 
 	// 더 이상 총을 쏘지 못하도록 타이머를 멈춤
-	GetWorldTimerManager().ClearTimer(AIFireTimer);
+	// GetWorldTimerManager().ClearTimer(AIFireTimer);
 
 	// 들고 있던 무기 파괴
 	if (CurrentWeapon)
