@@ -63,4 +63,35 @@ void AGun_phiriaHUD::DrawHUD()
 	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y + FinalOffset, CrosshairThickness, CrosshairLength);
 	DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
 	DrawRect(CrosshairColor, Center.X + FinalOffset, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
+
+	// ==========================================
+	// ★ [새로 추가된 부분] 배틀그라운드 스타일 하단 체력바 그리기
+
+	// 체력바 크기 및 위치 설정
+	float BarWidth = 400.0f;  // 체력바 가로 길이
+	float BarHeight = 15.0f;  // 체력바 세로 두께
+
+	// 화면 하단 중앙 계산 (바닥에서 60픽셀 위로 띄움)
+	float BarPosX = Center.X - (BarWidth * 0.5f);
+	float BarPosY = Canvas->ClipY - 60.0f;
+
+	// 1. 체력바 배경 (어두운 반투명 회색)
+	FLinearColor BackgroundColor = FLinearColor(0.05f, 0.05f, 0.05f, 0.7f);
+	DrawRect(BackgroundColor, BarPosX, BarPosY, BarWidth, BarHeight);
+
+	// 2. 현재 체력 비율 계산 (0.0 ~ 1.0)
+	float HealthPercent = PlayerChar->CurrentHealth / PlayerChar->MaxHealth;
+	float CurrentBarWidth = BarWidth * HealthPercent;
+
+	// 3. 체력바 전경색 (배그처럼 기본은 흰색)
+	FLinearColor HealthColor = FLinearColor::White;
+
+	// 체력이 30% 이하로 떨어지면 붉은색으로 변하게 하여 위기감 조성!
+	if (HealthPercent <= 0.3f)
+	{
+		HealthColor = FLinearColor(0.8f, 0.0f, 0.0f, 1.0f); // 진한 빨강
+	}
+
+	// 4. 현재 체력만큼 흰색 바 그리기
+	DrawRect(HealthColor, BarPosX, BarPosY, CurrentBarWidth, BarHeight);
 }

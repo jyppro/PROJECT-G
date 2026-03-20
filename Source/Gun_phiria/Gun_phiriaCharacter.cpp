@@ -12,6 +12,9 @@
 #include "DrawDebugHelpers.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Engine/DamageEvents.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
@@ -55,11 +58,22 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 
 	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둠
 	ADSCamera->SetAutoActivate(false);
+
+	// ★ [콜리전 자동화] 블루프린트에서 하던 설정을 C++로 고정!
+
+	// 1. 캡슐 컴포넌트는 총알(Visibility)을 무시(Ignore)하게 만듭니다.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+
+	// 2. 스켈레탈 메시는 충돌 연산을 켜주고, 총알(Visibility)을 막아내게(Block) 만듭니다.
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 void AGun_phiriaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	CurrentHealth = MaxHealth; // 시작 시 체력 100
 
 	// 게임 시작 시 무기 스폰 및 장착
 	if (DefaultWeaponClass)
@@ -416,4 +430,61 @@ void AGun_phiriaCharacter::Fire()
 void AGun_phiriaCharacter::StopFiringPose()
 {
 	bIsFiring = false;
+}
+
+float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	if (bIsDead) return 0.0f;
+
+	float ActualDamage = DamageAmount;
+
+	// 포인트 데미지(총알)인지 확인하여 부위 판별 및 이펙트 재생
+	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	{
+		const FPointDamageEvent* PointDamageEvent = static_cast<const FPointDamageEvent*>(&DamageEvent);
+		FName HitBoneName = PointDamageEvent->HitInfo.BoneName;
+
+		// 적이 나를 헤드샷 맞췄을 때 2.5배 데미지!
+		if (HitBoneName == FName("head"))
+		{
+			ActualDamage *= 2.5f;
+		}
+
+		// 플레이어 피격 이펙트 재생 (적과 동일하게 피 튀김)
+		if (PlayerHitEffect)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), PlayerHitEffect, PointDamageEvent->HitInfo.ImpactPoint, PointDamageEvent->HitInfo.ImpactNormal.Rotation());
+		}
+	}
+
+	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
+
+	// 체력 깎기
+	CurrentHealth -= ActualDamage;
+	CurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, MaxHealth);
+
+	// 체력이 0이 되면 사망 처리
+	if (CurrentHealth <= 0.0f)
+	{
+		Die();
+	}
+
+	return ActualDamage;
+}
+
+void AGun_phiriaCharacter::Die()
+{
+	if (bIsDead) return;
+	bIsDead = true;
+
+	// 플레이어 조작 비활성화 및 래그돌(물리 쓰러짐) 켜기
+	DisableInput(Cast<APlayerController>(GetController()));
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	GetMesh()->SetSimulatePhysics(true);
+
+	// 화면에 크게 사망 메시지 띄우기
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("YOU DIED"));
+	}
 }

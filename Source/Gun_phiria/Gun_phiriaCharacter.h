@@ -28,6 +28,9 @@ public:
 	// Public 오버라이드 함수
 	virtual void Tick(float DeltaTime) override;
 
+	// 데미지 수신 오버라이드 함수
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
 	// =========================================================
 
 	// Getters (외부에서 컴포넌트나 상태를 가져갈 때 사용)
@@ -39,6 +42,18 @@ public:
 	// HUD에서 읽어갈 수 있도록 public에 선언합니다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crosshair")
 	bool bIsAimingAtHead = false;
+
+	// 최대 체력
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
+	float MaxHealth = 100.0f;
+
+	// 현재 체력
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
+	float CurrentHealth;
+
+	// 플레이어가 맞았을 때 튀길 피격 이펙트 (나이아가라)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effects")
+	class UNiagaraSystem* PlayerHitEffect;
 
 protected:
 	// Protected 오버라이드 함수
@@ -158,4 +173,7 @@ private:
 	FTimerHandle FireTimerHandle;
 	float PreviousActorYaw = 0.0f;
 	float LastFireTime = 0.0f;
+
+	bool bIsDead = false;
+	void Die();
 };

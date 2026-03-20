@@ -4,10 +4,18 @@
 #include "GameFramework/Character.h"
 #include "TimerManager.h"
 #include "Engine/DamageEvents.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+	// ★ [콜리전 자동화]
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 void AEnemyCharacter::BeginPlay()
@@ -38,18 +46,31 @@ void AEnemyCharacter::BeginPlay()
 
 void AEnemyCharacter::FireAtPlayer()
 {
-	// 무기가 없으면 쏘지 않습니다.
-	if (!CurrentWeapon) return;
+	// 무기가 없거나 이미 죽었다면 쏘지 않음
+	if (!CurrentWeapon || bIsDead) return;
 
-	// 월드에 존재하는 플레이어 캐릭터(인덱스 0번)를 찾아옵니다.
+	// 월드에 존재하는 플레이어 캐릭터를 찾아옵니다.
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 
 	if (PlayerCharacter)
 	{
-		// 플레이어의 현재 몸통 위치를 타겟 좌표로 삼습니다.
+		// 플레이어의 현재 정중앙 위치를 타겟 좌표로 삼습니다.
 		FVector TargetLocation = PlayerCharacter->GetActorLocation();
 
-		// 내 손에 들려있는 무기에게 플레이어 위치를 향해 쏘라고 명령합니다!
+		// ==========================================================
+		// ★ [새로 추가된 부분] 적의 조준에 오차(Inaccuracy)를 줍니다!
+		// 이 수치(80.0f)를 키우면 적이 멍청해지고, 줄이면 명사수가 됩니다.
+		float Inaccuracy = 80.0f;
+
+		float RandomX = FMath::RandRange(-Inaccuracy, Inaccuracy);
+		float RandomY = FMath::RandRange(-Inaccuracy, Inaccuracy);
+		float RandomZ = FMath::RandRange(-Inaccuracy, Inaccuracy);
+
+		// 정확한 타겟 좌표에 랜덤한 오차를 더해 조준을 흐트러뜨립니다.
+		TargetLocation += FVector(RandomX, RandomY, RandomZ);
+		// ==========================================================
+
+		// 내 손에 들려있는 무기에게 '오차가 적용된 엉뚱한 위치'를 향해 쏘라고 명령합니다!
 		CurrentWeapon->Fire(TargetLocation);
 	}
 }
