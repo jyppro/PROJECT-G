@@ -136,6 +136,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
 	float YawRotationSpeed = 0.0f;
 
+	// IA_Crouch 입력을 받을 인풋 액션 변수
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* CrouchAction;
+
+	void ToggleCrouch();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	TArray<class UAnimMontage*> HitMontages;
+
 private:
 	FTimerHandle FireTimerHandle;
 	float PreviousActorYaw = 0.0f;

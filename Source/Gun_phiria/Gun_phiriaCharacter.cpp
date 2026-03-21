@@ -14,6 +14,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "Engine/DamageEvents.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
 
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
@@ -51,6 +52,7 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 
 	// --- 조준 전용 카메라 생성 및 가늠좌 소켓에 부착 ---
 	ADSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ADSCamera"));
+	ADSCamera->SetupAttachment(GetMesh());
 
 	// 카메라는 마우스가 아닌 '총의 애니메이션 흔들림'을 그대로 따라가야 하므로 false로 설정
 	ADSCamera->bUsePawnControlRotation = false;
@@ -64,6 +66,16 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// 스켈레탈 메시는 충돌 연산을 켜주고, 총알(Visibility)을 Block
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	// ★ [새로 추가] 캐릭터 움직임 컴포넌트에서 숙이기 기능을 사용하겠다고 활성화합니다!
+	// (이게 꺼져있으면 Crouch() 함수를 불러도 작동하지 않습니다.)
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+
+		// (선택) 숙여서 걸을 때 속도를 조절합니다. (기존 500의 절반인 250 정도로 설정)
+		GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
+	}
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -270,6 +282,10 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		{
 			EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Fire);
 		}
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleCrouch);
+		}
 	}
 	else
 	{
@@ -429,6 +445,19 @@ float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
 
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
 
+	if (HitMontages.Num() > 0)
+	{
+		// 0번부터 (배열 개수 - 1)번 사이의 숫자를 랜덤으로 하나 뽑습니다.
+		int32 RandomIndex = FMath::RandRange(0, HitMontages.Num() - 1);
+
+		// 당첨된 번호의 몽타주를 재생합니다!
+		// 플레이어 전용 애님 인스턴스를 가져와서 몽타주를 재생하도록 명령합니다.
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->Montage_Play(HitMontages[RandomIndex]);
+		}
+	}
+
 	// 체력 깎기
 	CurrentHealth -= ActualDamage;
 	CurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, MaxHealth);
@@ -456,5 +485,20 @@ void AGun_phiriaCharacter::Die()
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("YOU DIED"));
+	}
+}
+
+void AGun_phiriaCharacter::ToggleCrouch()
+{
+	// 언리얼 ACharacter에 기본 내장된 변수 bIsCrouched를 확인합니다.
+	if (bIsCrouched)
+	{
+		// 이미 숙이고 있다면 일어섭니다.
+		UnCrouch();
+	}
+	else
+	{
+		// 서 있다면 숙입니다.
+		Crouch();
 	}
 }

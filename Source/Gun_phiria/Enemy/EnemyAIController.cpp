@@ -13,17 +13,10 @@ AEnemyAIController::AEnemyAIController()
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 
 	// 시야 설정 (시야 반경, 잃어버리는 반경, 시야각 등)
-	// 발견 반경: 25미터
-	SightConfig->SightRadius = 2500.0f;
-
-	// 잃어버리는 반경: 30미터
-	SightConfig->LoseSightRadius = 3000.0f;
-
-	// 시야각: 60도
-	SightConfig->PeripheralVisionAngleDegrees = 60.0f;
-
-	// 기억 시간: 5초
-	SightConfig->SetMaxAge(5.0f);
+	SightConfig->SightRadius = 2500.0f;					// 발견 반경: 25미터
+	SightConfig->LoseSightRadius = 3000.0f;				// 잃어버리는 반경: 30미터
+	SightConfig->PeripheralVisionAngleDegrees = 60.0f;	// 시야각: 60도
+	SightConfig->SetMaxAge(5.0f);						// 기억 시간: 5초
 
 	// 감지 대상 설정 (일단 모든 것을 감지하게 세팅)
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;

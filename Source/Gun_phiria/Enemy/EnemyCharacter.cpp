@@ -8,6 +8,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "../ProceduralDungeonGeneration/DungeonRoomManager.h"
+#include "AIController.h"
+#include "BehaviorTree/BlackboardComponent.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -38,13 +40,14 @@ void AEnemyCharacter::BeginPlay()
 		if (CurrentWeapon)
 		{
 			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
+
 			// 적 캐릭터의 스켈레탈 메시 중 "WeaponSocket"에 무기를 부착
 			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
 		}
 	}
 
-	// 게임이 시작되면 FireRate(예: 2초) 간격으로 FireAtPlayer 함수를 무한 반복 실행
-	// GetWorldTimerManager().SetTimer(AIFireTimer, this, &AEnemyCharacter::FireAtPlayer, FireRate, true);
+	bIsReadyToFire = false;
+	GetWorldTimerManager().SetTimer(SpawnDelayTimer, this, &AEnemyCharacter::SetReadyToFire, 1.5f, false);
 }
 
 void AEnemyCharacter::Tick(float DeltaTime)
@@ -85,8 +88,8 @@ void AEnemyCharacter::Tick(float DeltaTime)
 
 void AEnemyCharacter::FireAtPlayer()
 {
-	// 무기가 없거나 이미 죽었다면 쏘지 않음
-	if (!CurrentWeapon || bIsDead) return;
+	// ★ [수정됨] 무기가 없거나, 죽었거나, "아직 쏠 준비가 안 되었다면(!bIsReadyToFire)" 그냥 돌아갑니다(return)!
+	if (!CurrentWeapon || bIsDead || !bIsReadyToFire) return;
 
 	// 월드에 존재하는 플레이어 캐릭터를 찾기
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
@@ -109,11 +112,6 @@ void AEnemyCharacter::FireAtPlayer()
 
 		// 내 손에 들려있는 무기에게 '오차가 적용된 엉뚱한 위치'를 향해 쏘라고 명령
 		CurrentWeapon->Fire(TargetLocation);
-
-		if (FireMontage)
-		{
-			PlayAnimMontage(FireMontage);
-		}
 	}
 }
 
@@ -145,9 +143,33 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 	// 부모 클래스의 기본 데미지 처리 로직 실행
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
 
+	if (CurrentHealth > ActualDamage)
+	{
+		// 배열 안에 몽타주가 1개 이상 들어있는지 안전 검사
+		if (HitMontages.Num() > 0)
+		{
+			// 0번부터 (배열 개수 - 1)번 사이의 숫자를 랜덤으로 하나 뽑습니다.
+			// (예: 4개가 들어있으면 0, 1, 2, 3 중 하나가 나옴)
+			int32 RandomIndex = FMath::RandRange(0, HitMontages.Num() - 1);
+
+			// 당첨된 번호의 몽타주를 재생합니다!
+			PlayAnimMontage(HitMontages[RandomIndex]);
+		}
+	}
+
 	// 체력을 깎고 안전장치(Clamp) 적용
 	CurrentHealth -= ActualDamage;
 	CurrentHealth = FMath::Clamp(CurrentHealth, 0.0f, MaxHealth);
+
+	if (CurrentHealth <= MaxHealth * 0.5f)
+	{
+		AAIController* AICon = Cast<AAIController>(GetController());
+		if (AICon && AICon->GetBlackboardComponent())
+		{
+			// 블랙보드의 "IsLowHealth" 라는 키를 True로 만듭니다.
+			AICon->GetBlackboardComponent()->SetValueAsBool(FName("IsLowHealth"), true);
+		}
+	}
 
 	// 디버그용: 맞을 때마다 화면에 체력 표시
 	if (GEngine)
@@ -193,4 +215,10 @@ void AEnemyCharacter::Die()
 
 	// 시체가 너무 많이 쌓이지 않도록 5초 뒤에 액터 완전 삭제
 	SetLifeSpan(5.0f);
+}
+
+// 1.5초 뒤에 이 함수가 실행되면서 방아쇠 잠금이 풀립니다.
+void AEnemyCharacter::SetReadyToFire()
+{
+	bIsReadyToFire = true;
 }

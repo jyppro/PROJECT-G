@@ -55,21 +55,31 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Animation")
 	bool bIsAiming = false;
 
-	// 총을 쏠 때 재생할 사격 반동 애니메이션 몽타주
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
-	class UAnimMontage* FireMontage;
+	TArray<class UAnimMontage*> HitMontages;
 
 	// 애니메이션 블루프린트로 넘겨줄 위/아래 쳐다보는 각도 (Pitch)
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Animation")
 	float AimPitch = 0.0f;
 
+	// AI가 지금 숙여야 하는지 여부 (나중에 비헤이비어 트리에서 제어)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Animation")
+	bool bIsCrouching = false;
+
 private:
-	// 사격을 반복하기 위한 타이머
-	//FTimerHandle AIFireTimer;
 
 	// 사망 처리 함수
 	void Die();
 
 	// 죽었는지 여부 확인
 	bool bIsDead = false;
+
+	// 스폰 직후 방아쇠가 잠겨있는지 확인하는 변수
+	bool bIsReadyToFire = false;
+
+	// 사격 대기 시간을 재기 위한 타이머
+	FTimerHandle SpawnDelayTimer;
+
+	// 방아쇠 잠금을 해제하는 함수
+	void SetReadyToFire();
 };
