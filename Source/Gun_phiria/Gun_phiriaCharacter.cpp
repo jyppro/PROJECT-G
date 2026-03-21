@@ -60,6 +60,8 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// 평소(비조준 상태)에는 꺼져 있어야 하므로 기본 활성화 상태를 false로 둠
 	ADSCamera->SetAutoActivate(false);
 
+	ADSCamera->PrimaryComponentTick.TickGroup = TG_PostPhysics;
+
 	// 캡슐 컴포넌트는 총알(Visibility)을 무시(Ignore)
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 
@@ -244,6 +246,76 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 			}
 		}
 	}
+
+	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, 10.0f);
+
+	if (FollowCamera && ADSCamera && GetMesh())
+	{
+		FVector PureAimForward = GetBaseAimRotation().Vector();
+
+		// 이 순수 조준 방향을 캐릭터 몸통(Component Space) 축으로 변환합니다.
+		LeanAxisCS = GetMesh()->GetComponentTransform().InverseTransformVectorNoScale(PureAimForward);
+	}
+
+	// ★ [새로 추가] 비조준 상태(FollowCamera)의 좌우 시야 확보 로직
+	if (CameraBoom)
+	{
+		// 1. 기본 위치 (평소 카메라 위치)
+		FVector TargetOffset = FVector(0.0f, 0.0f, 120.0f);
+
+		// 2. 기울기(CurrentLean: -1.0 ~ 1.0)에 따라 좌우(Y축)로 얼마나 밀어줄지 계산
+		// 100.0f는 카메라가 옆으로 나가는 거리입니다. (테스트 후 조절 가능)
+		float LeanOffsetAmount = CurrentLean * 100.0f;
+
+		// 3. 목표 오프셋 설정 (Y값에 기울기 반영)
+		TargetOffset.Y = LeanOffsetAmount;
+
+		// 4. 부드럽게 카메라 위치 이동 (뚝 끊기지 않게 Interp 사용)
+		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, TargetOffset, DeltaTime, 10.0f);
+	}
+
+	// ★ [총기 벽 뚫림 완벽 방지] 총구가 벽에 닿으면 캐릭터를 부드럽게 뒤로 밀어냅니다!
+	// ==========================================================
+	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
+	{
+		// 실제 총구 위치
+		FVector MuzzleLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+
+		// 1. 캐릭터 중심에서 총구와 같은 높이의 시작점을 만듭니다. 
+		// (높이를 맞추는 이유: 창문 너머로 사격할 때 창틀에 밀려나지 않기 위해)
+		FVector Start = GetActorLocation();
+		Start.Z = MuzzleLoc.Z;
+
+		// 2. 중심에서 총구를 향하는 방향을 구합니다.
+		FVector Direction = (MuzzleLoc - Start).GetSafeNormal();
+
+		// 3. 총구 위치보다 살짝 앞(여유공간 15cm)을 끝점으로 잡습니다.
+		FVector End = MuzzleLoc + (Direction * 15.0f);
+
+		FHitResult Hit;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+		Params.AddIgnoredActor(CurrentWeapon);
+
+		// 4. 캐릭터 가슴에서 총구 방향으로 레이저를 쏴서 벽이 있는지 스캔합니다.
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			// 5. 바닥이나 천장이 아닌 '벽'일 때만 작동하도록 합니다. (평면의 수직 각도 체크)
+			if (FMath::Abs(Hit.ImpactNormal.Z) < 0.3f)
+			{
+				// 총구가 벽을 파고든 깊이를 계산합니다.
+				float PenetrationDepth = FVector::Distance(Hit.ImpactPoint, End);
+
+				// 벽의 수직 방향(ImpactNormal)으로 캐릭터를 밀어냅니다!
+				FVector PushDirection = Hit.ImpactNormal;
+				PushDirection.Z = 0.0f; // 위아래로는 밀리지 않도록 고정
+				PushDirection.Normalize();
+
+				// bSweep을 true로 켜서 뒤로 밀려날 때 다른 벽을 뚫지 않도록 안전하게 이동시킵니다.
+				AddActorWorldOffset(PushDirection * PenetrationDepth, true);
+			}
+		}
+	}
 }
 
 // Input
@@ -286,12 +358,36 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		{
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleCrouch);
 		}
+		if (LeanAction)
+		{
+			// 키를 누르고 있는 동안(Triggered)
+			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::InputLean);
+			// 키를 완전히 뗐을 때(Completed)
+			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
+		}
 	}
 	else
 	{
 		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component!"), *GetNameSafe(this));
 	}
 }
+
+//void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
+//{
+//	FVector2D MovementVector = Value.Get<FVector2D>();
+//
+//	if (Controller != nullptr)
+//	{
+//		const FRotator Rotation = Controller->GetControlRotation();
+//		const FRotator YawRotation(0, Rotation.Yaw, 0);
+//
+//		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+//		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+//
+//		AddMovementInput(ForwardDirection, MovementVector.Y);
+//		AddMovementInput(RightDirection, MovementVector.X);
+//	}
+//}
 
 void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 {
@@ -305,7 +401,47 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		AddMovementInput(ForwardDirection, MovementVector.Y);
+		float ForwardInput = MovementVector.Y; // W키(+1) 또는 S키(-1) 입력값
+
+		// ==========================================================
+		// ★ [총구 벽 뚫림 방지 로직] 총구 쪽에 벽 충돌을 감지하여 전진을 차단합니다.
+		// ==========================================================
+
+		// 앞으로 가려고 할 때(ForwardInput > 0)만 벽을 체크합니다. (뒤로 가는 건 허용)
+		if (CurrentWeapon && CurrentWeapon->GetWeaponMesh() && ForwardInput > 0.0f)
+		{
+			// 1. 실제 총구 위치를 가져옵니다.
+			FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+
+			// 2. 센서 시작점(총구 살짝 뒤)과 끝점(총구 살짝 앞)을 설정합니다.
+			// 총구 안쪽에서부터 트레이스를 쏴야 이미 살짝 파묻혔을 때도 정확히 감지해냅니다.
+			FVector TraceStart = MuzzleLocation - (ForwardDirection * 20.0f);
+			FVector TraceEnd = MuzzleLocation + (ForwardDirection * 15.0f); // 총구 앞 15cm까지 감지
+
+			FHitResult Hit;
+			FCollisionQueryParams Params;
+			Params.AddIgnoredActor(this);
+			Params.AddIgnoredActor(CurrentWeapon); // 나와 내 총은 무시
+
+			// 3. 얇은 선(Line) 대신 총 두께만한 구슬(Sphere)을 쏴서 더 정확하게 벽을 감지합니다.
+			FCollisionShape Sphere = FCollisionShape::MakeSphere(10.0f); // 반지름 10cm 구슬
+
+			// 4. 총구 앞에 벽이 있는지 스윕(Sweep) 검사!
+			if (GetWorld()->SweepSingleByChannel(Hit, TraceStart, TraceEnd, FQuat::Identity, ECC_Visibility, Sphere, Params))
+			{
+				// 벽이 감지되었다면? 전진 입력(W)을 강제로 0으로 만들어버립니다!
+				ForwardInput = 0.0f;
+
+				// (디버그 확인용 - 코드가 잘 작동하는지 붉은 구슬을 그려줍니다. 확인 후 지우셔도 됩니다.)
+				DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.0f, 12, FColor::Red, false, 0.1f);
+			}
+		}
+		// ==========================================================
+
+		// 수정된 ForwardInput을 사용해 전진/후진 적용 (벽에 닿으면 0이 되어 딱 멈춥니다!)
+		AddMovementInput(ForwardDirection, ForwardInput);
+
+		// 좌우 이동(A, D)은 터치하지 않았으므로, 벽에 막혀도 게걸음으로 옆으로는 스르륵 이동할 수 있습니다.
 		AddMovementInput(RightDirection, MovementVector.X);
 	}
 }
@@ -374,40 +510,72 @@ void AGun_phiriaCharacter::Fire()
 	// 탄 퍼짐(Spread) 누적
 	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
 
-	// 목표 지점 계산
+	// ==========================================================
+	// ★ [수정됨] 실제 총구에서 조준점을 향해 쏘는 로직
+	// ==========================================================
+
+	// 1. [시선 계산] 카메라가 현재 바라보고 있는 월드상의 목표 지점(EyeTarget)을 먼저 찾습니다.
 	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
 	FVector CameraLocation = ActiveCamera->GetComponentLocation();
 	FVector CameraForward = ActiveCamera->GetForwardVector();
-	float TraceDistance = 5000.0f;
+	float TraceDistance = 10000.0f;
 	FVector CameraEndLocation = CameraLocation + (CameraForward * TraceDistance);
 
 	FHitResult CameraHit;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
+	if (CurrentWeapon) QueryParams.AddIgnoredActor(CurrentWeapon);
 
-	bool bCameraHit = GetWorld()->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams);
-	FVector TargetLocation = bCameraHit ? CameraHit.ImpactPoint : CameraEndLocation;
+	FVector EyeTargetLocation;
+	if (GetWorld()->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams))
+	{
+		EyeTargetLocation = CameraHit.ImpactPoint; // 무언가 맞았다면 그 지점이 조준점
+	}
+	else
+	{
+		EyeTargetLocation = CameraEndLocation; // 아무것도 없다면 허공 끝이 조준점
+	}
 
-	// 무기에서 무기 고유의 퍼짐 배수를 가져옴
+	// 2. [총구 위치] 실제 무기 메시에 설정된 소켓 위치를 가져옵니다.
+	FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+
+	// 3. [탄도 정렬] 총구에서 시선 목표 지점(EyeTarget)을 향하는 방향 벡터를 구합니다.
+	FVector RealFireDirection = (EyeTargetLocation - MuzzleLocation).GetSafeNormal();
+
+	// 4. [실제 탄도 체크] 총구에서 목표 지점 방향으로 진짜 총알 궤적 레이저를 쏩니다.
+	FVector FinalTraceEnd = MuzzleLocation + (RealFireDirection * 5000.0f);
+	FHitResult FinalHit;
+
+	FVector FinalTargetLocation; // 최종적으로 탄착군(Spread)이 형성될 중심점
+
+	// 실제 총구 앞에 벽이 있는지 체크
+	if (GetWorld()->LineTraceSingleByChannel(FinalHit, MuzzleLocation, FinalTraceEnd, ECC_Visibility, QueryParams))
+	{
+		FinalTargetLocation = FinalHit.ImpactPoint;
+	}
+	else
+	{
+		FinalTargetLocation = FinalTraceEnd;
+	}
+
+	// --- 탄 퍼짐(Spread) 계산 (총구 기준 벡터로 계산) ---
 	float SpreadMultiplier = CurrentWeapon->WeaponSpreadMultiplier;
 	float FinalSpreadAngle = CurrentSpread * SpreadMultiplier;
 
-	FVector CameraRight = ActiveCamera->GetRightVector();
-	FVector CameraUp = ActiveCamera->GetUpVector();
+	// 총구 방향을 기준으로 Right와 Up 벡터 생성
+	FVector Forward, Right, Up;
+	RealFireDirection.FindBestAxisVectors(Right, Up);
 
-	// 카메라 위치에서 실제 타겟(벽, 적, 혹은 허공)까지의 거리를 구함
-	float ActualDistanceToTarget = FVector::Distance(CameraLocation, TargetLocation);
-
-	// 이 실제 거리를 바탕으로 퍼짐 원판의 반지름을 계산해야, 거리에 맞게 정확히 흩어짐
+	float ActualDistanceToTarget = FVector::Distance(MuzzleLocation, FinalTargetLocation);
 	float SpreadRadius = FMath::Tan(FMath::DegreesToRadians(FinalSpreadAngle)) * ActualDistanceToTarget;
 
 	float RandomAngle = FMath::RandRange(0.0f, PI * 2.0f);
 	float RandomRadius = FMath::RandRange(0.0f, SpreadRadius);
 
-	FVector SpreadOffset = (CameraRight * FMath::Cos(RandomAngle) * RandomRadius) + (CameraUp * FMath::Sin(RandomAngle) * RandomRadius);
+	FVector SpreadOffset = (Right * FMath::Cos(RandomAngle) * RandomRadius) + (Up * FMath::Sin(RandomAngle) * RandomRadius);
 
-	// 최종 타겟 지점에 스프레드 오프셋을 더함
-	TargetLocation += SpreadOffset;
+	// 최종 타겟 지점 확정
+	FVector TargetLocation = FinalTargetLocation + SpreadOffset;
 
 	if (GEngine)
 	{
@@ -415,6 +583,7 @@ void AGun_phiriaCharacter::Fire()
 			FString::Printf(TEXT("Spread Multiplier: %.1f | Spread Angle: %.2f deg"), SpreadMultiplier, FinalSpreadAngle));
 	}
 
+	// 진짜 총구 위치에서 조준된 목표 지점으로 발사 명령
 	CurrentWeapon->Fire(TargetLocation);
 }
 
@@ -501,4 +670,16 @@ void AGun_phiriaCharacter::ToggleCrouch()
 		// 서 있다면 숙입니다.
 		Crouch();
 	}
+}
+
+void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value)
+{
+	// E키면 1.0, Q키면 -1.0이 들어옵니다.
+	TargetLean = Value.Get<float>();
+}
+
+void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value)
+{
+	// 키를 떼면 다시 똑바로 섭니다.
+	TargetLean = 0.0f;
 }

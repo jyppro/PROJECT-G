@@ -48,6 +48,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentHealth;
 
+	// 기울이기의 중심축이 될 카메라 시선 벡터
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	FVector LeanAxisCS;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -144,6 +148,21 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
 	TArray<class UAnimMontage*> HitMontages;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* LeanAction;
+
+	// 목표 기울기 값 (-1.0 ~ 1.0)
+	float TargetLean = 0.0f;
+
+	// 현재 부드럽게 보간 중인 기울기 값 (AnimBP로 넘겨줄 변수)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Animation")
+	float CurrentLean = 0.0f;
+
+	// 키를 누르고 있을 때 실행
+	void InputLean(const FInputActionValue& Value);
+	// 키를 뗐을 때 실행 (0으로 원상복구)
+	void InputLeanEnd(const FInputActionValue& Value);
 
 private:
 	FTimerHandle FireTimerHandle;
