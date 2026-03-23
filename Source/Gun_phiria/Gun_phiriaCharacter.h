@@ -52,6 +52,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	FVector LeanAxisCS;
 
+	// 현재 엎드려 있는지 여부
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Prone")
+	bool bIsProne;
+
+	// 엎드렸을 때의 최대 이동 속도 (기본 500에서 아주 느리게 설정)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Prone")
+	float MaxWalkSpeedProne = 100.0f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -84,6 +92,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> FireAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> ProneAction;
 
 	// 입력 처리 함수
 	void Move(const FInputActionValue& Value);
@@ -163,6 +174,17 @@ protected:
 	void InputLean(const FInputActionValue& Value);
 	// 키를 뗐을 때 실행 (0으로 원상복구)
 	void InputLeanEnd(const FInputActionValue& Value);
+
+	// 조준 상태를 0.0 ~ 1.0 사이로 부드럽게 전환하기 위한 알파 값
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aiming")
+	float ADSAlpha = 0.0f;
+
+	// 엎드리기 토글 함수
+	void ToggleProne();
+
+	// 원래 캡슐 절반 높이와 메쉬의 Z 오프셋을 기억해둘 변수
+	float DefaultCapsuleHalfHeight;
+	float DefaultMeshRelativeLocationZ;
 
 private:
 	FTimerHandle FireTimerHandle;

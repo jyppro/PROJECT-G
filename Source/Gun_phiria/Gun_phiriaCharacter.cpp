@@ -78,6 +78,10 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 		// (선택) 숙여서 걸을 때 속도를 조절합니다. (기존 500의 절반인 250 정도로 설정)
 		GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
 	}
+
+	bIsProne = false;
+	DefaultCapsuleHalfHeight = 96.0f;
+	DefaultMeshRelativeLocationZ = -97.0f; // 프로젝트 메쉬 위치에 맞게 조절하세요 (보통 -90 ~ -97)
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -99,6 +103,11 @@ void AGun_phiriaCharacter::BeginPlay()
 			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
 		}
+	}
+
+	if (ADSCamera && GetMesh())
+	{
+		ADSCamera->AddTickPrerequisiteComponent(GetMesh());
 	}
 }
 
@@ -156,8 +165,14 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	}
 
 	// --- 절차적 조준(Procedural ADS) 뼈대 타겟 좌표 계산 ---
-	// 조건문에 CurrentWeapon이 유효한지 확인하는 로직 추가
-	if (bIsAiming && FollowCamera && CurrentWeapon && CurrentWeapon->GetWeaponMesh())
+
+	// 1. 조준 상태에 따라 0.0(비조준) ~ 1.0(조준)으로 부드럽게 변하는 보간값 생성
+	float TargetAlpha = bIsAiming ? 1.0f : 0.0f;
+	// 15.0f는 조준하는 속도야. 필요에 따라 더 빠르거나 느리게 조절할 수 있어.
+	ADSAlpha = FMath::FInterpTo(ADSAlpha, TargetAlpha, DeltaTime, 15.0f);
+
+	// 2. 무기가 유효하고, 알파값이 0보다 커서 조준 연산이 필요할 때만 실행
+	if (ADSAlpha > 0.01f && FollowCamera && CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
 		FVector CameraLocation = FollowCamera->GetComponentLocation();
 		FVector CameraForward = FollowCamera->GetForwardVector();
@@ -177,7 +192,15 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		FTransform MeshTransform = GetMesh()->GetComponentTransform();
 		FVector TargetHandCS = MeshTransform.InverseTransformPosition(TargetHandWorldLoc);
 
-		DynamicAimOffset = FMath::VInterpTo(DynamicAimOffset, TargetHandCS, DeltaTime, 20.0f);
+		// ★ 핵심 변경점: VInterpTo를 제거하고 Lerp(선형 보간)를 사용합니다!
+		// 마우스를 움직일 때 TargetHandCS가 변하면 지연 없이 즉각 반영되지만, 
+		// 비조준 -> 조준 상태 전환은 ADSAlpha에 의해 부드럽게 진행됩니다.
+		DynamicAimOffset = FMath::Lerp(FVector::ZeroVector, TargetHandCS, ADSAlpha);
+	}
+	else if (ADSAlpha <= 0.01f)
+	{
+		// 비조준 상태일 때는 오프셋을 0으로 초기화
+		DynamicAimOffset = FVector::ZeroVector;
 	}
 
 	// 대각선 이동 애니메이션을 위한 '이동 방향 각도(Direction)' 계산
@@ -364,6 +387,10 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::InputLean);
 			// 키를 완전히 뗐을 때(Completed)
 			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
+		}
+		if (ProneAction)
+		{
+			EnhancedInputComponent->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
 		}
 	}
 	else
@@ -682,4 +709,52 @@ void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value)
 {
 	// 키를 떼면 다시 똑바로 섭니다.
 	TargetLean = 0.0f;
+}
+
+void AGun_phiriaCharacter::ToggleProne()
+{
+	// 공중에 떠있을 때는 엎드릴 수 없도록 방지
+	if (GetCharacterMovement()->IsFalling()) return;
+
+	if (bIsProne)
+	{
+		// [엎드림 -> 일어서기]
+		bIsProne = false;
+
+		// 1. 캡슐 크기를 원래대로 (96.0f)
+		GetCapsuleComponent()->SetCapsuleHalfHeight(DefaultCapsuleHalfHeight);
+
+		// 2. 메쉬 위치를 원래대로 복구
+		FVector MeshLoc = GetMesh()->GetRelativeLocation();
+		MeshLoc.Z = DefaultMeshRelativeLocationZ;
+		GetMesh()->SetRelativeLocation(MeshLoc);
+
+		// 3. 이동 속도를 원래대로 (500.0f)
+		GetCharacterMovement()->MaxWalkSpeed = 500.0f;
+	}
+	else
+	{
+		// [서있음/앉아있음 -> 엎드리기]
+		// 만약 앉아있는 상태라면 먼저 앉기 상태를 해제합니다.
+		if (bIsCrouched)
+		{
+			UnCrouch();
+		}
+
+		bIsProne = true;
+
+		// 1. 캡슐 높이를 대폭 줄입니다 (예: 34.0f)
+		float ProneHalfHeight = 34.0f;
+		GetCapsuleComponent()->SetCapsuleHalfHeight(ProneHalfHeight);
+
+		// 2. 캡슐이 줄어든 만큼 메쉬가 공중에 뜨지 않게 위로 올려줍니다.
+		// 높이 차이 = 96.0 - 34.0 = 62.0. 기존 Z위치(-97) + 62 = -35.0
+		float HeightDifference = DefaultCapsuleHalfHeight - ProneHalfHeight;
+		FVector MeshLoc = GetMesh()->GetRelativeLocation();
+		MeshLoc.Z = DefaultMeshRelativeLocationZ + HeightDifference;
+		GetMesh()->SetRelativeLocation(MeshLoc);
+
+		// 3. 이동 속도를 기어가는 속도로 변경
+		GetCharacterMovement()->MaxWalkSpeed = MaxWalkSpeedProne;
+	}
 }
