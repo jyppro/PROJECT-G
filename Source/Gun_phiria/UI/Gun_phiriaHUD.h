@@ -4,25 +4,32 @@
 #include "GameFramework/HUD.h"
 #include "Gun_phiriaHUD.generated.h"
 
+class AGun_phiriaCharacter;
+class AWeaponBase;
+
 UCLASS()
 class GUN_PHIRIA_API AGun_phiriaHUD : public AHUD
 {
 	GENERATED_BODY()
 
 public:
+	// --- Lifecycle & API ---
 	virtual void DrawHUD() override;
-
 	void ShowMissionClearMessage();
 
+protected:
+	// --- Helper Draw Functions ---
+	void DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center);
+	void DrawHealthBar(TObjectPtr<AGun_phiriaCharacter> PlayerChar, const FVector2D& Center);
+	void DrawMissionClear(const FVector2D& Center);
+
 private:
-	// 크로스헤어 시각적 설정값
-	float BaseSpread = 5.0f;                 // 기본 상태일 때 선과 중앙 점 사이의 최소 거리
-	float CrosshairLength = 12.0f;           // 선의 길이
-	float CrosshairThickness = 2.0f;         // 선의 두께
+	// --- Crosshair Settings ---
+	float CrosshairLength = 12.0f;
+	float CrosshairThickness = 2.0f;
 
-	// 캐릭터 코드의 Fire()에서 사용한 스프레드 배수와 동일해야 함
-	float SpreadAngleMultiplier = 3.0f;
-
+	// --- State Flags & Timers ---
 	bool bIsShowingClearMessage = false;
 	float ClearMessageTimer = 0.0f;
+
 };

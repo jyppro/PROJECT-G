@@ -1,10 +1,12 @@
 #include "DungeonRoomManager.h"
-#include "Components/BoxComponent.h"
-#include "GameFramework/Character.h"
-#include "Kismet/GameplayStatics.h"
-#include "../Enemy/EnemyCharacter.h" 
+#include "../Enemy/EnemyCharacter.h"
 #include "../UI/Gun_phiriaHUD.h"
+
+// Engine Headers
+#include "Components/BoxComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Character.h"
 
 ADungeonRoomManager::ADungeonRoomManager()
 {
@@ -12,40 +14,38 @@ ADungeonRoomManager::ADungeonRoomManager()
 
 	RoomTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("RoomTrigger"));
 	RootComponent = RoomTrigger;
-
-	// 오직 플레이어의 겹침만 감지하도록 설정
 	RoomTrigger->SetCollisionProfileName(TEXT("Trigger"));
 }
 
 void ADungeonRoomManager::BeginPlay()
 {
 	Super::BeginPlay();
-	RoomTrigger->OnComponentBeginOverlap.AddDynamic(this, &ADungeonRoomManager::OnPlayerEnter);
+
+	if (RoomTrigger)
+	{
+		RoomTrigger->OnComponentBeginOverlap.AddDynamic(this, &ADungeonRoomManager::OnPlayerEnter);
+	}
 }
 
-// 플레이어가 방 중앙 박스에 닿았을 때!
 void ADungeonRoomManager::OnPlayerEnter(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (bIsTriggered || bIsCleared) return;
 
-	ACharacter* PlayerChar = Cast<ACharacter>(OtherActor);
-	// 닿은 사람이 플레이어인지 확인
-	if (PlayerChar && PlayerChar == UGameplayStatics::GetPlayerCharacter(GetWorld(), 0))
+	TObjectPtr<ACharacter> PlayerChar = Cast<ACharacter>(OtherActor);
+	if (PlayerChar && PlayerChar->IsPlayerControlled())
 	{
-		bIsTriggered = true; // 중복 트리거 방지
-
-		LockDoors(); // 1. 방 문을 닫아버림
-		SpawnEnemies(); // 2. 적 소환 시작
+		bIsTriggered = true;
+		LockDoors();
+		SpawnEnemies();
 	}
 }
 
 void ADungeonRoomManager::LockDoors()
 {
-	for (AActor* Door : ConnectedDoors)
+	for (TObjectPtr<AActor> Door : ConnectedDoors)
 	{
 		if (Door)
 		{
-			// 문을 보이게 하고, 충돌을 켜서 길을 막음 (배틀그라운드 레드존처럼 가둠)
 			Door->SetActorHiddenInGame(false);
 			Door->SetActorEnableCollision(true);
 		}
@@ -54,11 +54,10 @@ void ADungeonRoomManager::LockDoors()
 
 void ADungeonRoomManager::UnlockDoors()
 {
-	for (AActor* Door : ConnectedDoors)
+	for (TObjectPtr<AActor> Door : ConnectedDoors)
 	{
 		if (Door)
 		{
-			// 문을 투명하게 하고, 충돌을 꺼서 지나갈 수 있게 함 (열림)
 			Door->SetActorHiddenInGame(true);
 			Door->SetActorEnableCollision(false);
 		}
@@ -69,109 +68,73 @@ void ADungeonRoomManager::SpawnEnemies()
 {
 	if (!EnemyPrefab) return;
 
-	// 나중에 변수로 빼서 방 난이도별로 조절할 수 있습니다.
-	int32 NumEnemiesToSpawn = FMath::RandRange(3, 5);
+	const int32 NumEnemiesToSpawn = FMath::RandRange(3, 5);
 	AliveEnemiesCount = 0;
 
-	for (int32 j = 0; j < NumEnemiesToSpawn; j++)
+	for (int32 i = 0; i < NumEnemiesToSpawn; i++)
 	{
 		FVector SpawnLocation;
 		bool bValidPointFound = false;
-		int32 MaxTries = 10;
-		int32 CurrentTries = 0;
 
-		while (!bValidPointFound && CurrentTries < MaxTries)
+		for (int32 Tries = 0; Tries < 10 && !bValidPointFound; Tries++)
 		{
-			CurrentTries++;
+			const float Padding = 150.0f;
+			const FVector Center = GetActorLocation();
 
-			float Padding = 150.0f;
-			FVector Center = GetActorLocation();
-			float MinX = Center.X - (RoomSize.X * 0.5f) + Padding;
-			float MaxX = Center.X + (RoomSize.X * 0.5f) - Padding;
-			float MinY = Center.Y - (RoomSize.Y * 0.5f) + Padding;
-			float MaxY = Center.Y + (RoomSize.Y * 0.5f) - Padding;
-
-			float RandomX = FMath::RandRange(MinX, MaxX);
-			float RandomY = FMath::RandRange(MinY, MaxY);
-
-			// 하늘에서 수직 레이저 발사 (이전에 완성한 완벽한 스폰 로직)
-			FVector TraceStart = FVector(RandomX, RandomY, Center.Z + 2000.0f);
-			FVector TraceEnd = FVector(RandomX, RandomY, Center.Z - 500.0f);
+			const float RX = FMath::RandRange(Center.X - (RoomSize.X * 0.5f) + Padding, Center.X + (RoomSize.X * 0.5f) - Padding);
+			const float RY = FMath::RandRange(Center.Y - (RoomSize.Y * 0.5f) + Padding, Center.Y + (RoomSize.Y * 0.5f) - Padding);
 
 			FHitResult HitResult;
 			FCollisionQueryParams TraceParams;
 			TraceParams.AddIgnoredActor(this);
 
-			if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+			if (GetWorld()->LineTraceSingleByChannel(HitResult, FVector(RX, RY, Center.Z + 2000.f), FVector(RX, RY, Center.Z - 500.f), ECC_WorldStatic, TraceParams))
 			{
-				SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 100.0f);
-				if (IsSpawnLocationValid(SpawnLocation))
-				{
-					bValidPointFound = true;
-				}
+				SpawnLocation = HitResult.ImpactPoint + FVector(0, 0, 100.0f);
+				if (IsSpawnLocationValid(SpawnLocation)) bValidPointFound = true;
 			}
 		}
 
 		if (bValidPointFound)
 		{
-			FRotator SpawnRotation = FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-			AEnemyCharacter* SpawnedEnemy = GetWorld()->SpawnActor<AEnemyCharacter>(EnemyPrefab, SpawnLocation, SpawnRotation, SpawnParams);
-
-			if (SpawnedEnemy)
+			if (TObjectPtr<AEnemyCharacter> Enemy = GetWorld()->SpawnActor<AEnemyCharacter>(EnemyPrefab, SpawnLocation, FRotator(0, FMath::RandRange(0.f, 360.f), 0), SpawnParams))
 			{
-				// ★ 핵심: 스폰된 적에게 이 방(RoomManager)이 네 주인이라고 알려줌!
-				SpawnedEnemy->ParentRoom = this;
+				Enemy->ParentRoom = this;
 				AliveEnemiesCount++;
 			}
 		}
 	}
 
-	// 만약 스폰에 모두 실패해서 적이 0마리라면 즉시 클리어 처리
-	if (AliveEnemiesCount == 0)
-	{
-		OnEnemyDied();
-	}
+	if (AliveEnemiesCount == 0) OnEnemyDied();
 }
 
 bool ADungeonRoomManager::IsSpawnLocationValid(FVector Location)
 {
-	float CheckRadius = 45.0f;
-	FCollisionShape CheckSphere = FCollisionShape::MakeSphere(CheckRadius);
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 
-	bool bIsOverlapping = GetWorld()->OverlapAnyTestByChannel(Location, FQuat::Identity, ECC_WorldStatic, CheckSphere, QueryParams);
-
-	return !bIsOverlapping; // 겹치는 게 없으면 스폰 성공
+	return !GetWorld()->OverlapAnyTestByChannel(Location, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(45.0f), QueryParams);
 }
 
 void ADungeonRoomManager::OnEnemyDied()
 {
 	AliveEnemiesCount--;
 
-	// 모든 적 처치 완료!
 	if (AliveEnemiesCount <= 0 && !bIsCleared)
 	{
 		bIsCleared = true;
-		UnlockDoors(); // 다시 문이 스르륵 열립니다.
+		UnlockDoors();
 
-		// ★ [새로 추가] 플레이어의 HUD를 찾아서 클리어 메세지를 띄웁니다!
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
+		// Update HUD
+		if (TObjectPtr<APlayerController> PC = GetWorld()->GetFirstPlayerController())
 		{
-			AGun_phiriaHUD* PlayerHUD = Cast<AGun_phiriaHUD>(PC->GetHUD());
-			if (PlayerHUD)
+			if (TObjectPtr<AGun_phiriaHUD> PlayerHUD = Cast<AGun_phiriaHUD>(PC->GetHUD()))
 			{
 				PlayerHUD->ShowMissionClearMessage();
 			}
-		}
-
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, TEXT("MISSION CLEAR! Doors Opened."));
 		}
 	}
 }

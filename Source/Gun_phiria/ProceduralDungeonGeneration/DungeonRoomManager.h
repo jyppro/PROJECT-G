@@ -4,44 +4,50 @@
 #include "GameFramework/Actor.h"
 #include "DungeonRoomManager.generated.h"
 
+// --- Forward Declarations ---
+class UBoxComponent;
+class AEnemyCharacter;
+
 UCLASS()
 class GUN_PHIRIA_API ADungeonRoomManager : public AActor
 {
 	GENERATED_BODY()
 
 public:
+	// --- Constructor & API ---
 	ADungeonRoomManager();
+	void OnEnemyDied();
 
-protected:
-	virtual void BeginPlay() override;
-
-public:
-	// 플레이어 입장을 감지할 투명 박스
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class UBoxComponent* RoomTrigger;
-
-	// 던전 생성기에서 전달받을 데이터들
+	// --- Public Data (Set by Generator) ---
 	UPROPERTY()
-	TArray<AActor*> ConnectedDoors;
+	TArray<TObjectPtr<AActor>> ConnectedDoors;
 
 	UPROPERTY()
-	TSubclassOf<class AEnemyCharacter> EnemyPrefab;
+	TSubclassOf<AEnemyCharacter> EnemyPrefab;
 
 	FVector RoomSize;
 
-	// 적이 죽었을 때 보고받을 함수
-	void OnEnemyDied();
+	// --- Components ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UBoxComponent> RoomTrigger;
+
+protected:
+	// --- Lifecycle ---
+	virtual void BeginPlay() override;
 
 private:
-	bool bIsTriggered = false;
-	bool bIsCleared = false;
-	int32 AliveEnemiesCount = 0;
-
+	// --- Internal Callbacks ---
 	UFUNCTION()
 	void OnPlayerEnter(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
+	// --- Internal Logic ---
 	void LockDoors();
 	void UnlockDoors();
 	void SpawnEnemies();
 	bool IsSpawnLocationValid(FVector Location);
+
+	// --- State Flags ---
+	bool bIsTriggered = false;
+	bool bIsCleared = false;
+	int32 AliveEnemiesCount = 0;
 };
