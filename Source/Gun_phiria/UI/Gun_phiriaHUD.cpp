@@ -40,6 +40,8 @@ void AGun_phiriaHUD::DrawHUD()
 	FLinearColor CrosshairColor = FLinearColor::Black;
 	float DotSize = 2.0f; // 기본 점 크기
 
+	bool bIsAiming = PlayerChar->GetIsAiming();
+
 	// 캐릭터가 적의 머리를 조준하고 있다면?
 	if (PlayerChar->bIsAimingAtHead)
 	{
@@ -51,14 +53,18 @@ void AGun_phiriaHUD::DrawHUD()
 
 	float HalfDot = DotSize * 0.5f;
 
-	// 중앙 점 그리기 (변경된 크기와 통합된 색상 적용)
+	// 중앙 점 그리기
 	DrawRect(CrosshairColor, Center.X - HalfDot, Center.Y - HalfDot, DotSize, DotSize);
 
-	// 십자선의 4방향 선 그리기 (점과 동일하게 변경된 CrosshairColor 적용)
-	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y - FinalOffset - CrosshairLength, CrosshairThickness, CrosshairLength);
-	DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y + FinalOffset, CrosshairThickness, CrosshairLength);
-	DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
-	DrawRect(CrosshairColor, Center.X + FinalOffset, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
+	// 2. 십자선의 4방향 선 그리기: 정조준(ADS) 상태가 아닐 때만 그립니다!
+	if (!bIsAiming)
+	{
+		// 점과 동일하게 변경된 CrosshairColor 적용
+		DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y - FinalOffset - CrosshairLength, CrosshairThickness, CrosshairLength);
+		DrawRect(CrosshairColor, Center.X - (CrosshairThickness * 0.5f), Center.Y + FinalOffset, CrosshairThickness, CrosshairLength);
+		DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
+		DrawRect(CrosshairColor, Center.X + FinalOffset, Center.Y - (CrosshairThickness * 0.5f), CrosshairLength, CrosshairThickness);
+	}
 
 	// 체력바 크기 및 위치 설정
 	float BarWidth = 400.0f;  // 체력바 가로 길이

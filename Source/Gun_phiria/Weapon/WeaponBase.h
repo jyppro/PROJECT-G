@@ -37,6 +37,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon Stats")
 	float MaxWeaponDamage = 20.0f;
 
+	// 서 있거나 앉아 있을 때 재생할 사격 몽타주 (소총, 샷건 등에서 사용)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
+	TArray<UAnimMontage*> StandCrouchFireMontages;
+
+	// 엎드려 있을 때 재생할 사격 몽타주
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
+	TArray<UAnimMontage*> ProneFireMontages;
+
 protected:
 	// 기존 캐릭터 코드에 있던 무기 메시와 이펙트들을 이쪽으로 옮김
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

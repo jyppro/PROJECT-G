@@ -36,6 +36,10 @@ public:
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
 	FORCEINLINE class AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon; }
 
+	// 조준 상태를 외부(HUD 등)에서 확인할 수 있게 해주는 함수
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	bool GetIsAiming() const { return bIsAiming; }
+
 	// HUD에서 읽어갈 수 있도록 public에 선언
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crosshair")
 	bool bIsAimingAtHead = false;

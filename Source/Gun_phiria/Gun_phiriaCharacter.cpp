@@ -147,13 +147,42 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	}
 	else if (CurrentSpeed > 10.0f)
 	{
-		// 땅에 있지만 걷거나 뛸 때
-		TargetMinSpread = bIsAiming ? 1.5f : 3.0f;
+		// 땅에 있지만 움직일 때 (이동 중에도 자세에 따라 퍼짐이 다름)
+		if (bIsProne)
+		{
+			// 기어갈 때
+			TargetMinSpread = bIsAiming ? 0.5f : 1.5f;
+		}
+		else if (bIsCrouched)
+		{
+			// 앉아서 걸을 때
+			TargetMinSpread = bIsAiming ? 1.0f : 2.0f;
+		}
+		else
+		{
+			// 서서 걷거나 뛸 때
+			TargetMinSpread = bIsAiming ? 1.5f : 3.0f;
+		}
 	}
 	else
 	{
-		// 땅에서 가만히 서 있을 때
-		TargetMinSpread = bIsAiming ? 0.0f : 1.0f; // 서 있을 때도 비조준 시 약간의 퍼짐 유지
+		// 제자리에 멈춰 있을 때 (★ 배틀그라운드처럼 자세별 세분화 적용)
+		if (bIsProne)
+		{
+			// 엎드려쏴 (가장 안정적, 비조준 시에도 퍼짐이 매우 적음)
+			TargetMinSpread = bIsAiming ? 0.0f : 0.2f;
+		}
+		else if (bIsCrouched)
+		{
+			// 앉아쏴 (서있을 때보다 안정적)
+			// 조준 시 미세한 흔들림을 원하면 0.0f 대신 0.05f 등으로 설정 가능
+			TargetMinSpread = bIsAiming ? 0.0f : 0.5f;
+		}
+		else
+		{
+			// 서서쏴 (가장 불안정적, 기본값)
+			TargetMinSpread = bIsAiming ? 0.0f : 1.0f;
+		}
 	}
 
 	float CurrentTime = GetWorld()->GetTimeSeconds(); // 현재 게임 플레이 시간 가져오기
@@ -192,9 +221,6 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		FTransform MeshTransform = GetMesh()->GetComponentTransform();
 		FVector TargetHandCS = MeshTransform.InverseTransformPosition(TargetHandWorldLoc);
 
-		// ★ 핵심 변경점: VInterpTo를 제거하고 Lerp(선형 보간)를 사용합니다!
-		// 마우스를 움직일 때 TargetHandCS가 변하면 지연 없이 즉각 반영되지만, 
-		// 비조준 -> 조준 상태 전환은 ADSAlpha에 의해 부드럽게 진행됩니다.
 		DynamicAimOffset = FMath::Lerp(FVector::ZeroVector, TargetHandCS, ADSAlpha);
 	}
 	else if (ADSAlpha <= 0.01f)
@@ -302,7 +328,7 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
 		// 실제 총구 위치
-		FVector MuzzleLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+		FVector MuzzleLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
 
 		// 1. 캐릭터 중심에서 총구와 같은 높이의 시작점을 만듭니다. 
 		// (높이를 맞추는 이유: 창문 너머로 사격할 때 창틀에 밀려나지 않기 위해)
@@ -399,23 +425,6 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	}
 }
 
-//void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
-//{
-//	FVector2D MovementVector = Value.Get<FVector2D>();
-//
-//	if (Controller != nullptr)
-//	{
-//		const FRotator Rotation = Controller->GetControlRotation();
-//		const FRotator YawRotation(0, Rotation.Yaw, 0);
-//
-//		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-//		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-//
-//		AddMovementInput(ForwardDirection, MovementVector.Y);
-//		AddMovementInput(RightDirection, MovementVector.X);
-//	}
-//}
-
 void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 {
 	FVector2D MovementVector = Value.Get<FVector2D>();
@@ -431,14 +440,13 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 		float ForwardInput = MovementVector.Y; // W키(+1) 또는 S키(-1) 입력값
 
 		// ==========================================================
-		// ★ [총구 벽 뚫림 방지 로직] 총구 쪽에 벽 충돌을 감지하여 전진을 차단합니다.
-		// ==========================================================
+		// ★ [총구 벽 뚫림 방지 로직] 총구 쪽에 벽 충돌을 감지하여 전진을 차단
 
 		// 앞으로 가려고 할 때(ForwardInput > 0)만 벽을 체크합니다. (뒤로 가는 건 허용)
 		if (CurrentWeapon && CurrentWeapon->GetWeaponMesh() && ForwardInput > 0.0f)
 		{
 			// 1. 실제 총구 위치를 가져옵니다.
-			FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+			FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
 
 			// 2. 센서 시작점(총구 살짝 뒤)과 끝점(총구 살짝 앞)을 설정합니다.
 			// 총구 안쪽에서부터 트레이스를 쏴야 이미 살짝 파묻혔을 때도 정확히 감지해냅니다.
@@ -463,7 +471,6 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 				DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.0f, 12, FColor::Red, false, 0.1f);
 			}
 		}
-		// ==========================================================
 
 		// 수정된 ForwardInput을 사용해 전진/후진 적용 (벽에 닿으면 0이 되어 딱 멈춥니다!)
 		AddMovementInput(ForwardDirection, ForwardInput);
@@ -519,27 +526,68 @@ void AGun_phiriaCharacter::Fire()
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
 	LastFireTime = GetWorld()->GetTimeSeconds();
 
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && CurrentWeapon)
+	{
+		// 재생할 몽타주 목록을 담을 임시 배열
+		TArray<UAnimMontage*> MontagesToPlay;
+
+		// 1. 현재 자세에 따라 무기에서 어떤 몽타주 배열을 가져올지 결정
+		if (bIsProne)
+		{
+			MontagesToPlay = CurrentWeapon->ProneFireMontages;
+		}
+		else // 서 있거나 앉은 상태
+		{
+			MontagesToPlay = CurrentWeapon->StandCrouchFireMontages;
+		}
+
+		// 2. 해당 무기에 등록된 애니메이션이 1개라도 있는지 확인!
+		// (권총처럼 비워두면 0이므로 이 조건문을 무시하고 넘어감 -> 에러 방지 및 확장성 확보)
+		if (MontagesToPlay.Num() > 0)
+		{
+			// 등록된 애니메이션 중 하나를 랜덤으로 재생
+			int32 RandomIndex = FMath::RandRange(0, MontagesToPlay.Num() - 1);
+			AnimInstance->Montage_Play(MontagesToPlay[RandomIndex]);
+		}
+	}
+
 	// 상태에 따른 최종 페널티 계산
 	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
 	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
 	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
-	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier;
+
+	float StanceMultiplier = 1.0f; // 기본: 서 있는 상태 (반동 100%)
+
+	if (bIsProne)
+	{
+		StanceMultiplier = 0.4f; // 엎드려 쏠 때: 반동 및 퍼짐 60% 감소 (매우 안정적)
+	}
+	else if (bIsCrouched)
+	{
+		StanceMultiplier = 0.75f; // 앉아 쏠 때: 반동 및 퍼짐 25% 감소 (조금 안정적)
+	}
+
+	// 모든 배율을 곱해서 최종 배율(TotalMultiplier) 산출
+	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier * StanceMultiplier;
 
 	// 물리적 카메라 반동 (Recoil)
 	if (Controller != nullptr)
 	{
+		// Pitch(상하) 반동: 위로 튀어야 하므로 음수값, TotalMultiplier로 자세별 감소 적용
 		float RecoilPitch = FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier;
+		// Yaw(좌우) 반동: 좌우 랜덤, TotalMultiplier로 자세별 감소 적용
 		float RecoilYaw = FMath::RandRange(-0.5f, 0.5f) * TotalMultiplier;
+
 		AddControllerPitchInput(RecoilPitch);
 		AddControllerYawInput(RecoilYaw);
 	}
 
-	// 탄 퍼짐(Spread) 누적
+	// 탄 퍼짐(Spread) 누적: 총을 쏠 때 순간적으로 벌어지는 수치도 자세의 영향을 받게 됨
 	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
 
 	// ==========================================================
-	// ★ [수정됨] 실제 총구에서 조준점을 향해 쏘는 로직
-	// ==========================================================
+	// 실제 총구에서 조준점을 향해 쏘는 로직
 
 	// 1. [시선 계산] 카메라가 현재 바라보고 있는 월드상의 목표 지점(EyeTarget)을 먼저 찾습니다.
 	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
@@ -564,7 +612,7 @@ void AGun_phiriaCharacter::Fire()
 	}
 
 	// 2. [총구 위치] 실제 무기 메시에 설정된 소켓 위치를 가져옵니다.
-	FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleFlash"));
+	FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
 
 	// 3. [탄도 정렬] 총구에서 시선 목표 지점(EyeTarget)을 향하는 방향 벡터를 구합니다.
 	FVector RealFireDirection = (EyeTargetLocation - MuzzleLocation).GetSafeNormal();
@@ -686,6 +734,8 @@ void AGun_phiriaCharacter::Die()
 
 void AGun_phiriaCharacter::ToggleCrouch()
 {
+	if (bIsProne) return;
+
 	// 언리얼 ACharacter에 기본 내장된 변수 bIsCrouched를 확인합니다.
 	if (bIsCrouched)
 	{
