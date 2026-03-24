@@ -10,6 +10,7 @@
 #include "../ProceduralDungeonGeneration/DungeonRoomManager.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -20,6 +21,15 @@ AEnemyCharacter::AEnemyCharacter()
 
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	if (GetCharacterMovement())
+	{
+		// 숙이기 기능 활성화!
+		GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+
+		// (선택) 숙인 상태로 이동할 때의 최대 속도 조절
+		GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
+	}
 }
 
 void AEnemyCharacter::BeginPlay()
@@ -29,6 +39,7 @@ void AEnemyCharacter::BeginPlay()
 	CurrentHealth = MaxHealth;
 
 	bIsAiming = false;
+	bIsCrouching = false;
 
 	// 무기 스폰 및 장착 (플레이어와 동일)
 	if (DefaultWeaponClass)

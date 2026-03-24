@@ -1,6 +1,7 @@
 #include "BTTask_SetCrouchState.h"
 #include "AIController.h"
 #include "../Enemy/EnemyCharacter.h"
+#include "BehaviorTree/BlackboardComponent.h"
 
 UBTTask_SetCrouchState::UBTTask_SetCrouchState()
 {
@@ -17,25 +18,30 @@ EBTNodeResult::Type UBTTask_SetCrouchState::ExecuteTask(UBehaviorTreeComponent& 
 		AEnemyCharacter* Enemy = Cast<AEnemyCharacter>(AIController->GetPawn());
 		if (Enemy)
 		{
-			// bShouldCrouch가 켜져 있다면 확률 계산 시작!
 			if (bShouldCrouch)
 			{
-				// ★ 0~100 사이의 랜덤 숫자를 뽑아서 지정한 확률보다 낮으면 숙임!
 				if (FMath::FRandRange(0.0f, 100.0f) <= CrouchProbability)
 				{
+					// 1. 적을 숙이게 만듦
 					Enemy->Crouch();
 					Enemy->bIsCrouching = true;
+
+					// ★ [추가] 2. 블랙보드 컴포넌트를 가져와서 '한 번이라도 숙였음'을 True로 기록!
+					UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
+					if (BlackboardComp)
+					{
+						// 에디터에서 선택한 키 이름에 접근해 Bool 값을 강제로 True로 만듭니다.
+						BlackboardComp->SetValueAsBool(HasCrouchedKey.SelectedKeyName, true);
+					}
 				}
 				else
 				{
-					// 확률에 실패하면 일어섬
 					Enemy->UnCrouch();
 					Enemy->bIsCrouching = false;
 				}
 			}
 			else
 			{
-				// bShouldCrouch가 꺼져있으면 무조건 일어섬
 				Enemy->UnCrouch();
 				Enemy->bIsCrouching = false;
 			}

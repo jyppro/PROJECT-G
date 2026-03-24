@@ -9,7 +9,10 @@
 AEnemyAIController::AEnemyAIController()
 {
 	// 퍼셉션(시야) 컴포넌트 생성
-	AIPerception = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("AIPerception"));
+	/*AIPerception = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("AIPerception"));
+	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));*/
+
+	PerceptionComponent = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("PerceptionComponent"));
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 
 	// 시야 설정 (시야 반경, 잃어버리는 반경, 시야각 등)
@@ -23,8 +26,11 @@ AEnemyAIController::AEnemyAIController()
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
 
-	AIPerception->ConfigureSense(*SightConfig);
-	AIPerception->SetDominantSense(SightConfig->GetSenseImplementation());
+	/*AIPerception->ConfigureSense(*SightConfig);
+	AIPerception->SetDominantSense(SightConfig->GetSenseImplementation());*/
+
+	PerceptionComponent->ConfigureSense(*SightConfig);
+	PerceptionComponent->SetDominantSense(SightConfig->GetSenseImplementation());
 }
 
 void AEnemyAIController::BeginPlay()
@@ -32,9 +38,19 @@ void AEnemyAIController::BeginPlay()
 	Super::BeginPlay();
 
 	// 시야에 무언가 들어오거나 나갈 때 OnTargetDetected 함수 실행 연결
-	AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetDetected);
+	//AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetDetected);
 
-	// 비헤이비어 트리 실행
+	//// 비헤이비어 트리 실행
+	//if (BehaviorTreeAsset)
+	//{
+	//	RunBehaviorTree(BehaviorTreeAsset);
+	//}
+
+	if (PerceptionComponent)
+	{
+		PerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetDetected);
+	}
+
 	if (BehaviorTreeAsset)
 	{
 		RunBehaviorTree(BehaviorTreeAsset);

@@ -31,6 +31,8 @@ void ADungeonGenerator::BeginPlay()
 
 	SetupRoomManagers();
 
+	SpawnItemsInRooms();
+
 	if (bShowDebugBoxes)
 	{
 		DrawDebugRooms();
@@ -559,6 +561,92 @@ void ADungeonGenerator::SetupRoomManagers()
 					// 게임 시작 시점에서는 당연히 모든 문이 열려있어야 합니다.
 					Door->SetActorHiddenInGame(true);
 					Door->SetActorEnableCollision(false);
+				}
+			}
+		}
+	}
+}
+
+void ADungeonGenerator::SpawnItemsInRooms()
+{
+	if (ItemPrefabs.IsEmpty()) return;
+
+	for (int32 i = 0; i < RoomList.Num(); i++)
+	{
+		const FDungeonRoom& Room = RoomList[i];
+		if (!Room.bIsMainRoom) continue;
+
+		int32 NumItemsToSpawn = FMath::RandRange(MinItemsPerRoom, MaxItemsPerRoom);
+
+		for (int32 j = 0; j < NumItemsToSpawn; j++)
+		{
+			TSubclassOf<AActor> SelectedItemPrefab = ItemPrefabs[FMath::RandRange(0, ItemPrefabs.Num() - 1)];
+			if (!SelectedItemPrefab) continue;
+
+			bool bValidPointFound = false;
+			FVector SpawnLocation;
+			int32 MaxTries = 10;
+			int32 CurrentTries = 0;
+
+			while (!bValidPointFound && CurrentTries < MaxTries)
+			{
+				CurrentTries++;
+
+				float Padding = 150.0f;
+				float MinX = Room.CenterLocation.X - (Room.Size.X * 0.5f) + Padding;
+				float MaxX = Room.CenterLocation.X + (Room.Size.X * 0.5f) - Padding;
+				float MinY = Room.CenterLocation.Y - (Room.Size.Y * 0.5f) + Padding;
+				float MaxY = Room.CenterLocation.Y + (Room.Size.Y * 0.5f) - Padding;
+
+				float RandomX = FMath::RandRange(MinX, MaxX);
+				float RandomY = FMath::RandRange(MinY, MaxY);
+
+				FVector TraceStart = FVector(RandomX, RandomY, Room.CenterLocation.Z + 2000.0f);
+				FVector TraceEnd = FVector(RandomX, RandomY, Room.CenterLocation.Z - 500.0f);
+
+				FHitResult HitResult;
+				FCollisionQueryParams TraceParams;
+				TraceParams.AddIgnoredActor(this);
+
+				if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+				{
+					// ★ 수정: 구체가 바닥에 닿지 않도록 충분히 띄워줍니다 (50.0f)
+					SpawnLocation = HitResult.ImpactPoint + FVector(0.0f, 0.0f, 50.0f);
+
+					// ★ 수정: 구체 크기를 조금 줄여줍니다 (20.0f)
+					float CheckRadius = 20.0f;
+					FCollisionShape CheckSphere = FCollisionShape::MakeSphere(CheckRadius);
+
+					// 겹침 검사
+					if (!GetWorld()->OverlapAnyTestByChannel(SpawnLocation, FQuat::Identity, ECC_WorldStatic, CheckSphere, TraceParams))
+					{
+						bValidPointFound = true;
+					}
+					else
+					{
+						// (디버그) 겹쳐서 실패한 위치는 빨간 구체로 표시
+						if (bShowDebugBoxes) DrawDebugSphere(GetWorld(), SpawnLocation, CheckRadius, 12, FColor::Red, true, -1.0f);
+					}
+				}
+				else
+				{
+					// (디버그) 바닥을 아예 못 찾은 레이저는 노란색 선으로 표시
+					if (bShowDebugBoxes) DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, true, -1.0f, 0, 5.0f);
+				}
+			}
+
+			if (bValidPointFound)
+			{
+				FRotator SpawnRotation = FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+				AActor* SpawnedItem = GetWorld()->SpawnActor<AActor>(SelectedItemPrefab, SpawnLocation, SpawnRotation, SpawnParams);
+
+				// (디버그) 성공적으로 스폰된 위치는 초록색 선으로 표시!
+				if (SpawnedItem && bShowDebugBoxes)
+				{
+					DrawDebugLine(GetWorld(), SpawnLocation, SpawnLocation + FVector(0, 0, 200), FColor::Green, true, -1.0f, 0, 5.0f);
 				}
 			}
 		}

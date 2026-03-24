@@ -165,6 +165,20 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon Data")
 	TArray<FVector> CorridorTiles;
 
+	// ★ [새로 추가] 스폰할 아이템 종류들 (에디터에서 넣어주세요)
+	UPROPERTY(EditAnywhere, Category = "Spawning|Items")
+	TArray<TSubclassOf<AActor>> ItemPrefabs;
+
+	// ★ [새로 추가] 방 하나당 생성할 최소/최대 아이템 개수
+	UPROPERTY(EditAnywhere, Category = "Spawning|Items")
+	int32 MinItemsPerRoom = 1;
+
+	UPROPERTY(EditAnywhere, Category = "Spawning|Items")
+	int32 MaxItemsPerRoom = 3;
+
+	// ★ [새로 추가] 아이템 스폰 함수
+	void SpawnItemsInRooms();
+
 private:
 	// 내부 헬퍼 함수들
 	float SnapToGrid(float Value);
