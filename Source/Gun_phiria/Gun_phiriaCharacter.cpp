@@ -1,21 +1,16 @@
 #include "Gun_phiriaCharacter.h"
+#include "Weapon/WeaponBase.h"
+#include "Interface/InteractInterface.h"
+
+// Engine Headers
 #include "Kismet/GameplayStatics.h"
-#include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "GameFramework/Controller.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
-#include "DrawDebugHelpers.h"
-#include "NiagaraComponent.h"
-#include "NiagaraFunctionLibrary.h"
 #include "Engine/DamageEvents.h"
-#include "Components/SkeletalMeshComponent.h"
-#include "GameFramework/Character.h"
-#include "Interface/InteractInterface.h"
 #include "Engine/OverlapResult.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
@@ -24,23 +19,29 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	// Collision & Physics
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
+	// Rotation & Movement
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
 
-	// 이동 세팅
-	GetCharacterMovement()->bOrientRotationToMovement = false;
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
-	GetCharacterMovement()->JumpZVelocity = 700.f;
-	GetCharacterMovement()->AirControl = 0.35f;
-	GetCharacterMovement()->MaxWalkSpeed = 500.f;
-	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
-	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
-	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
+	if (TObjectPtr<UCharacterMovementComponent> MoveComp = GetCharacterMovement())
+	{
+		MoveComp->bOrientRotationToMovement = false;
+		MoveComp->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+		MoveComp->JumpZVelocity = 700.f;
+		MoveComp->AirControl = 0.35f;
+		MoveComp->MaxWalkSpeed = 500.f;
+		MoveComp->NavAgentProps.bCanCrouch = true;
+		MoveComp->MaxWalkSpeedCrouched = 250.0f;
+	}
 
-	// 기본 카메라 세팅
+	// Camera Setup
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
@@ -48,27 +49,13 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
-	FollowCamera->bUsePawnControlRotation = false;
 
-	// 조준 카메라 세팅
 	ADSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ADSCamera"));
 	ADSCamera->SetupAttachment(GetMesh());
-	ADSCamera->bUsePawnControlRotation = false;
 	ADSCamera->SetAutoActivate(false);
 	ADSCamera->PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
-	// 콜리전 세팅
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-
-	// 앉기 활성화
-	if (GetCharacterMovement())
-	{
-		GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
-		GetCharacterMovement()->MaxWalkSpeedCrouched = 250.0f;
-	}
-
+	// Initial States
 	bIsProne = false;
 	DefaultCapsuleHalfHeight = 96.0f;
 	DefaultMeshRelativeLocationZ = -97.0f;
@@ -78,11 +65,12 @@ void AGun_phiriaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
-
 	CurrentHealth = MaxHealth;
 
-	// 기본 무기 스폰 및 장착
+	// Interaction Timer
+	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
+
+	// Weapon Initialization
 	if (DefaultWeaponClass)
 	{
 		FActorSpawnParameters SpawnParams;
@@ -97,43 +85,25 @@ void AGun_phiriaCharacter::BeginPlay()
 		}
 	}
 
-	if (ADSCamera && GetMesh())
-	{
-		ADSCamera->AddTickPrerequisiteComponent(GetMesh());
-	}
+	if (ADSCamera) ADSCamera->AddTickPrerequisiteComponent(GetMesh());
 }
 
 void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 카메라 FOV 보간
-	if (FollowCamera && ADSCamera)
-	{
-		float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
-		UCameraComponent* CurrentActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+	// 1. Camera FOV Interpolation
+	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+	float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
+	ActiveCam->SetFieldOfView(FMath::FInterpTo(ActiveCam->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed));
 
-		if (!FMath::IsNearlyEqual(CurrentActiveCam->FieldOfView, TargetFOV, 0.5f))
-		{
-			float NewFOV = FMath::FInterpTo(CurrentActiveCam->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed);
-			CurrentActiveCam->SetFieldOfView(NewFOV);
-		}
-		else
-		{
-			CurrentActiveCam->SetFieldOfView(TargetFOV);
-		}
-	}
+	// 2. Dynamic Spread Calculation
+	float TargetMinSpread = 1.0f;
+	const float Speed = GetVelocity().Size2D();
+	const bool bFalling = GetCharacterMovement()->IsFalling();
 
-	// 상태별 기본 탄 퍼짐(Spread) 계산
-	float CurrentSpeed = GetVelocity().Size2D();
-	bool bIsFalling = GetCharacterMovement()->IsFalling();
-	float TargetMinSpread = 0.0f;
-
-	if (bIsFalling)
-	{
-		TargetMinSpread = bIsAiming ? 3.0f : 6.0f;
-	}
-	else if (CurrentSpeed > 10.0f)
+	if (bFalling) TargetMinSpread = bIsAiming ? 3.0f : 6.0f;
+	else if (Speed > 10.0f)
 	{
 		if (bIsProne) TargetMinSpread = bIsAiming ? 0.5f : 1.5f;
 		else if (bIsCrouched) TargetMinSpread = bIsAiming ? 1.0f : 2.0f;
@@ -146,254 +116,156 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		else TargetMinSpread = bIsAiming ? 0.0f : 1.0f;
 	}
 
-	// 탄 퍼짐 회복
 	if (GetWorld()->GetTimeSeconds() - LastFireTime > SpreadRecoveryDelay)
 	{
 		CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
 	}
 
-	// 절차적 조준(Procedural ADS) 오프셋 연산
-	float TargetAlpha = bIsAiming ? 1.0f : 0.0f;
-	ADSAlpha = FMath::FInterpTo(ADSAlpha, TargetAlpha, DeltaTime, 15.0f);
-
+	// 3. Procedural ADS Offset
+	ADSAlpha = FMath::FInterpTo(ADSAlpha, bIsAiming ? 1.0f : 0.0f, DeltaTime, 15.0f);
 	if (ADSAlpha > 0.01f && FollowCamera && CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
-		FVector CameraLocation = FollowCamera->GetComponentLocation();
-		FVector CameraForward = FollowCamera->GetForwardVector();
+		const FVector CamLoc = FollowCamera->GetComponentLocation();
+		const FVector CamFwd = FollowCamera->GetForwardVector();
+		const float TotalDist = FVector::DotProduct(GetActorLocation() - CamLoc, CamFwd) + AimDistance;
 
-		FVector CamToChar = GetActorLocation() - CameraLocation;
-		float ActualDistance = FVector::DotProduct(CamToChar, CameraForward);
-		float TotalDistance = ActualDistance + AimDistance;
+		const FVector TargetSightLoc = CamLoc + (CamFwd * TotalDist);
+		const FVector HandLoc = CurrentWeapon->GetWeaponMesh()->GetComponentLocation();
+		const FVector SightLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("SightSocket"));
 
-		FVector TargetSightWorldLoc = CameraLocation + (CameraForward * TotalDistance);
-		FVector HandWorldLoc = CurrentWeapon->GetWeaponMesh()->GetComponentLocation();
-		FVector SightWorldLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("SightSocket"));
-
-		FVector TargetHandWorldLoc = TargetSightWorldLoc + (HandWorldLoc - SightWorldLoc);
-		FTransform MeshTransform = GetMesh()->GetComponentTransform();
-
-		DynamicAimOffset = FMath::Lerp(FVector::ZeroVector, MeshTransform.InverseTransformPosition(TargetHandWorldLoc), ADSAlpha);
+		const FVector TargetHandLoc = TargetSightLoc + (HandLoc - SightLoc);
+		DynamicAimOffset = FMath::Lerp(FVector::ZeroVector, GetMesh()->GetComponentTransform().InverseTransformPosition(TargetHandLoc), ADSAlpha);
 	}
-	else if (ADSAlpha <= 0.01f)
-	{
-		DynamicAimOffset = FVector::ZeroVector;
-	}
+	else DynamicAimOffset = FVector::ZeroVector;
 
-	// 애니메이션용 로코모션 변수 계산 (Direction, YawSpeed)
-	FVector Velocity = GetVelocity();
-	if (Velocity.Size2D() > 1.0f)
-	{
-		FVector LocalVelocity = GetActorTransform().InverseTransformVectorNoScale(Velocity);
-		MovementDirectionAngle = LocalVelocity.Rotation().Yaw;
-	}
-	else
-	{
-		MovementDirectionAngle = 0.0f;
-	}
+	// 4. Locomotion Variables
+	const FVector Velocity = GetVelocity();
+	MovementDirectionAngle = (Velocity.Size2D() > 1.0f) ? GetActorTransform().InverseTransformVectorNoScale(Velocity).Rotation().Yaw : 0.0f;
 
-	float CurrentYaw = GetActorRotation().Yaw;
-	float YawDelta = CurrentYaw - PreviousActorYaw;
-	if (YawDelta > 180.0f) YawDelta -= 360.0f;
-	if (YawDelta < -180.0f) YawDelta += 360.0f;
-
+	const float CurrentYaw = GetActorRotation().Yaw;
+	float YawDelta = FRotator::NormalizeAxis(CurrentYaw - PreviousActorYaw);
 	YawRotationSpeed = YawDelta / DeltaTime;
 	PreviousActorYaw = CurrentYaw;
 
-	// 헤드샷 조준 판별
+	// 5. Headshot Detection
 	bIsAimingAtHead = false;
-	if (Controller != nullptr)
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		FVector CameraLocation;
-		FRotator CameraRotation;
-		Controller->GetPlayerViewPoint(CameraLocation, CameraRotation);
-
-		FVector TraceEnd = CameraLocation + (CameraRotation.Vector() * 5000.0f);
-		FHitResult HitResult;
-		FCollisionQueryParams TraceParams;
-		TraceParams.AddIgnoredActor(this);
-		if (CurrentWeapon) TraceParams.AddIgnoredActor(CurrentWeapon);
-
-		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, TraceParams))
-		{
-			if (HitResult.GetActor() && Cast<ACharacter>(HitResult.GetActor()))
-			{
-				if (HitResult.BoneName == FName("head")) bIsAimingAtHead = true;
-			}
-		}
-	}
-
-	// 기울기(Lean) 적용
-	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, 10.0f);
-	if (FollowCamera && ADSCamera && GetMesh())
-	{
-		LeanAxisCS = GetMesh()->GetComponentTransform().InverseTransformVectorNoScale(GetBaseAimRotation().Vector());
-	}
-
-	// 동적 카메라 높이 및 좌우 시야 확보
-	if (CameraBoom)
-	{
-		float TargetHeight = 120.0f;
-		if (bIsProne) TargetHeight = 60.0f;
-		else if (bIsCrouched) TargetHeight = 90.0f;
-
-		FVector TargetOffset = FVector(0.0f, CurrentLean * 100.0f, TargetHeight);
-		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, TargetOffset, DeltaTime, 10.0f);
-	}
-
-	// 총기 벽 뚫림 방지 (밀어내기)
-	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
-	{
-		FVector MuzzleLoc = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-		FVector Start = GetActorLocation();
-		Start.Z = MuzzleLoc.Z;
-
-		FVector Direction = (MuzzleLoc - Start).GetSafeNormal();
-		FVector End = MuzzleLoc + (Direction * 15.0f);
-
+		FVector CamLoc; FRotator CamRot;
+		PC->GetPlayerViewPoint(CamLoc, CamRot);
 		FHitResult Hit;
 		FCollisionQueryParams Params;
 		Params.AddIgnoredActor(this);
-		Params.AddIgnoredActor(CurrentWeapon);
+		if (CurrentWeapon) Params.AddIgnoredActor(CurrentWeapon);
+
+		if (GetWorld()->LineTraceSingleByChannel(Hit, CamLoc, CamLoc + CamRot.Vector() * 5000.f, ECC_Visibility, Params))
+		{
+			if (Cast<ACharacter>(Hit.GetActor()) && Hit.BoneName == FName("head")) bIsAimingAtHead = true;
+		}
+	}
+
+	// 6. Lean & Camera Offset
+	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, 10.0f);
+	LeanAxisCS = GetMesh()->GetComponentTransform().InverseTransformVectorNoScale(GetBaseAimRotation().Vector());
+
+	if (CameraBoom)
+	{
+		float H = bIsProne ? 60.f : (bIsCrouched ? 90.f : 120.f);
+		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, FVector(0.f, CurrentLean * 100.f, H), DeltaTime, 10.0f);
+	}
+
+	// 7. Weapon Collision Prevention
+	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
+	{
+		const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+		FVector Start = GetActorLocation(); Start.Z = Muzzle.Z;
+		FVector End = Muzzle + (Muzzle - Start).GetSafeNormal() * 15.f;
+
+		FHitResult Hit;
+		FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
 
 		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 		{
 			if (FMath::Abs(Hit.ImpactNormal.Z) < 0.3f)
 			{
-				float PenetrationDepth = FVector::Distance(Hit.ImpactPoint, End);
-				FVector PushDirection = Hit.ImpactNormal;
-				PushDirection.Z = 0.0f;
-				PushDirection.Normalize();
-
-				AddActorWorldOffset(PushDirection * PenetrationDepth, true);
+				FVector Push = Hit.ImpactNormal; Push.Z = 0.f;
+				AddActorWorldOffset(Push.GetSafeNormal() * FVector::Distance(Hit.ImpactPoint, End), true);
 			}
 		}
 	}
 }
 
-// Input 설정
 void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
 	}
 
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	if (TObjectPtr<UEnhancedInputComponent> EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		if (JumpAction)
-		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::CustomJump);
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		}
-		if (MoveAction)
-		{
-			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::Move);
-		}
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::Look);
-		}
-		if (AimAction)
-		{
-			EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::StartAiming);
-			EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::StopAiming);
-		}
-		if (FireAction)
-		{
-			EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Fire);
-		}
-		if (CrouchAction)
-		{
-			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleCrouch);
-		}
-		if (LeanAction)
-		{
-			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::InputLean);
-			EnhancedInputComponent->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
-		}
-		if (ProneAction)
-		{
-			EnhancedInputComponent->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
-		}
-		if (InteractAction)
-		{
-			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Interact);
-		}
+		EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::CustomJump);
+		EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::Move);
+		EIC->BindAction(LookAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::Look);
+		EIC->BindAction(AimAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::StartAiming);
+		EIC->BindAction(AimAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::StopAiming);
+		EIC->BindAction(FireAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Fire);
+		EIC->BindAction(CrouchAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleCrouch);
+		EIC->BindAction(LeanAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::InputLean);
+		EIC->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
+		EIC->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
+		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Interact);
 	}
 }
 
 void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 {
-	FVector2D MovementVector = Value.Get<FVector2D>();
+	if (!Controller) return;
 
-	if (Controller != nullptr)
+	const FVector2D Vec = Value.Get<FVector2D>();
+	const FRotator Rot = FRotator(0, Controller->GetControlRotation().Yaw, 0);
+	const FVector Fwd = FRotationMatrix(Rot).GetUnitAxis(EAxis::X);
+	const FVector Rit = FRotationMatrix(Rot).GetUnitAxis(EAxis::Y);
+
+	float FwdInput = Vec.Y;
+	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh() && FwdInput > 0.0f)
 	{
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		float ForwardInput = MovementVector.Y;
-
-		// 총구 벽 뚫림 방지 (전진 차단)
-		if (CurrentWeapon && CurrentWeapon->GetWeaponMesh() && ForwardInput > 0.0f)
+		const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+		FHitResult Hit;
+		FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
+		if (GetWorld()->SweepSingleByChannel(Hit, Muzzle - Fwd * 20.f, Muzzle + Fwd * 15.f, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(10.f), Params))
 		{
-			FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-			FVector TraceStart = MuzzleLocation - (ForwardDirection * 20.0f);
-			FVector TraceEnd = MuzzleLocation + (ForwardDirection * 15.0f);
-
-			FHitResult Hit;
-			FCollisionQueryParams Params;
-			Params.AddIgnoredActor(this);
-			Params.AddIgnoredActor(CurrentWeapon);
-
-			FCollisionShape Sphere = FCollisionShape::MakeSphere(10.0f);
-
-			if (GetWorld()->SweepSingleByChannel(Hit, TraceStart, TraceEnd, FQuat::Identity, ECC_Visibility, Sphere, Params))
-			{
-				ForwardInput = 0.0f;
-				// DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.0f, 12, FColor::Red, false, 0.1f); // 디버그용 주석 처리
-			}
+			FwdInput = 0.0f;
 		}
-
-		AddMovementInput(ForwardDirection, ForwardInput);
-		AddMovementInput(RightDirection, MovementVector.X);
 	}
+
+	AddMovementInput(Fwd, FwdInput);
+	AddMovementInput(Rit, Vec.X);
 }
 
 void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
 {
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	if (Controller != nullptr)
-	{
-		AddControllerYawInput(LookAxisVector.X);
-		AddControllerPitchInput(LookAxisVector.Y);
-	}
+	const FVector2D Vec = Value.Get<FVector2D>();
+	AddControllerYawInput(Vec.X);
+	AddControllerPitchInput(Vec.Y);
 }
 
 void AGun_phiriaCharacter::StartAiming()
 {
 	bIsAiming = true;
-	if (FollowCamera && ADSCamera)
-	{
-		FollowCamera->SetActive(false);
-		ADSCamera->SetActive(true);
-	}
+	if (FollowCamera) FollowCamera->SetActive(false);
+	if (ADSCamera) ADSCamera->SetActive(true);
 }
 
 void AGun_phiriaCharacter::StopAiming()
 {
 	bIsAiming = false;
-	if (FollowCamera && ADSCamera)
-	{
-		ADSCamera->SetActive(false);
-		FollowCamera->SetActive(true);
-	}
+	if (ADSCamera) ADSCamera->SetActive(false);
+	if (FollowCamera) FollowCamera->SetActive(true);
 }
 
 void AGun_phiriaCharacter::Fire()
@@ -404,116 +276,61 @@ void AGun_phiriaCharacter::Fire()
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
 	LastFireTime = GetWorld()->GetTimeSeconds();
 
-	// 사격 애니메이션 재생
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	// Animation
+	if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
 	{
-		TArray<UAnimMontage*> MontagesToPlay = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
-
-		if (MontagesToPlay.Num() > 0)
-		{
-			int32 RandomIndex = FMath::RandRange(0, MontagesToPlay.Num() - 1);
-			AnimInstance->Montage_Play(MontagesToPlay[RandomIndex]);
-		}
+		const auto& Montages = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
+		if (Montages.Num() > 0) AnimInst->Montage_Play(Montages[FMath::RandRange(0, Montages.Num() - 1)]);
 	}
 
-	// 반동 및 탄 퍼짐 계산
-	float AimMultiplier = bIsAiming ? 0.6f : 1.2f;
-	float MovementMultiplier = (GetVelocity().Size2D() > 10.0f) ? 1.5f : 1.0f;
-	float FallMultiplier = GetCharacterMovement()->IsFalling() ? 2.5f : 1.0f;
+	// Recoil & Spread
+	float Mult = (bIsAiming ? 0.6f : 1.2f) * (GetVelocity().Size2D() > 10.f ? 1.5f : 1.f) * (GetCharacterMovement()->IsFalling() ? 2.5f : 1.f);
+	Mult *= bIsProne ? 0.4f : (bIsCrouched ? 0.75f : 1.f);
 
-	float StanceMultiplier = 1.0f;
-	if (bIsProne) StanceMultiplier = 0.4f;
-	else if (bIsCrouched) StanceMultiplier = 0.75f;
+	AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * Mult);
+	AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * Mult);
+	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * Mult), 0.0f, MaxSpread);
 
-	float TotalMultiplier = AimMultiplier * MovementMultiplier * FallMultiplier * StanceMultiplier;
+	// Line Trace Logic
+	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+	const FVector CamLoc = ActiveCam->GetComponentLocation();
+	const FVector CamEnd = CamLoc + ActiveCam->GetForwardVector() * 10000.f;
 
-	if (Controller != nullptr)
-	{
-		AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * TotalMultiplier);
-		AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * TotalMultiplier);
-	}
+	FHitResult CamHit;
+	FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
+	const FVector EyeTarget = GetWorld()->LineTraceSingleByChannel(CamHit, CamLoc, CamEnd, ECC_Visibility, Params) ? CamHit.ImpactPoint : CamEnd;
 
-	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * TotalMultiplier), 0.0f, MaxSpread);
-
-	// 탄도 계산 및 사격
-	UCameraComponent* ActiveCamera = bIsAiming ? ADSCamera : FollowCamera;
-	FVector CameraLocation = ActiveCamera->GetComponentLocation();
-	FVector CameraForward = ActiveCamera->GetForwardVector();
-	FVector CameraEndLocation = CameraLocation + (CameraForward * 10000.0f);
-
-	FHitResult CameraHit;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
-	if (CurrentWeapon) QueryParams.AddIgnoredActor(CurrentWeapon);
-
-	FVector EyeTargetLocation = GetWorld()->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEndLocation, ECC_Visibility, QueryParams)
-		? CameraHit.ImpactPoint : CameraEndLocation;
-
-	FVector MuzzleLocation = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-	FVector RealFireDirection = (EyeTargetLocation - MuzzleLocation).GetSafeNormal();
-	FVector FinalTraceEnd = MuzzleLocation + (RealFireDirection * 5000.0f);
-
+	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+	const FVector RealDir = (EyeTarget - Muzzle).GetSafeNormal();
 	FHitResult FinalHit;
-	FVector FinalTargetLocation = GetWorld()->LineTraceSingleByChannel(FinalHit, MuzzleLocation, FinalTraceEnd, ECC_Visibility, QueryParams)
-		? FinalHit.ImpactPoint : FinalTraceEnd;
+	const FVector FinalTarget = GetWorld()->LineTraceSingleByChannel(FinalHit, Muzzle, Muzzle + RealDir * 5000.f, ECC_Visibility, Params) ? FinalHit.ImpactPoint : Muzzle + RealDir * 5000.f;
 
-	float SpreadMultiplier = CurrentWeapon->WeaponSpreadMultiplier;
-	float FinalSpreadAngle = CurrentSpread * SpreadMultiplier;
+	// Apply Spread
+	FVector Right, Up; RealDir.FindBestAxisVectors(Right, Up);
+	const float Radius = FMath::Tan(FMath::DegreesToRadians(CurrentSpread * CurrentWeapon->WeaponSpreadMultiplier)) * FVector::Distance(Muzzle, FinalTarget);
+	const float RandAngle = FMath::RandRange(0.f, PI * 2.f);
+	const FVector Offset = (Right * FMath::Cos(RandAngle) + Up * FMath::Sin(RandAngle)) * FMath::RandRange(0.f, Radius);
 
-	FVector Right, Up;
-	RealFireDirection.FindBestAxisVectors(Right, Up);
-
-	float ActualDistanceToTarget = FVector::Distance(MuzzleLocation, FinalTargetLocation);
-	float SpreadRadius = FMath::Tan(FMath::DegreesToRadians(FinalSpreadAngle)) * ActualDistanceToTarget;
-
-	float RandomAngle = FMath::RandRange(0.0f, PI * 2.0f);
-	float RandomRadius = FMath::RandRange(0.0f, SpreadRadius);
-
-	FVector SpreadOffset = (Right * FMath::Cos(RandomAngle) * RandomRadius) + (Up * FMath::Sin(RandomAngle) * RandomRadius);
-	FVector TargetLocation = FinalTargetLocation + SpreadOffset;
-
-	// GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, FString::Printf(TEXT("Spread Multiplier: %.1f | Spread Angle: %.2f deg"), SpreadMultiplier, FinalSpreadAngle)); // 디버그용 주석 처리
-
-	CurrentWeapon->Fire(TargetLocation);
+	CurrentWeapon->Fire(FinalTarget + Offset);
 }
 
-void AGun_phiriaCharacter::StopFiringPose()
-{
-	bIsFiring = false;
-}
+void AGun_phiriaCharacter::StopFiringPose() { bIsFiring = false; }
 
 float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	if (bIsDead) return 0.0f;
 
 	float ActualDamage = DamageAmount;
-
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
-		const FPointDamageEvent* PointDamageEvent = static_cast<const FPointDamageEvent*>(&DamageEvent);
-		if (PointDamageEvent->HitInfo.BoneName == FName("head"))
-		{
-			ActualDamage *= 2.5f;
-		}
+		if (static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName == FName("head")) ActualDamage *= 2.5f;
 	}
 
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
-
-	// 피격 애니메이션 재생
-	if (HitMontages.Num() > 0)
-	{
-		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-		{
-			AnimInstance->Montage_Play(HitMontages[FMath::RandRange(0, HitMontages.Num() - 1)]);
-		}
-	}
+	if (HitMontages.Num() > 0) PlayAnimMontage(HitMontages[FMath::RandRange(0, HitMontages.Num() - 1)]);
 
 	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
-
-	if (CurrentHealth <= 0.0f)
-	{
-		Die();
-	}
+	if (CurrentHealth <= 0.0f) Die();
 
 	return ActualDamage;
 }
@@ -522,31 +339,14 @@ void AGun_phiriaCharacter::Die()
 {
 	if (bIsDead) return;
 	bIsDead = true;
-
 	DisableInput(Cast<APlayerController>(GetController()));
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	GetMesh()->SetSimulatePhysics(true);
-
-	// GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("YOU DIED")); // 디버그용 주석 처리
 }
 
-void AGun_phiriaCharacter::ToggleCrouch()
-{
-	if (bIsProne) return;
-
-	if (bIsCrouched) UnCrouch();
-	else Crouch();
-}
-
-void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value)
-{
-	TargetLean = Value.Get<float>();
-}
-
-void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value)
-{
-	TargetLean = 0.0f;
-}
+void AGun_phiriaCharacter::ToggleCrouch() { if (!bIsProne) bIsCrouched ? UnCrouch() : Crouch(); }
+void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value) { TargetLean = Value.Get<float>(); }
+void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { TargetLean = 0.0f; }
 
 void AGun_phiriaCharacter::ToggleProne()
 {
@@ -556,25 +356,15 @@ void AGun_phiriaCharacter::ToggleProne()
 	{
 		bIsProne = false;
 		GetCapsuleComponent()->SetCapsuleHalfHeight(DefaultCapsuleHalfHeight);
-
-		FVector MeshLoc = GetMesh()->GetRelativeLocation();
-		MeshLoc.Z = DefaultMeshRelativeLocationZ;
-		GetMesh()->SetRelativeLocation(MeshLoc);
-
+		GetMesh()->SetRelativeLocation(FVector(0, 0, DefaultMeshRelativeLocationZ));
 		GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 	}
 	else
 	{
 		if (bIsCrouched) UnCrouch();
-
 		bIsProne = true;
-		float ProneHalfHeight = 34.0f;
-		GetCapsuleComponent()->SetCapsuleHalfHeight(ProneHalfHeight);
-
-		FVector MeshLoc = GetMesh()->GetRelativeLocation();
-		MeshLoc.Z = DefaultMeshRelativeLocationZ + (DefaultCapsuleHalfHeight - ProneHalfHeight);
-		GetMesh()->SetRelativeLocation(MeshLoc);
-
+		GetCapsuleComponent()->SetCapsuleHalfHeight(34.0f);
+		GetMesh()->SetRelativeLocation(FVector(0, 0, DefaultMeshRelativeLocationZ + (DefaultCapsuleHalfHeight - 34.0f)));
 		GetCharacterMovement()->MaxWalkSpeed = MaxWalkSpeedProne;
 	}
 }
@@ -582,68 +372,37 @@ void AGun_phiriaCharacter::ToggleProne()
 void AGun_phiriaCharacter::CustomJump()
 {
 	if (bIsChangingStance) return;
-
 	if (bIsProne) ToggleProne();
 	else if (bIsCrouched) UnCrouch();
-	else ACharacter::Jump();
+	else Jump();
 }
 
 void AGun_phiriaCharacter::CheckForInteractables()
 {
-	float ScanRange = 200.0f; // 상호작용 가능 거리
-	TArray<FOverlapResult> OverlapResults;
-	FCollisionShape Sphere = FCollisionShape::MakeSphere(ScanRange);
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
+	TArray<FOverlapResult> Overlaps;
+	FCollisionQueryParams Params; Params.AddIgnoredActor(this);
+	TObjectPtr<AActor> BestTarget = nullptr;
 
-	// 주변 스캔 (성능을 위해 Visibility 채널 사용)
-	bool bHit = GetWorld()->OverlapMultiByChannel(OverlapResults, GetActorLocation(), FQuat::Identity, ECC_Visibility, Sphere, Params);
-
-	AActor* BestTarget = nullptr;
-	float MinDistance = ScanRange;
-
-	if (bHit)
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
 	{
-		for (const FOverlapResult& Result : OverlapResults)
+		float MinDist = 200.f;
+		for (const auto& Res : Overlaps)
 		{
-			AActor* Potential = Result.GetActor();
-			// 인터페이스를 가지고 있는지 확인
-			if (Potential && Potential->Implements<UInteractInterface>())
+			if (Res.GetActor() && Res.GetActor()->Implements<UInteractInterface>())
 			{
-				float Dist = FVector::Dist(GetActorLocation(), Potential->GetActorLocation());
-				if (Dist < MinDistance)
-				{
-					MinDistance = Dist;
-					BestTarget = Potential;
-				}
+				float D = FVector::Dist(GetActorLocation(), Res.GetActor()->GetActorLocation());
+				if (D < MinDist) { MinDist = D; BestTarget = Res.GetActor(); }
 			}
 		}
 	}
-
-	// 타겟이 바뀌었을 때만 갱신 (HUD 업데이트 최적화를 위해)
-	if (BestTarget != TargetInteractable)
-	{
-		TargetInteractable = BestTarget;
-
-		// 여기에 나중에 블루프린트로 UI를 끄고 켜는 이벤트를 보낼 수 있어!
-	}
+	TargetInteractable = BestTarget;
 }
 
 void AGun_phiriaCharacter::Interact()
 {
-	// 타겟이 유효하고 인터페이스를 가지고 있다면 실행
 	if (TargetInteractable && TargetInteractable->Implements<UInteractInterface>())
 	{
-		// 1. 애니메이션 판단 (인터페이스의 ShouldPlayAnimation 함수 호출)
-		if (IInteractInterface::Execute_ShouldPlayAnimation(TargetInteractable) && InteractMontage)
-		{
-			if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-			{
-				AnimInstance->Montage_Play(InteractMontage);
-			}
-		}
-
-		// 2. 실제 상호작용 로직 실행 (아이템 줍기 등)
-		IInteractInterface::Execute_Interact(TargetInteractable, this);
+		if (IInteractInterface::Execute_ShouldPlayAnimation(TargetInteractable.Get()) && InteractMontage) PlayAnimMontage(InteractMontage);
+		IInteractInterface::Execute_Interact(TargetInteractable.Get(), this);
 	}
 }
