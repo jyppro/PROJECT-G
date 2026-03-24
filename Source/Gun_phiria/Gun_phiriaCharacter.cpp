@@ -306,20 +306,33 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		LeanAxisCS = GetMesh()->GetComponentTransform().InverseTransformVectorNoScale(PureAimForward);
 	}
 
-	// ★ [새로 추가] 비조준 상태(FollowCamera)의 좌우 시야 확보 로직
 	if (CameraBoom)
 	{
-		// 1. 기본 위치 (평소 카메라 위치)
-		FVector TargetOffset = FVector(0.0f, 0.0f, 120.0f);
+		// 1. 현재 자세에 따라 목표 카메라 높이(Z축) 설정
+		float TargetHeight = 120.0f; // 기본 서 있는 상태
+
+		if (bIsProne)
+		{
+			// 엎드렸을 때: 카메라를 바닥에 가깝게 확 낮춥니다.
+			// (발까지 잘 보이도록 30.0f 정도로 낮췄습니다. 필요에 따라 0.0f ~ 40.0f 사이로 조절해 보세요!)
+			TargetHeight = 60.0f;
+		}
+		else if (bIsCrouched)
+		{
+			// 앉았을 때: 서 있을 때와 엎드렸을 때의 중간 높이
+			TargetHeight = 90.0f;
+		}
+
+		FVector TargetOffset = FVector(0.0f, 0.0f, TargetHeight);
 
 		// 2. 기울기(CurrentLean: -1.0 ~ 1.0)에 따라 좌우(Y축)로 얼마나 밀어줄지 계산
-		// 100.0f는 카메라가 옆으로 나가는 거리입니다. (테스트 후 조절 가능)
 		float LeanOffsetAmount = CurrentLean * 100.0f;
 
 		// 3. 목표 오프셋 설정 (Y값에 기울기 반영)
 		TargetOffset.Y = LeanOffsetAmount;
 
 		// 4. 부드럽게 카메라 위치 이동 (뚝 끊기지 않게 Interp 사용)
+		// 10.0f 속도로 부드럽게 카메라가 슉~ 하고 내려가거나 올라갑니다.
 		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, TargetOffset, DeltaTime, 10.0f);
 	}
 
@@ -383,7 +396,8 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		// 모든 액션에 대해 일관되게 안전 검사(Null Check) 적용
 		if (JumpAction)
 		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+			//EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::CustomJump);
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		}
 		if (MoveAction)
@@ -806,5 +820,29 @@ void AGun_phiriaCharacter::ToggleProne()
 
 		// 3. 이동 속도를 기어가는 속도로 변경
 		GetCharacterMovement()->MaxWalkSpeed = MaxWalkSpeedProne;
+	}
+}
+
+void AGun_phiriaCharacter::CustomJump()
+{
+	if (bIsChangingStance) return;
+
+	// 1. 엎드려 있는 상태라면?
+	if (bIsProne)
+	{
+		// 점프 대신 엎드리기를 해제합니다.
+		ToggleProne();
+	}
+	// 2. (선택) 앉아 있는 상태라면?
+	else if (bIsCrouched)
+	{
+		// 점프 대신 앉기를 해제합니다. (배틀그라운드와 동일한 방식)
+		UnCrouch();
+	}
+	// 3. 서 있는 상태라면?
+	else
+	{
+		// 평소처럼 정상적으로 점프합니다!
+		ACharacter::Jump();
 	}
 }

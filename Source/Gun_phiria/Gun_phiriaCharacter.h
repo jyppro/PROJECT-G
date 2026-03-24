@@ -190,6 +190,12 @@ protected:
 	float DefaultCapsuleHalfHeight;
 	float DefaultMeshRelativeLocationZ;
 
+	// 우리가 직접 제어할 커스텀 점프 함수
+	void CustomJump();
+
+	UPROPERTY(BlueprintReadWrite, Category = "State")
+	bool bIsChangingStance = false;
+
 private:
 	FTimerHandle FireTimerHandle;
 	float PreviousActorYaw = 0.0f;
