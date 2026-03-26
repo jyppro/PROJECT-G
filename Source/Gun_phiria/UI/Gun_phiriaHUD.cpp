@@ -1,10 +1,12 @@
 #include "Gun_phiriaHUD.h"
 #include "../Gun_phiriaCharacter.h"
 #include "../Weapon/WeaponBase.h"
+#include "../Interface/InteractInterface.h"
 
 // Engine Headers
 #include "Engine/Canvas.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/Actor.h"
 
 void AGun_phiriaHUD::DrawHUD()
 {
@@ -31,6 +33,8 @@ void AGun_phiriaHUD::DrawHUD()
 	{
 		DrawMissionClear(Center);
 	}
+
+	DrawInteractPrompt(PlayerChar, Center);
 }
 
 void AGun_phiriaHUD::DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center)
@@ -117,4 +121,52 @@ void AGun_phiriaHUD::ShowMissionClearMessage()
 {
 	bIsShowingClearMessage = true;
 	ClearMessageTimer = 3.0f;
+}
+
+void AGun_phiriaHUD::DrawInteractPrompt(TObjectPtr<AGun_phiriaCharacter> PlayerChar, const FVector2D& Center)
+{
+	AActor* Target = PlayerChar->TargetInteractable.Get();
+
+	if (Target)
+	{
+		// 1. 표시할 텍스트 가져오기
+		FString DisplayName = Target->GetName(); // 기본값: 액터 이름
+
+		// 만약 타겟이 상호작용 인터페이스를 가지고 있다면, 전용 텍스트를 가져옵니다.
+		if (Target->Implements<UInteractInterface>())
+		{
+			DisplayName = IInteractInterface::Execute_GetInteractText(Target);
+		}
+
+		FString InteractText = FString::Printf(TEXT("[F] - %s"), *DisplayName);
+
+		// 2. 폰트 및 텍스트 크기 설정
+		// 엔진 기본 폰트를 가져와서 정확한 텍스트 픽셀 크기를 측정합니다.
+		UFont* DrawFont = GEngine->GetMediumFont();
+		float TextScale = 1.2f;
+		float TextWidth = 0.0f;
+		float TextHeight = 0.0f;
+
+		// 문자열이 화면에서 차지할 가로(TextWidth)와 세로(TextHeight) 픽셀 길이를 알아냅니다.
+		GetTextSize(InteractText, TextWidth, TextHeight, DrawFont, TextScale);
+
+		// 3. 위치 계산 (가운데 정렬)
+		// 글씨의 절반 길이만큼 왼쪽으로 이동시켜서 크로스헤어 정중앙에 글씨가 오도록 맞춥니다.
+		float TextPosX = Center.X - (TextWidth * 0.5f);
+		float TextPosY = Center.Y + 50.0f;
+
+		// 상자 여백 (글씨 주변의 까만 공간 크기)
+		float PaddingX = 15.0f;
+		float PaddingY = 5.0f;
+
+		// 4. 글씨 길이에 맞춰진 동적 배경 박스 그리기
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f),
+			TextPosX - PaddingX,
+			TextPosY - PaddingY,
+			TextWidth + (PaddingX * 2.0f),
+			TextHeight + (PaddingY * 2.0f));
+
+		// 5. 텍스트 그리기
+		DrawText(InteractText, FLinearColor::White, TextPosX, TextPosY, DrawFont, TextScale);
+	}
 }

@@ -395,7 +395,11 @@ void AGun_phiriaCharacter::CheckForInteractables()
 			}
 		}
 	}
-	TargetInteractable = BestTarget;
+	// --- 수정된 부분: 타겟이 이전과 달라졌을 때만 상태를 업데이트하고 이벤트를 호출합니다. ---
+	if (TargetInteractable != BestTarget)
+	{
+		TargetInteractable = BestTarget;
+	}
 }
 
 void AGun_phiriaCharacter::Interact()

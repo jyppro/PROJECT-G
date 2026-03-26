@@ -55,6 +55,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Movement|Prone")
 	float MaxWalkSpeedProne = 100.0f;
 
+	// 상호작용 대상이 변경되었을 때 블루프린트로 알려주는 이벤트입니다.
+	/*UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
+	void OnInteractableChanged(AActor* NewInteractable);*/
+
+	// --- Interaction ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TObjectPtr<AActor> TargetInteractable;
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
@@ -154,10 +162,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Animation|Interaction")
 	TObjectPtr<UAnimMontage> InteractMontage;
-
-	// --- Interaction ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
-	TObjectPtr<AActor> TargetInteractable;
 
 private:
 	// --- Input Handlers ---

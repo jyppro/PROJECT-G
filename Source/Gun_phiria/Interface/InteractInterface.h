@@ -22,4 +22,8 @@ public:
 	// 애니메이션을 재생해야 하는 물체인지 판별 (아이템 줍기: true, NPC 대화: false)
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	bool ShouldPlayAnimation() const;
+
+	// 상호작용 시 화면에 띄울 텍스트를 반환하는 함수입니다.
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	FString GetInteractText();
 };
