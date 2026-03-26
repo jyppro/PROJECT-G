@@ -1,6 +1,8 @@
 #include "DungeonGenerator.h"
 #include "DungeonRoomManager.h"
 #include "../Enemy/EnemyCharacter.h"
+#include "../Gun_phiriaCharacter.h"
+#include "TimerManager.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -21,7 +23,29 @@ void ADungeonGenerator::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Sequence of Generation
+	// 1. 맵이 열리자마자 렉이 걸리기 전에 플레이어 화면을 강제로 까맣게 만듭니다.
+	if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
+	{
+		PlayerChar->ForceBlackScreen();
+	}
+
+	// 2. 화면이 까맣게 렌더링될 아주 짧은 시간(0.2초)을 벌어준 뒤에 진짜 생성을 시작합니다.
+	FTimerHandle GenerationTimerHandle;
+	GetWorld()->GetTimerManager().SetTimer(
+		GenerationTimerHandle,
+		this,
+		&ADungeonGenerator::ExecuteGeneration,
+		0.2f,
+		false
+	);
+}
+
+void ADungeonGenerator::ExecuteGeneration()
+{
+	// =========================================================
+	// 원래 BeginPlay에 있던 무거운 맵 생성 로직들을 여기서 실행합니다.
+	// 화면이 까맣기 때문에 유저는 프레임 드랍을 전혀 느끼지 못합니다.
+	// =========================================================
 	GenerateRandomRooms();
 	SeparateRooms();
 	SelectMainRooms();
@@ -33,6 +57,12 @@ void ADungeonGenerator::BeginPlay()
 	SpawnItemsInRooms();
 
 	if (bShowDebugBoxes) DrawDebugRooms();
+
+	// 3. 모든 생성이 끝났습니다! 이제 화면을 서서히 밝힙니다.
+	if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
+	{
+		PlayerChar->StartFadeIn(2.0f); // 2초 동안 페이드 인
+	}
 }
 
 // --- Logic Helpers ---

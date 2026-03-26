@@ -55,13 +55,48 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Movement|Prone")
 	float MaxWalkSpeedProne = 100.0f;
 
-	// 상호작용 대상이 변경되었을 때 블루프린트로 알려주는 이벤트입니다.
-	/*UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-	void OnInteractableChanged(AActor* NewInteractable);*/
-
 	// --- Interaction ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	TObjectPtr<AActor> TargetInteractable;
+
+	// 화면을 즉시 까맣게 만듭니다 (로딩 렉을 가리기 위함)
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	void ForceBlackScreen();
+
+	// 화면을 서서히 밝힙니다 (던전 생성 완료 후 호출)
+	UFUNCTION(BlueprintCallable, Category = "Level Transition")
+	void StartFadeIn(float FadeInDuration = 2.0f);
+
+	// ==========================================
+	// --- Currency System (재화 시스템) ---
+	// ==========================================
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Currency")
+	int32 CurrentGold = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Currency")
+	int32 CurrentSapphire = 0;
+
+	// 골드 획득, 소비, 초기화 (던전용)
+	UFUNCTION(BlueprintCallable, Category = "Currency")
+	void AddGold(int32 Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Currency")
+	bool SpendGold(int32 Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Currency")
+	void ResetGold();
+
+	// 사파이어 획득, 소비 (영구 강화용)
+	UFUNCTION(BlueprintCallable, Category = "Currency")
+	void AddSapphire(int32 Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Currency")
+	bool SpendSapphire(int32 Amount);
+
+	// 테스트용 재화 치트키 (콘솔 창에서 실행 가능)
+	UFUNCTION(Exec)
+	void CheatCurrency(int32 GoldAmount, int32 SapphireAmount);
 
 protected:
 	// --- Lifecycle ---

@@ -1,6 +1,7 @@
 #include "EnemyCharacter.h"
 #include "../Weapon/WeaponBase.h"
 #include "../ProceduralDungeonGeneration/DungeonRoomManager.h"
+#include "../Gun_phiriaCharacter.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -36,6 +37,9 @@ AEnemyCharacter::AEnemyCharacter()
 		MoveComp->NavAgentProps.bCanCrouch = true;
 		MoveComp->MaxWalkSpeedCrouched = 250.0f;
 	}
+
+	MinGoldDrop = 10;
+	MaxGoldDrop = 30;
 }
 
 void AEnemyCharacter::BeginPlay()
@@ -151,27 +155,53 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 	if (CurrentHealth <= 0.0f)
 	{
-		Die();
+		Die(EventInstigator);
 	}
 
 	return ActualDamage;
 }
 
-void AEnemyCharacter::Die()
+// --- 수정된 부분: 매개변수 AController* Killer 추가 ---
+void AEnemyCharacter::Die(AController* Killer)
 {
 	if (bIsDead) return;
 	bIsDead = true;
 
+	// ==========================================
+	// 1. 플레이어에게 골드 보상 지급
+	// ==========================================
+	int32 DroppedGold = FMath::RandRange(MinGoldDrop, MaxGoldDrop);
+
+	// 나를 죽인 킬러가 있다면
+	if (Killer)
+	{
+		if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(Killer->GetPawn()))
+		{
+			PlayerChar->AddGold(DroppedGold);
+		}
+	}
+	else
+	{
+		// 폭발통이나 환경 피해로 죽어서 Killer가 nullptr인 경우, 
+		// 싱글플레이 기준 0번 플레이어에게 돈을 줍니다. (선택 사항)
+		if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
+		{
+			PlayerChar->AddGold(DroppedGold);
+		}
+	}
+	// ==========================================
+
+	// 2. 무기 파괴 및 물리(랙돌) 처리
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->Destroy();
 	}
 
-	// Disable Collision & Enable Ragdoll
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	GetMesh()->SetSimulatePhysics(true);
 
+	// 3. 방에 사망 알림 및 시체 소멸 타이머 설정
 	if (ParentRoom)
 	{
 		ParentRoom->OnEnemyDied();

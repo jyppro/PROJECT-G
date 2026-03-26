@@ -27,20 +27,28 @@ AInteractableDoor::AInteractableDoor()
 // 상호작용 시 실행되는 함수 (인터페이스 구현)
 void AInteractableDoor::Interact_Implementation(AActor* Interactor)
 {
-	// 1. 상호작용한 액터(Interactor)가 캐릭터인지 확인하고 컨트롤러를 가져옵니다.
+	// 1. 이미 페이드 아웃(레벨 이동)이 시작되었다면, 더 이상 코드를 실행하지 않고 바로 빠져나갑니다. (F키 연타 방지)
+	if (bIsTransitioning)
+	{
+		return;
+	}
+
 	if (ACharacter* PlayerChar = Cast<ACharacter>(Interactor))
 	{
 		if (APlayerController* PC = Cast<APlayerController>(PlayerChar->GetController()))
 		{
-			// 2. 카메라 매니저를 가져와서 페이드 아웃 효과를 시작합니다.
+			// 2. 이동이 시작되었음을 표시하고, 플레이어의 모든 입력(이동, 시점 회전, 공격, 상호작용 등)을 차단합니다.
+			bIsTransitioning = true;
+			PlayerChar->DisableInput(PC);
+
+			// 3. 카메라 매니저를 가져와서 페이드 아웃 효과를 시작합니다.
 			APlayerCameraManager* CameraManager = PC->PlayerCameraManager;
 			if (CameraManager)
 			{
-				// (시작 투명도, 끝 투명도, 지속 시간, 색상, 오디오 페이드 여부, 페이드 아웃 유지 여부)
 				CameraManager->StartCameraFade(0.0f, 1.0f, FadeOutDuration, FLinearColor::Black, false, true);
 			}
 
-			// 3. 페이드 아웃이 진행되는 동안 기다렸다가 레벨을 이동하도록 타이머를 설정합니다.
+			// 4. 페이드 아웃이 진행되는 동안 기다렸다가 레벨을 이동하도록 타이머를 설정합니다.
 			GetWorld()->GetTimerManager().SetTimer(
 				LevelTransitionTimerHandle,
 				this,

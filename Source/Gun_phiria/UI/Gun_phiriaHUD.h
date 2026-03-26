@@ -22,9 +22,8 @@ protected:
 	void DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center);
 	void DrawHealthBar(TObjectPtr<AGun_phiriaCharacter> PlayerChar, const FVector2D& Center);
 	void DrawMissionClear(const FVector2D& Center);
-
-	// 추가할 함수: 상호작용 프롬프트를 화면에 그립니다.
 	void DrawInteractPrompt(TObjectPtr<class AGun_phiriaCharacter> PlayerChar, const FVector2D& Center);
+	void DrawCurrency(TObjectPtr<class AGun_phiriaCharacter> PlayerChar);
 
 private:
 	// --- Crosshair Settings ---

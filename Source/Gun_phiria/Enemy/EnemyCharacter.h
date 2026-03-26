@@ -60,9 +60,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentHealth;
 
+	// --- Reward ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward")
+	int32 MinGoldDrop;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward")
+	int32 MaxGoldDrop;
+
+	void Die(AController* Killer);
+
 private:
-	// --- Internal Logic ---
-	void Die();
 	void SetReadyToFire();
 
 	// --- State Flags & Timers ---

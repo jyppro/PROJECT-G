@@ -44,4 +44,6 @@ protected:
 private:
 	// 타이머를 관리하기 위한 핸들입니다.
 	FTimerHandle LevelTransitionTimerHandle;
+
+	bool bIsTransitioning = false;
 };

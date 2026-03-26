@@ -410,3 +410,86 @@ void AGun_phiriaCharacter::Interact()
 		IInteractInterface::Execute_Interact(TargetInteractable.Get(), this);
 	}
 }
+
+// ==========================================
+// --- Currency System Implementation ---
+// ==========================================
+
+void AGun_phiriaCharacter::AddGold(int32 Amount)
+{
+	// 음수 값이 들어오는 것을 방지합니다.
+	if (Amount > 0)
+	{
+		CurrentGold += Amount;
+		// 디버그용 출력 (나중에 지워도 됩니다)
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("골드 획득! 현재 골드: %d"), CurrentGold));
+	}
+}
+
+bool AGun_phiriaCharacter::SpendGold(int32 Amount)
+{
+	// 현재 골드가 요구량보다 많거나 같을 때만 소비 성공
+	if (Amount > 0 && CurrentGold >= Amount)
+	{
+		CurrentGold -= Amount;
+		return true; // 구매 성공
+	}
+	return false; // 구매 실패 (돈 부족)
+}
+
+void AGun_phiriaCharacter::ResetGold()
+{
+	CurrentGold = 0;
+	GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("마을 귀환: 골드가 초기화되었습니다."));
+}
+
+void AGun_phiriaCharacter::AddSapphire(int32 Amount)
+{
+	if (Amount > 0)
+	{
+		CurrentSapphire += Amount;
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, FString::Printf(TEXT("사파이어 획득! 현재 사파이어: %d"), CurrentSapphire));
+	}
+}
+
+bool AGun_phiriaCharacter::SpendSapphire(int32 Amount)
+{
+	if (Amount > 0 && CurrentSapphire >= Amount)
+	{
+		CurrentSapphire -= Amount;
+		return true;
+	}
+	return false;
+}
+
+// 치트 명령어 실행 함수
+void AGun_phiriaCharacter::CheatCurrency(int32 GoldAmount, int32 SapphireAmount)
+{
+	AddGold(GoldAmount);
+	AddSapphire(SapphireAmount);
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("[치트 발동] 골드 +%d, 사파이어 +%d"), GoldAmount, SapphireAmount));
+}
+
+void AGun_phiriaCharacter::ForceBlackScreen()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (PC->PlayerCameraManager)
+		{
+			// (시작 투명도 1=검은색, 끝 투명도 1, 시간 0=즉시, 색상, 오디오 유지, 페이드 유지)
+			PC->PlayerCameraManager->StartCameraFade(1.0f, 1.0f, 0.0f, FLinearColor::Black, false, true);
+		}
+	}
+}
+
+void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (PC->PlayerCameraManager)
+		{
+			// (시작 투명도 1=검은색, 끝 투명도 0=투명, 지정한 시간동안 서서히 밝아짐)
+			PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInDuration, FLinearColor::Black, false, false);
+		}
+	}
+}

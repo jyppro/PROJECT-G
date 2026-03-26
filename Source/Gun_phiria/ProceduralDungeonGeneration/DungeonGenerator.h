@@ -169,6 +169,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dungeon|Data")
 	TArray<FVector> CorridorTiles;
 
+	UFUNCTION()
+	void ExecuteGeneration();
+
 private:
 	// --- Internal Helpers ---
 	float SnapToGrid(float Value);

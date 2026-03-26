@@ -35,6 +35,7 @@ void AGun_phiriaHUD::DrawHUD()
 	}
 
 	DrawInteractPrompt(PlayerChar, Center);
+	DrawCurrency(PlayerChar);
 }
 
 void AGun_phiriaHUD::DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center)
@@ -130,43 +131,64 @@ void AGun_phiriaHUD::DrawInteractPrompt(TObjectPtr<AGun_phiriaCharacter> PlayerC
 	if (Target)
 	{
 		// 1. 표시할 텍스트 가져오기
-		FString DisplayName = Target->GetName(); // 기본값: 액터 이름
-
-		// 만약 타겟이 상호작용 인터페이스를 가지고 있다면, 전용 텍스트를 가져옵니다.
+		FString DisplayName = Target->GetName();
 		if (Target->Implements<UInteractInterface>())
 		{
 			DisplayName = IInteractInterface::Execute_GetInteractText(Target);
 		}
 
-		FString InteractText = FString::Printf(TEXT("[F] - %s"), *DisplayName);
+		// 배그 스타일 텍스트 조합 (예: "[F] 대용량 퀵 드로우 탄창 줍기")
+		FString InteractText = FString::Printf(TEXT("[F] %s"), *DisplayName);
 
 		// 2. 폰트 및 텍스트 크기 설정
-		// 엔진 기본 폰트를 가져와서 정확한 텍스트 픽셀 크기를 측정합니다.
 		UFont* DrawFont = GEngine->GetMediumFont();
-		float TextScale = 1.2f;
+		float TextScale = 1.5f;
 		float TextWidth = 0.0f;
 		float TextHeight = 0.0f;
 
-		// 문자열이 화면에서 차지할 가로(TextWidth)와 세로(TextHeight) 픽셀 길이를 알아냅니다.
 		GetTextSize(InteractText, TextWidth, TextHeight, DrawFont, TextScale);
 
-		// 3. 위치 계산 (가운데 정렬)
-		// 글씨의 절반 길이만큼 왼쪽으로 이동시켜서 크로스헤어 정중앙에 글씨가 오도록 맞춥니다.
-		float TextPosX = Center.X - (TextWidth * 0.5f);
-		float TextPosY = Center.Y + 50.0f;
+		// 3. 고정 위치 계산 (화면 중앙 기준)
+		float OffsetX = 180.0f; // 중앙에서 오른쪽으로 180픽셀 이동
+		float OffsetY = 80.0f;  // 중앙에서 아래로 80픽셀 이동
 
-		// 상자 여백 (글씨 주변의 까만 공간 크기)
-		float PaddingX = 15.0f;
-		float PaddingY = 5.0f;
+		float TextPosX = Center.X + OffsetX;
+		float TextPosY = Center.Y + OffsetY;
 
-		// 4. 글씨 길이에 맞춰진 동적 배경 박스 그리기
-		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f),
+		// 4. 상자 여백 설정
+		float PaddingX = 12.0f;
+		float PaddingY = 6.0f;
+
+		// 5. 배경 박스 그리기 (배그 느낌으로 투명도를 0.4 정도로 낮춤)
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.4f),
 			TextPosX - PaddingX,
 			TextPosY - PaddingY,
 			TextWidth + (PaddingX * 2.0f),
 			TextHeight + (PaddingY * 2.0f));
 
-		// 5. 텍스트 그리기
+		// 6. 텍스트 그리기
 		DrawText(InteractText, FLinearColor::White, TextPosX, TextPosY, DrawFont, TextScale);
 	}
+}
+
+void AGun_phiriaHUD::DrawCurrency(TObjectPtr<AGun_phiriaCharacter> PlayerChar)
+{
+	// 1. 표시할 텍스트 문자열 만들기 (캐릭터의 재화 변수 접근)
+	// 나중에 인벤토리 구조체가 생기면 이 부분의 참조 위치만 살짝 바꿔주면 돼!
+	FString GoldText = FString::Printf(TEXT("Gold : %d"), PlayerChar->CurrentGold);
+	FString SapphireText = FString::Printf(TEXT("Sapphire : %d"), PlayerChar->CurrentSapphire);
+
+	// 2. 폰트 및 배율 설정
+	UFont* DrawFont = GEngine->GetMediumFont();
+	float TextScale = 1.5f; // 글씨가 잘 보이도록 조금 키웠어
+
+	// 3. 텍스트를 그릴 화면 좌표 설정 (화면 우측 상단)
+	// Canvas->ClipX는 화면의 전체 가로 길이입니다. 오른쪽 끝에서 조금 안쪽으로 당겨옵니다.
+	float PosX = Canvas->ClipX - 250.0f;
+	float PosY = 50.0f; // 위에서부터 50픽셀 아래
+
+	// 4. 화면에 텍스트 그리기 (골드는 노란색, 사파이어는 청록색)
+	// 그림자 효과를 주기 위해 검은색 텍스트를 살짝 어긋나게 먼저 그릴 수도 있지만, 직관성을 위해 바로 그립니다.
+	DrawText(GoldText, FLinearColor::Yellow, PosX, PosY, DrawFont, TextScale);
+	DrawText(SapphireText, FLinearColor(0.0f, 1.0f, 1.0f, 1.0f), PosX, PosY + 40.0f, DrawFont, TextScale);
 }
