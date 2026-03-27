@@ -1,6 +1,7 @@
 #include "Gun_phiriaCharacter.h"
 #include "Weapon/WeaponBase.h"
 #include "Interface/InteractInterface.h"
+#include "component/InventoryComponent.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -59,6 +60,8 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	bIsProne = false;
 	DefaultCapsuleHalfHeight = 96.0f;
 	DefaultMeshRelativeLocationZ = -97.0f;
+
+	PlayerInventory = CreateDefaultSubobject<UInventoryComponent>(TEXT("PlayerInventory"));
 }
 
 void AGun_phiriaCharacter::BeginPlay()

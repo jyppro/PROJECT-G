@@ -198,6 +198,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Animation|Interaction")
 	TObjectPtr<UAnimMontage> InteractMontage;
 
+	// 플레이어의 인벤토리(가방) 컴포넌트입니다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<class UInventoryComponent> PlayerInventory;
+
 private:
 	// --- Input Handlers ---
 	void Move(const FInputActionValue& Value);
