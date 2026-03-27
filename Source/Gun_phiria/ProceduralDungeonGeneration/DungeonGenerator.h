@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Kismet/KismetMathLibrary.h" 
 #include "DungeonGenerator.generated.h"
 
 // --- Forward Declarations ---
@@ -43,6 +44,9 @@ struct FDungeonRoom
 
 	UPROPERTY(VisibleAnywhere)
 	int32 SelectedPrefabIndex = -1;
+
+	UPROPERTY()
+	bool bIsShopRoom = false;
 };
 
 USTRUCT(BlueprintType)
@@ -171,6 +175,17 @@ protected:
 
 	UFUNCTION()
 	void ExecuteGeneration();
+
+	// 상점 NPC 프리팹
+	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
+	TSubclassOf<class AShopNPC> ShopNPCPrefab;
+
+	// 상점 방을 고르고 NPC를 스폰하는 함수
+	void SpawnShopNPC();
+
+	// --- 새로 추가: 상점 가판대(테이블) 프리팹 ---
+	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
+	TSubclassOf<class AActor> ShopStallPrefab;
 
 private:
 	// --- Internal Helpers ---
