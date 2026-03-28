@@ -202,6 +202,39 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<class UInventoryComponent> PlayerInventory;
 
+	// ==========================================
+	// --- UI & Inventory System ---
+	// ==========================================
+
+	// 에디터에서 할당할 인벤토리 위젯 클래스 (WBP_InventoryMain)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> InventoryWidgetClass;
+
+	// 생성된 위젯을 담아둘 포인터
+	UPROPERTY()
+	TObjectPtr<class UUserWidget> InventoryWidgetInstance;
+
+	// 인벤토리 열기/닫기 단축키 (Tab 또는 I)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* InventoryAction;
+
+	// 현재 인벤토리가 열려있는지 확인하는 상태 변수
+	bool bIsInventoryOpen = false;
+
+	// 인벤토리 토글 함수
+	void ToggleInventory();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<class USceneCaptureComponent2D> InventoryCamera;
+
+	// --- 인벤토리 UI용 가짜(Clone) 몸통 ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<class USkeletalMeshComponent> InventoryCloneMesh;
+
+	// UI에서 재생할 기본 대기(Idle) 애니메이션 에셋
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TObjectPtr<class UAnimationAsset> UI_IdleAnimation;
+
 private:
 	// --- Input Handlers ---
 	void Move(const FInputActionValue& Value);

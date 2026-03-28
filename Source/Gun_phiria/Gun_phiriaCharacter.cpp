@@ -2,6 +2,8 @@
 #include "Weapon/WeaponBase.h"
 #include "Interface/InteractInterface.h"
 #include "component/InventoryComponent.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/SceneCaptureComponent2D.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -62,6 +64,25 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	DefaultMeshRelativeLocationZ = -97.0f;
 
 	PlayerInventory = CreateDefaultSubobject<UInventoryComponent>(TEXT("PlayerInventory"));
+
+	// --- 생성자 마지막 부분에 추가 ---
+	// 1. 인벤토리 카메라 생성
+	InventoryCamera = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("InventoryCamera"));
+	// 2. 캐릭터 루트(보통 캡슐)에 붙임
+	InventoryCamera->SetupAttachment(RootComponent);
+
+	// 3. 카메라 위치 및 회전 설정 (캐릭터 정면을 바라보도록)
+	// 캐릭터 머리 높이 정도로 올리고 (Z=60), 앞으로 살짝 뺌 (X=150)
+	InventoryCamera->SetRelativeLocation(FVector(150.0f, 0.0f, 60.0f));
+	// 캐릭터 정면을 마주 보도록 180도 회전
+	InventoryCamera->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+
+	// 1. UI용 가짜 몸통 생성 및 부착
+	InventoryCloneMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("InventoryCloneMesh"));
+	InventoryCloneMesh->SetupAttachment(RootComponent);
+
+	InventoryCloneMesh->bVisibleInSceneCaptureOnly = true;
+	InventoryCloneMesh->SetCastShadow(false);
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -89,6 +110,23 @@ void AGun_phiriaCharacter::BeginPlay()
 	}
 
 	if (ADSCamera) ADSCamera->AddTickPrerequisiteComponent(GetMesh());
+
+	// --- 인벤토리 UI 생성 및 숨김 처리 ---
+	if (InventoryWidgetClass)
+	{
+		InventoryWidgetInstance = CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
+		if (InventoryWidgetInstance)
+		{
+			InventoryWidgetInstance->AddToViewport();
+			InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	if (InventoryCamera)
+	{
+		InventoryCamera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+		InventoryCamera->ShowOnlyComponent(InventoryCloneMesh);
+	}
 }
 
 void AGun_phiriaCharacter::Tick(float DeltaTime)
@@ -222,6 +260,7 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EIC->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
 		EIC->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Interact);
+		EIC->BindAction(InventoryAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleInventory);
 	}
 }
 
@@ -494,5 +533,46 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 			// (시작 투명도 1=검은색, 끝 투명도 0=투명, 지정한 시간동안 서서히 밝아짐)
 			PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInDuration, FLinearColor::Black, false, false);
 		}
+	}
+}
+
+void AGun_phiriaCharacter::ToggleInventory()
+{
+	// 위젯이 생성되지 않았거나 플레이어 컨트롤러가 없으면 중단
+	if (!InventoryWidgetInstance) return;
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	// 상태 뒤집기 (열려있으면 닫고, 닫혀있으면 열기)
+	bIsInventoryOpen = !bIsInventoryOpen;
+
+	if (bIsInventoryOpen)
+	{
+		// 1. UI 보이기
+		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Visible);
+
+		// 2. 블루프린트에서 만든 RefreshInventory 이벤트 직접 호출 (마법의 코드!)
+		UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
+		if (RefreshFunc)
+		{
+			InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
+		}
+
+		// 3. 마우스 켜기 및 UI 조작 모드로 전환
+		PC->SetShowMouseCursor(true);
+		FInputModeGameAndUI InputMode;
+		InputMode.SetWidgetToFocus(InventoryWidgetInstance->TakeWidget());
+		PC->SetInputMode(InputMode);
+	}
+	else
+	{
+		// 1. UI 숨기기
+		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+
+		// 2. 마우스 끄기 및 게임 전용 모드로 복귀
+		PC->SetShowMouseCursor(false);
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
 	}
 }
