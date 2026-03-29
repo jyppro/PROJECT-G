@@ -4,6 +4,7 @@
 #include "../Gun_phiriaCharacter.h"
 #include "Engine/DataTable.h"
 #include "../component/InventoryComponent.h"
+#include "../UI/InventoryMainWidget.h"
 
 APickupItemBase::APickupItemBase()
 {
@@ -27,18 +28,48 @@ void APickupItemBase::Interact_Implementation(AActor* Interactor)
 	{
 		if (UInventoryComponent* Inventory = Player->PlayerInventory)
 		{
-			// 가방에 넣기 시도! (남은 개수를 반환받음)
+			// 1. 가방에 넣기 시도! (반환값은 가방에 못 들어가고 남은 개수)
 			int32 Leftover = Inventory->AddItem(ItemID, Quantity);
 
+			// 2. 남은 게 없다면? (전부 다 주웠음!)
 			if (Leftover <= 0)
 			{
-				// 전부 다 주웠다면 월드에서 이 아이템을 파괴!
-				Destroy();
+				Destroy(); // 바닥에서 아이템 파괴
 			}
+			// 3. 남은 게 있다면? (가방이 꽉 차서 다 못 주웠음!)
 			else
 			{
-				// 가방이 꽉 차서 남았다면, 월드에 남은 개수만 업데이트
+				// 바닥에 남은 개수를 업데이트
 				Quantity = Leftover;
+
+				// 화면에 "가방이 꽉 찼습니다!" 문구 띄우기
+				// 방법 A: 간단한 디버그 메시지 (일단 이걸로 테스트 해봐!)
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, TEXT("가방이 꽉 찼습니다!"));
+				}
+
+				// 방법 B: 진짜 상용 게임처럼 UI(HUD)에 띄우기 (네가 만든 HUD가 있다면 주석 풀고 사용!)
+				/*
+				if (APlayerController* PC = Cast<APlayerController>(Player->GetController()))
+				{
+					if (AGun_phiriaHUD* HUD = Cast<AGun_phiriaHUD>(PC->GetHUD()))
+					{
+						HUD->ShowSystemMessage(TEXT("가방이 꽉 찼습니다!")); // HUD에 만든 함수 이름으로 변경
+					}
+				}
+				*/
+
+				// 아이템 개수가 줄어들었으니, 인벤토리가 열려있다면 주변(Nearby) UI도 갱신해주기
+				if (Player->bIsInventoryOpen && Player->InventoryWidgetInstance)
+				{
+					// 기존 UUserWidget을 우리가 만든 UInventoryMainWidget으로 형변환(Cast) 합니다.
+					if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(Player->InventoryWidgetInstance))
+					{
+						// 복잡한 FindFunction 없이, 그냥 C++ 함수를 직접 똭! 호출합니다.
+						MainWidget->ForceNearbyRefresh();
+					}
+				}
 			}
 		}
 	}

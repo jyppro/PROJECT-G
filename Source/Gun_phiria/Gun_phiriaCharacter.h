@@ -105,6 +105,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	TArray<class APickupItemBase*> GetNearbyItems();
 
+	// 현재 인벤토리가 열려있는지 확인하는 상태 변수
+	bool bIsInventoryOpen = false;
+
+	// 생성된 위젯을 담아둘 포인터
+	UPROPERTY()
+	TObjectPtr<class UUserWidget> InventoryWidgetInstance;
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
@@ -213,16 +220,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
 	TSubclassOf<class UUserWidget> InventoryWidgetClass;
 
-	// 생성된 위젯을 담아둘 포인터
-	UPROPERTY()
-	TObjectPtr<class UUserWidget> InventoryWidgetInstance;
-
 	// 인벤토리 열기/닫기 단축키 (Tab 또는 I)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	class UInputAction* InventoryAction;
-
-	// 현재 인벤토리가 열려있는지 확인하는 상태 변수
-	bool bIsInventoryOpen = false;
 
 	// 인벤토리 토글 함수
 	void ToggleInventory();
