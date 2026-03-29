@@ -3,6 +3,7 @@
 #include "../Enemy/EnemyCharacter.h"
 #include "../Gun_phiriaCharacter.h"
 #include "../NPC/ShopNPC.h"
+#include "../Item/PickupItemBase.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -376,7 +377,8 @@ void ADungeonGenerator::SetupRoomManagers()
 
 void ADungeonGenerator::SpawnItemsInRooms()
 {
-	if (ItemPrefabs.IsEmpty()) return;
+	// 아이템 프리팹이나 전리품 목록이 비어있으면 실행 안 함
+	if (ItemPrefabs.IsEmpty() || LootPool.IsEmpty()) return;
 
 	for (const auto& Room : RoomList)
 	{
@@ -387,6 +389,7 @@ void ADungeonGenerator::SpawnItemsInRooms()
 		{
 			FVector SpawnLoc;
 			bool bFound = false;
+
 			for (int32 Tries = 0; Tries < 10 && !bFound; Tries++)
 			{
 				float RX = FMath::RandRange(Room.CenterLocation.X - Room.Size.X * 0.4f, Room.CenterLocation.X + Room.Size.X * 0.4f);
@@ -395,11 +398,47 @@ void ADungeonGenerator::SpawnItemsInRooms()
 				FHitResult Hit;
 				if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(RX, RY, 2000), FVector(RX, RY, -500), ECC_WorldStatic))
 				{
-					SpawnLoc = Hit.ImpactPoint + FVector(0, 0, 50.f);
-					if (!GetWorld()->OverlapAnyTestByChannel(SpawnLoc, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(20.f))) bFound = true;
+					FVector GroundLocation = Hit.ImpactPoint;
+					float CheckRadius = 20.0f;
+
+					// 픽스 1: 구슬이 바닥에 쓸려서 '겹침' 판정 나는 것을 막기 위해 반지름보다 5.f 더 위로 띄움!
+					FVector CheckLocation = GroundLocation + FVector(0.0f, 0.0f, CheckRadius + 5.0f);
+
+					FCollisionQueryParams OverlapParams;
+					OverlapParams.AddIgnoredActor(this);
+
+					if (!GetWorld()->OverlapAnyTestByChannel(CheckLocation, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(CheckRadius), OverlapParams))
+					{
+						bFound = true;
+						SpawnLoc = GroundLocation; // 실제 스폰은 바닥에!
+					}
 				}
 			}
-			if (bFound) GetWorld()->SpawnActor<AActor>(ItemPrefabs[FMath::RandRange(0, ItemPrefabs.Num() - 1)], SpawnLoc, FRotator(0, FMath::RandRange(0.f, 360.f), 0));
+
+			if (bFound)
+			{
+				// 픽스 2: 엔진이 바닥과 겹친다고 착각해서 스폰을 취소하는 것을 강제로 막는 파라미터!
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+				// 스폰 파라미터(SpawnParams)를 넣어서 강제 스폰
+				AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(
+					ItemPrefabs[FMath::RandRange(0, ItemPrefabs.Num() - 1)],
+					SpawnLoc,
+					FRotator(0, FMath::RandRange(0.f, 360.f), 0),
+					SpawnParams
+				);
+
+				if (APickupItemBase* PickupItem = Cast<APickupItemBase>(SpawnedActor))
+				{
+					FName RandomLootID = LootPool[FMath::RandRange(0, LootPool.Num() - 1)];
+					PickupItem->ItemID = RandomLootID;
+
+					FString ItemString = RandomLootID.ToString();
+					if (ItemString.Contains(TEXT("Ammo"))) PickupItem->Quantity = FMath::RandRange(15, 30);
+					else PickupItem->Quantity = 1;
+				}
+			}
 		}
 	}
 }

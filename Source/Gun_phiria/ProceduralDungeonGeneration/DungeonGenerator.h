@@ -187,6 +187,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
 	TSubclassOf<class AActor> ShopStallPrefab;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Loot")
+	TArray<FName> LootPool;
+
 private:
 	// --- Internal Helpers ---
 	float SnapToGrid(float Value);

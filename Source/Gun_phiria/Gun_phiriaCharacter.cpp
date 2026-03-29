@@ -4,6 +4,8 @@
 #include "component/InventoryComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Item/PickupItemBase.h"
+#include "UI/InventoryMainWidget.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -71,15 +73,16 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	// 2. 캐릭터 루트(보통 캡슐)에 붙임
 	InventoryCamera->SetupAttachment(RootComponent);
 
-	// 3. 카메라 위치 및 회전 설정 (캐릭터 정면을 바라보도록)
-	// 캐릭터 머리 높이 정도로 올리고 (Z=60), 앞으로 살짝 뺌 (X=150)
-	InventoryCamera->SetRelativeLocation(FVector(150.0f, 0.0f, 60.0f));
-	// 캐릭터 정면을 마주 보도록 180도 회전
+	InventoryCamera->SetRelativeLocation(FVector(150.0f, 0.0f, 0.0f));
 	InventoryCamera->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+	InventoryCamera->FOVAngle = 80.0f;
 
 	// 1. UI용 가짜 몸통 생성 및 부착
 	InventoryCloneMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("InventoryCloneMesh"));
 	InventoryCloneMesh->SetupAttachment(RootComponent);
+
+	InventoryCloneMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
+	InventoryCloneMesh->SetRelativeRotation(FRotator(0.0f, 255.0f, 0.0f));
 
 	InventoryCloneMesh->bVisibleInSceneCaptureOnly = true;
 	InventoryCloneMesh->SetCastShadow(false);
@@ -291,6 +294,8 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 
 void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
 {
+	if (bIsInventoryOpen) return;
+
 	const FVector2D Vec = Value.Get<FVector2D>();
 	AddControllerYawInput(Vec.X);
 	AddControllerPitchInput(Vec.Y);
@@ -298,6 +303,8 @@ void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
 
 void AGun_phiriaCharacter::StartAiming()
 {
+	if (bIsInventoryOpen) return;
+
 	bIsAiming = true;
 	if (FollowCamera) FollowCamera->SetActive(false);
 	if (ADSCamera) ADSCamera->SetActive(true);
@@ -312,6 +319,7 @@ void AGun_phiriaCharacter::StopAiming()
 
 void AGun_phiriaCharacter::Fire()
 {
+	if (bIsInventoryOpen) return;
 	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
 
 	bIsFiring = true;
@@ -448,8 +456,18 @@ void AGun_phiriaCharacter::Interact()
 {
 	if (TargetInteractable && TargetInteractable->Implements<UInteractInterface>())
 	{
-		if (IInteractInterface::Execute_ShouldPlayAnimation(TargetInteractable.Get()) && InteractMontage) PlayAnimMontage(InteractMontage);
 		IInteractInterface::Execute_Interact(TargetInteractable.Get(), this);
+
+		// 아이템을 주운 직후, 인벤토리가 열려있다면 UI를 새로고침합니다.
+		if (bIsInventoryOpen && InventoryWidgetInstance)
+		{
+			// 블루프린트의 RefreshInventory(우리가 이름을 바꾼 RefreshBackpack) 함수 호출
+			UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
+			if (RefreshFunc)
+			{
+				InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
+			}
+		}
 	}
 }
 
@@ -552,11 +570,14 @@ void AGun_phiriaCharacter::ToggleInventory()
 		// 1. UI 보이기
 		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Visible);
 
-		// 2. 블루프린트에서 만든 RefreshInventory 이벤트 직접 호출 (마법의 코드!)
+		// 블루프린트 이벤트 호출 (가방 업데이트)
 		UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
-		if (RefreshFunc)
+		if (RefreshFunc) InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
+
+		// 방금 만든 C++ 강제 새로고침 호출! (주변 아이템 업데이트)
+		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
 		{
-			InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
+			MainWidget->ForceNearbyRefresh();
 		}
 
 		// 3. 마우스 켜기 및 UI 조작 모드로 전환
@@ -575,4 +596,27 @@ void AGun_phiriaCharacter::ToggleInventory()
 		FInputModeGameOnly InputMode;
 		PC->SetInputMode(InputMode);
 	}
+}
+
+TArray<APickupItemBase*> AGun_phiriaCharacter::GetNearbyItems()
+{
+	TArray<APickupItemBase*> NearbyItems;
+	TArray<FOverlapResult> Overlaps;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	// 내 캐릭터 반경 200 유닛 안의 아이템 스캔
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
+	{
+		for (const auto& Res : Overlaps)
+		{
+			// 겹친 게 PickupItemBase인지 캐스팅
+			if (APickupItemBase* FoundItem = Cast<APickupItemBase>(Res.GetActor()))
+			{
+				//NearbyItems.Add(FoundItem);
+				NearbyItems.AddUnique(FoundItem);
+			}
+		}
+	}
+	return NearbyItems;
 }
