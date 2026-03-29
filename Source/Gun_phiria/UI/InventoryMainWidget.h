@@ -38,6 +38,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<class UUserWidget> ItemSlotWidgetClass;
 
+	// 블루프린트에서 사용
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void UpdateNearbyUI(const TArray<class APickupItemBase*>& NearbyItems);
 
@@ -48,7 +49,4 @@ private:
 
 	// 타이머가 주기적으로 실행할 함수
 	void CheckNearbyItems();
-
-	// 실제로 UI를 지우고 새로 그리는 함수
-	// void RefreshNearbyUI(const TArray<class APickupItemBase*>& NearbyItems);
 };

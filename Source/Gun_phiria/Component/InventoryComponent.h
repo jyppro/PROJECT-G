@@ -103,13 +103,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Weight")
 	float MaxWeight = 100.0f; // 가방 레벨에 따라 나중에 올려줄 수 있음!
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory|Data")
+	class UDataTable* ItemDataTable;
+
 protected:
 	virtual void BeginPlay() override;
 
 	// 가방의 총 칸 수 (배그의 가방 용량 개념)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	int32 MaxSlots = 20;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory|Data")
-	class UDataTable* ItemDataTable;
 };
