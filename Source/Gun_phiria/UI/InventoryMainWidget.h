@@ -4,11 +4,10 @@
 #include "Blueprint/UserWidget.h"
 #include "InventoryMainWidget.generated.h"
 
-struct FUpdateSlotParams
-{
-	FName ItemID;
-	int32 Quantity;
-};
+// 전방 선언을 통해 헤더 포함을 최소화합니다.
+class UScrollBox;
+class APickupItemBase;
+class UItemSlotWidget; // 이전에 만든 슬롯 위젯 클래스
 
 UCLASS()
 class GUN_PHIRIA_API UInventoryMainWidget : public UUserWidget
@@ -16,37 +15,49 @@ class GUN_PHIRIA_API UInventoryMainWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// 인벤토리를 열 때 호출할 강제 새로고침 함수
+	// 인벤토리를 열 때 호출하여 즉시 새로고침하는 함수
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void ForceNearbyRefresh();
 
+	// 가방(Backpack) 아이템 리스트를 새로고침하는 함수 (캐릭터에서 호출 가능)
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void RefreshInventory();
+
 protected:
-	// UI가 처음 화면에 생성될 때 실행되는 함수 (블루프린트의 Event Construct와 동일)
+	// 초기화 및 타이머 설정
 	virtual void NativeConstruct() override;
 
-	// UI가 화면에서 사라질 때 실행 (타이머 정리용)
+	// 타이머 해제 및 정리
 	virtual void NativeDestruct() override;
 
-	// 마법의 매크로! 블루프린트에 있는 똑같은 이름의 스크롤 박스를 자동으로 연결해줌
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	class UScrollBox* VicinityScrollBox;
+	// ==========================================
+	// UI 컴포넌트 바인딩 (이름이 WBP_InventoryMain의 위젯 이름과 일치해야 함)
+	// ==========================================
 
-	// 가방 스크롤 박스도 미리 연결해두면 좋아!
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	class UScrollBox* InventoryScrollBox;
+	// 주변 아이템 스크롤 박스
+	UPROPERTY(meta = (BindWidget))
+	UScrollBox* VicinityScrollBox;
 
-	// 슬롯으로 생성할 위젯 클래스 (에디터에서 WBP_ItemSlot을 넣어줄 칸)
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<class UUserWidget> ItemSlotWidgetClass;
+	// 가방 아이템 스크롤 박스
+	UPROPERTY(meta = (BindWidget))
+	UScrollBox* InventoryScrollBox;
 
-	// 블루프린트에서 사용
-	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
-	void UpdateNearbyUI(const TArray<class APickupItemBase*>& NearbyItems);
+	// ==========================================
+	// 위젯 설정
+	// ==========================================
+
+	// 슬롯으로 생성할 위젯 클래스 (Class Defaults에서 WBP_ItemSlot 선택)
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory | Settings")
+	TSubclassOf<UUserWidget> ItemSlotWidgetClass;
 
 private:
-	// 타이머 핸들과 이전 아이템 개수 기억용 변수
+	// 주기적으로 주변 아이템을 검사하는 함수
+	void CheckNearbyItems();
+
+	// 실제 UI 리스트를 다시 그리는 내부 로직 (블루프린트 이벤트 대신 C++ 함수 사용)
+	void UpdateNearbyUI(const TArray<APickupItemBase*>& NearbyItems);
+
+	// 타이머 및 상태 관리 변수
 	FTimerHandle NearbyCheckTimer;
 	int32 LastNearbyCount = -1;
-
-	// 타이머가 주기적으로 실행할 함수
-	void CheckNearbyItems();
 };

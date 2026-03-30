@@ -52,6 +52,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Economy")
 	int32 SellPrice = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	TSubclassOf<class UItemEffectBase> ItemEffectClass;
 };
 
 // ========================================================
@@ -105,6 +108,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inventory|Data")
 	class UDataTable* ItemDataTable;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void UseItemAtIndex(int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void UseItemByID(FName UseItemID);
 
 protected:
 	virtual void BeginPlay() override;

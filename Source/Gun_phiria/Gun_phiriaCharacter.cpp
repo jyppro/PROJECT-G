@@ -117,11 +117,14 @@ void AGun_phiriaCharacter::BeginPlay()
 	// --- 牢亥配府 UI 积己 棺 见辫 贸府 ---
 	if (InventoryWidgetClass)
 	{
-		InventoryWidgetInstance = CreateWidget<UUserWidget>(GetWorld(), InventoryWidgetClass);
-		if (InventoryWidgetInstance)
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			InventoryWidgetInstance->AddToViewport();
-			InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+			InventoryWidgetInstance = CreateWidget<UUserWidget>(PC, InventoryWidgetClass);
+			if (InventoryWidgetInstance)
+			{
+				InventoryWidgetInstance->AddToViewport();
+				InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+			}
 		}
 	}
 
