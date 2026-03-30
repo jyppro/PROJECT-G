@@ -4,6 +4,9 @@
 #include "Engine/Texture2D.h"
 #include "../Gun_phiriaCharacter.h"
 #include "../component/InventoryComponent.h"
+#include "InventoryMainWidget.h"
+#include "Components/PanelWidget.h"
+#include "../Item/PickupItemBase.h"
 
 // FItemData 구조체가 정의된 헤더를 반드시 포함해야 합니다! 
 // (본인의 프로젝트 경로에 맞게 수정해 주세요. 예: #include "Item/ItemData.h")
@@ -55,19 +58,74 @@ void UItemSlotWidget::SetItemInfo(FName InItemID, int32 InQuantity)
 	}
 }
 
+void UItemSlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+
+	// 배경색 어둡게 만들기 (호버 효과)
+	if (IMG_Background)
+	{
+		IMG_Background->SetColorAndOpacity(FLinearColor(0.5f, 0.5f, 0.5f, 0.5f));
+	}
+
+	if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+	{
+		MainUI->ShowTooltip(CurrentItemID, ItemDataTable);
+	}
+}
+
+// 2. 마우스가 나갔을 때 (원래 색으로 복구 + 툴팁 끄기)
+void UItemSlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+
+	// 배경색 원래대로 (흰색)
+	if (IMG_Background)
+	{
+		IMG_Background->SetColorAndOpacity(FLinearColor(0.25f, 0.25f, 0.25f, 0.5f));
+	}
+
+	if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+	{
+		MainUI->HideTooltip();
+	}
+}
+
 FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
 		if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn()))
 		{
-			if (UInventoryComponent* Inventory = Player->PlayerInventory)
+			if (bIsVicinitySlot)
 			{
-				Inventory->UseItemByID(CurrentItemID);
-				return FReply::Handled();
+				// [바닥 슬롯] 우클릭 -> 인벤토리에 넣기 (습득)
+				int32 Remainder = Player->PlayerInventory->AddItem(CurrentItemID, 1);
+
+				if (Remainder == 0) // 가방 공간이 있어서 성공했다면
+				{
+					if (TargetItemActor && IsValid(TargetItemActor))
+					{
+						TargetItemActor->Destroy();
+						TargetItemActor = nullptr;
+					}
+
+					if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+					{
+						// (지웠던 HideTooltip의 빈자리. 이제 MainUI가 알아서 꺼줍니다!)
+						MainUI->RefreshInventory();
+						MainUI->ForceNearbyRefresh();
+					}
+				}
 			}
+			else
+			{
+				// [가방 슬롯] 우클릭 -> 아이템 사용
+				// (여기도 HideTooltip 삭제 완료!)
+				Player->PlayerInventory->UseItemByID(CurrentItemID);
+			}
+			return FReply::Handled();
 		}
 	}
-
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }

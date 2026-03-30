@@ -8,6 +8,7 @@
 // 전방 선언 (헤더 포함을 줄여 컴파일 속도 향상)
 class UImage;
 class UTextBlock;
+class APickupItemBase;
 
 UCLASS()
 class GUN_PHIRIA_API UItemSlotWidget : public UUserWidget
@@ -19,8 +20,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void SetItemInfo(FName InItemID, int32 InQuantity);
 
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory")
+	TSubclassOf<UUserWidget> TooltipWidgetClass;
+
+	// 이 슬롯이 바닥에 있는 아이템인지 체크하는 변수
+	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+	bool bIsVicinitySlot = false;
+
+	// [추가된 부분] 바닥에 있는 실제 아이템 액터를 가리키는 포인터
+	UPROPERTY()
+	APickupItemBase* TargetItemActor = nullptr;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	// 마우스가 들어올 때
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	// 마우스가 나갈 때 (이 줄이 빠져있었습니다!)
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	FName CurrentItemID;
@@ -31,6 +49,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	UImage* IMG_ItemIcon;
+
+	UPROPERTY(meta = (BindWidget))
+	UImage* IMG_Background;
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* TXT_ItemName;

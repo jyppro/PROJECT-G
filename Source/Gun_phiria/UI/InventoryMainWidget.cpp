@@ -5,6 +5,7 @@
 #include "../Gun_phiriaCharacter.h"
 #include "../Item/PickupItemBase.h"
 #include "../component/InventoryComponent.h"
+#include "ItemTooltipWidget.h"
 
 void UInventoryMainWidget::NativeConstruct()
 {
@@ -15,6 +16,12 @@ void UInventoryMainWidget::NativeConstruct()
 	ForceNearbyRefresh();
 
 	GetWorld()->GetTimerManager().SetTimer(NearbyCheckTimer, this, &UInventoryMainWidget::CheckNearbyItems, 0.2f, true);
+
+	if (TooltipClass && !CachedTooltip)
+	{
+		CachedTooltip = CreateWidget<UItemTooltipWidget>(this, TooltipClass);
+		CachedTooltip->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UInventoryMainWidget::NativeDestruct()
@@ -27,6 +34,8 @@ void UInventoryMainWidget::NativeDestruct()
 void UInventoryMainWidget::RefreshInventory()
 {
 	if (!InventoryScrollBox || !ItemSlotWidgetClass) return;
+
+	HideTooltip();
 
 	// 기존 리스트 초기화
 	InventoryScrollBox->ClearChildren();
@@ -52,10 +61,11 @@ void UInventoryMainWidget::RefreshInventory()
 	}
 }
 
-// 2. 주변 아이템 리스트 갱신 (캐릭터의 GetNearbyItems 결과 사용)
 void UInventoryMainWidget::UpdateNearbyUI(const TArray<APickupItemBase*>& NearbyItems)
 {
 	if (!VicinityScrollBox || !ItemSlotWidgetClass) return;
+
+	HideTooltip();
 
 	VicinityScrollBox->ClearChildren();
 
@@ -66,8 +76,12 @@ void UInventoryMainWidget::UpdateNearbyUI(const TArray<APickupItemBase*>& Nearby
 			UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass);
 			if (NewSlot)
 			{
-				// PickupItemBase에 있는 ItemID와 Quantity 정보를 가져와 설정
-				NewSlot->SetItemInfo(Item->ItemID, Item->Quantity); // 변수명은 본인 프로젝트에 맞춰 확인
+				NewSlot->bIsVicinitySlot = true;
+
+				// 실제 아이템 액터를 슬롯에 기억시킵니다.
+				NewSlot->TargetItemActor = Item;
+
+				NewSlot->SetItemInfo(Item->ItemID, Item->Quantity);
 				VicinityScrollBox->AddChild(NewSlot);
 			}
 		}
@@ -92,4 +106,24 @@ void UInventoryMainWidget::ForceNearbyRefresh()
 {
 	LastNearbyCount = -1;
 	CheckNearbyItems();
+}
+
+void UInventoryMainWidget::ShowTooltip(FName ItemID, UDataTable* DataTable)
+{
+	if (CachedTooltip)
+	{
+		CachedTooltip->UpdateTooltip(ItemID, DataTable);
+		CachedTooltip->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+		// 위젯의 툴팁 시스템에 연결 (마우스 위치를 자동으로 따라가게 함)
+		SetToolTip(CachedTooltip);
+	}
+}
+
+void UInventoryMainWidget::HideTooltip()
+{
+	if (CachedTooltip)
+	{
+		CachedTooltip->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }

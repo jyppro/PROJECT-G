@@ -23,6 +23,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void RefreshInventory();
 
+	// 슬롯에서 호출할 함수
+	void ShowTooltip(FName ItemID, UDataTable* DataTable);
+	void HideTooltip();
+
 protected:
 	// 초기화 및 타이머 설정
 	virtual void NativeConstruct() override;
@@ -50,6 +54,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory | Settings")
 	TSubclassOf<UUserWidget> ItemSlotWidgetClass;
 
+	// 에디터에서 설정할 툴팁 클래스
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory | Settings")
+	TSubclassOf<class UItemTooltipWidget> TooltipClass;
+
 private:
 	// 주기적으로 주변 아이템을 검사하는 함수
 	void CheckNearbyItems();
@@ -60,4 +68,7 @@ private:
 	// 타이머 및 상태 관리 변수
 	FTimerHandle NearbyCheckTimer;
 	int32 LastNearbyCount = -1;
+
+	UPROPERTY()
+	UItemTooltipWidget* CachedTooltip;
 };
