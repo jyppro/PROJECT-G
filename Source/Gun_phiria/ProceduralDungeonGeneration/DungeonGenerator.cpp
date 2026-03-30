@@ -378,7 +378,7 @@ void ADungeonGenerator::SetupRoomManagers()
 void ADungeonGenerator::SpawnItemsInRooms()
 {
 	// 아이템 프리팹이나 전리품 목록이 비어있으면 실행 안 함
-	if (ItemPrefabs.IsEmpty() || LootPool.IsEmpty()) return;
+	if (ItemPrefabs.IsEmpty()) return;
 
 	for (const auto& Room : RoomList)
 	{
@@ -431,12 +431,17 @@ void ADungeonGenerator::SpawnItemsInRooms()
 
 				if (APickupItemBase* PickupItem = Cast<APickupItemBase>(SpawnedActor))
 				{
-					FName RandomLootID = LootPool[FMath::RandRange(0, LootPool.Num() - 1)];
-					PickupItem->ItemID = RandomLootID;
+					// 블루프린트가 원래 가지고 태어난 '진짜 ID'를 그대로 사용합니다!
+					FString ItemString = PickupItem->ItemID.ToString();
 
-					FString ItemString = RandomLootID.ToString();
-					if (ItemString.Contains(TEXT("Ammo"))) PickupItem->Quantity = FMath::RandRange(15, 30);
-					else PickupItem->Quantity = 1;
+					if (ItemString.Contains(TEXT("Ammo")))
+					{
+						PickupItem->Quantity = FMath::RandRange(15, 30);
+					}
+					else
+					{
+						PickupItem->Quantity = 1;
+					}
 				}
 			}
 		}

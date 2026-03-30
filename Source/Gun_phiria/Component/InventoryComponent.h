@@ -13,6 +13,7 @@ UENUM(BlueprintType)
 enum class EItemType : uint8
 {
 	Weapon			UMETA(DisplayName = "Weapon"),
+	Equipment		UMETA(DisplayName = "Equipment"),
 	Attachment		UMETA(DisplayName = "Attachment"),
 	Consumable		UMETA(DisplayName = "Consumable"),
 	Throwable		UMETA(DisplayName = "Throwable"),
@@ -53,8 +54,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Economy")
 	int32 SellPrice = 0;
 
+
+	// [소모품용] 발동시킬 효과 클래스
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
 	TSubclassOf<class UItemEffectBase> ItemEffectClass;
+
+	// [무기용] 무기를 장착할 때 스폰할 실제 무기 액터 클래스
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
+	TSubclassOf<class AWeaponBase> WeaponClass;
+
+	// [장비용] 캐릭터에게 입힐 3D 모델 (헬멧, 조끼, 가방 메쉬)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	TObjectPtr<class USkeletalMesh> EquipmentMesh;
+
+	// [장비 & 아티팩트용] 범용 스탯 보너스 수치
+	// (예: 조끼면 방어력 50 증가, 가방이면 용량 50 증가, 아티팩트면 데미지 10% 증가 등)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Stats")
+	float StatBonus = 0.0f;
 };
 
 // ========================================================
