@@ -13,6 +13,7 @@ class UInputAction;
 class AWeaponBase;
 class UAnimMontage;
 struct FInputActionValue;
+class UCastBarWidget;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
@@ -111,6 +112,36 @@ public:
 	// 생성된 위젯을 담아둘 포인터
 	UPROPERTY()
 	TObjectPtr<class UUserWidget> InventoryWidgetInstance;
+
+	// --- 시전 (Casting) 관련 ---
+	UPROPERTY(BlueprintReadWrite, Category = "Casting")
+	bool bIsCasting = false;
+
+	// 시전 중 이동 속도 (앉아서 걷는 속도 수준)
+	UPROPERTY(EditAnywhere, Category = "Casting")
+	float CastingWalkSpeed = 160.0f;
+
+	float OriginalWalkSpeed;
+
+	// ItemID를 받도록 수정된 StartCasting
+	void StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess);
+
+	// void StartCasting(float Duration, TFunction<void()> OnSuccess);
+	void CancelCasting();
+
+	// --- Buff & HOT System ---
+	// 이동 속도 증가 적용 (중첩 방지)
+	void ApplySpeedBuff(float BoostAmount, float Duration);
+
+	// 지속 체력 회복 적용 (중첩 방지)
+	void ApplyHealOverTime(float TotalHeal, float Duration);
+
+	// 블루프린트에서 설정할 UI 클래스
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<class UCastBarWidget> CastBarWidgetClass;
+
+	UPROPERTY()
+	UCastBarWidget* CastBarInstance = nullptr;
 
 protected:
 	// --- Lifecycle ---
@@ -271,4 +302,18 @@ private:
 	float ZoomInterpSpeed = 20.0f;
 	float SpreadRecoveryDelay = 0.1f;
 	bool bIsDead = false;
+
+	FTimerHandle CastTimerHandle;
+	TFunction<void()> OnCastSuccessCallback;
+
+	// 이동 속도 버프 추적용
+	bool bHasSpeedBuff = false;
+	float CurrentSpeedBoost = 0.0f;
+	FTimerHandle SpeedBuffTimerHandle;
+
+	// 지속 회복(HOT) 추적용
+	FTimerHandle HOTTimerHandle;
+	int32 CurrentHOTTicks = 0;
+	int32 MaxHOTTicks = 0;
+	float HOTAmountPerTick = 0.0f;
 };

@@ -114,15 +114,16 @@ void UInventoryComponent::UseItemAtIndex(int32 SlotIndex)
 
 	if (ItemInfo && ItemInfo->ItemEffectClass)
 	{
-		// 캐릭터 가져오기
 		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner());
 
-		// C++의 마법: 클래스의 '기본 객체(CDO)'를 가져와서 즉시 함수 실행! (메모리 생성/삭제 비용 0)
 		UItemEffectBase* EffectCDO = ItemInfo->ItemEffectClass->GetDefaultObject<UItemEffectBase>();
 
-		if (EffectCDO && EffectCDO->UseItem(Player))
+		// [수정됨] UseItem 호출 시 ItemID를 함께 넘겨줍니다!
+		if (EffectCDO && EffectCDO->UseItem(Player, ItemID))
 		{
-			// 사용에 성공(true)했다면 아이템 1개 소모
+			// (참고) 진통제처럼 캐스팅이 있는 아이템은 여기서 즉시 삭제되지 않도록 
+			// ItemEffect 내부에서 false를 반환하고, 캐스팅 성공 시 ItemEffect 내부에서 RemoveItem을 호출하게 됩니다.
+			// 만약 캐스팅 없이 즉시 사용되는 아이템(예: 사과)라면 Effect 안에서 true를 반환하여 여기서 삭제됩니다.
 			RemoveItem(ItemID, 1);
 		}
 	}
@@ -143,7 +144,7 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 		}
 	}
 
-	if (!bHasItem) return; // 가방에 없으면 실행 안 함
+	if (!bHasItem) return;
 
 	// 2. 데이터 테이블에서 아이템 정보 가져오기
 	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(UseItemID, TEXT("UseItem"));
@@ -152,24 +153,23 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner());
 	if (!Player) return;
 
-	// [추가됨] 아이템 사용/장착이 '성공'했는지 추적하는 변수
 	bool bUseSuccess = false;
 
-	// 3. 아이템 타입에 따른 분기 처리 (핵심!)
+	// 3. 아이템 타입에 따른 분기 처리
 	switch (ItemInfo->ItemType)
 	{
 	case EItemType::Consumable:
 	case EItemType::Throwable:
 	case EItemType::Artifact:
 	{
-		// [소모품/투척/아티팩트] : 기존처럼 ItemEffectClass를 이용해 효과 발동
 		if (ItemInfo->ItemEffectClass)
 		{
 			UItemEffectBase* EffectCDO = ItemInfo->ItemEffectClass->GetDefaultObject<UItemEffectBase>();
 
-			if (EffectCDO && EffectCDO->UseItem(Player))
+			// [수정됨] UseItem 호출 시 UseItemID를 함께 넘겨줍니다!
+			if (EffectCDO && EffectCDO->UseItem(Player, UseItemID))
 			{
-				bUseSuccess = true; // 효과 발동 성공!
+				bUseSuccess = true;
 			}
 		}
 		break;
@@ -177,23 +177,13 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 	case EItemType::Equipment:
 	{
-		// [장비] : 뚝배기, 조끼, 가방 등
-		// TODO: 캐릭터 클래스에 EquipItem 같은 함수를 만들어서 여기서 호출할 예정입니다.
-		// 예: Player->EquipItem(ItemInfo);
-
-		// 지금은 테스트용으로 메시지만 띄웁니다.
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Cyan, TEXT("장비 장착 시도!"));
-		// bUseSuccess = true; // 나중에 장착 구현이 완료되면 주석을 푸세요.
 		break;
 	}
 
 	case EItemType::Weapon:
 	{
-		// [무기] : 총기 장착
-		// TODO: 무기 스폰 및 손에 쥐여주는 로직 호출 예정
-
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("무기 장착 시도!"));
-		// bUseSuccess = true;
 		break;
 	}
 
@@ -204,13 +194,11 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 	// 4. 사용/장착에 성공했다면 아이템을 소모하고 UI를 갱신합니다.
 	if (bUseSuccess)
 	{
-		// 인벤토리에서 1개 삭제
+		// 이 부분은 캐스팅 없이 즉시 사용(UseItem이 true 반환)되는 아이템을 위한 로직입니다.
 		RemoveItem(UseItemID, 1);
 
-		// UI 새로고침 (블루프린트 방식에서 C++ 방식으로 깔끔하게 변경!)
 		if (Player->bIsInventoryOpen && Player->InventoryWidgetInstance)
 		{
-			// 우리가 만든 C++ 위젯 클래스로 형변환하여 직접 함수 호출
 			if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(Player->InventoryWidgetInstance))
 			{
 				MainWidget->RefreshInventory();

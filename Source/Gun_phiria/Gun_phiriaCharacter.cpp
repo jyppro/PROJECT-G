@@ -6,6 +6,7 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Item/PickupItemBase.h"
 #include "UI/InventoryMainWidget.h"
+#include "UI/CastBarWidget.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -17,6 +18,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/DamageEvents.h"
 #include "Engine/OverlapResult.h"
+#include "TimerManager.h"
+#include "Engine/DataTable.h"
+#include "Engine/Texture2D.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -308,6 +312,13 @@ void AGun_phiriaCharacter::StartAiming()
 {
 	if (bIsInventoryOpen) return;
 
+	// 아이템 시전 중 조준을 시도하면 시전 취소
+	if (bIsCasting)
+	{
+		CancelCasting();
+		return;
+	}
+
 	bIsAiming = true;
 	if (FollowCamera) FollowCamera->SetActive(false);
 	if (ADSCamera) ADSCamera->SetActive(true);
@@ -323,6 +334,13 @@ void AGun_phiriaCharacter::StopAiming()
 void AGun_phiriaCharacter::Fire()
 {
 	if (bIsInventoryOpen) return;
+
+	if (bIsCasting)
+	{
+		CancelCasting();
+		return;
+	}
+
 	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
 
 	bIsFiring = true;
@@ -397,12 +415,28 @@ void AGun_phiriaCharacter::Die()
 	GetMesh()->SetSimulatePhysics(true);
 }
 
-void AGun_phiriaCharacter::ToggleCrouch() { if (!bIsProne) bIsCrouched ? UnCrouch() : Crouch(); }
+void AGun_phiriaCharacter::ToggleCrouch()
+{
+	// 시전 중 앉기/일어서기 시도 시 취소
+	if (bIsCasting)
+	{
+		CancelCasting();
+		return;
+	}
+	if (!bIsProne) bIsCrouched ? UnCrouch() : Crouch();
+}
+
 void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value) { TargetLean = Value.Get<float>(); }
 void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { TargetLean = 0.0f; }
 
 void AGun_phiriaCharacter::ToggleProne()
 {
+	if (bIsCasting)
+	{
+		CancelCasting();
+		return;
+	}
+
 	if (GetCharacterMovement()->IsFalling()) return;
 
 	if (bIsProne)
@@ -424,6 +458,13 @@ void AGun_phiriaCharacter::ToggleProne()
 
 void AGun_phiriaCharacter::CustomJump()
 {
+	// 아이템 시전 중 점프를 시도하면 시전 취소
+	if (bIsCasting)
+	{
+		CancelCasting();
+		return;
+	}
+
 	if (bIsChangingStance) return;
 	if (bIsProne) ToggleProne();
 	else if (bIsCrouched) UnCrouch();
@@ -622,4 +663,151 @@ TArray<APickupItemBase*> AGun_phiriaCharacter::GetNearbyItems()
 		}
 	}
 	return NearbyItems;
+}
+
+// --- StartCasting 함수 ---
+void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess)
+{
+	if (bIsCasting) CancelCasting();
+
+	bIsCasting = true;
+	OnCastSuccessCallback = OnSuccess;
+
+	OriginalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = CastingWalkSpeed;
+
+	// ==========================================
+	// 1. 데이터 테이블에서 아이템 아이콘 텍스처 가져오기
+	// ==========================================
+	UTexture2D* IconTexture = nullptr;
+	if (PlayerInventory && PlayerInventory->ItemDataTable)
+	{
+		// [주의] FItemData 구조체 안에 UTexture2D* ItemIcon 변수가 있다고 가정한 코드입니다. 변수명이 다르면 맞춰주세요!
+		FItemData* ItemInfo = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("GetIcon"));
+		if (ItemInfo)
+		{
+			IconTexture = ItemInfo->ItemIcon;
+		}
+	}
+
+	// ==========================================
+	// 2. C++ 위젯 생성 및 화면에 띄우기 (안전한 PlayerController 방식)
+	// ==========================================
+	if (CastBarWidgetClass)
+	{
+		if (!CastBarInstance)
+		{
+			// GetWorld() 대신 플레이어 컨트롤러를 명확하게 넘겨줍니다!
+			if (APlayerController* PC = Cast<APlayerController>(GetController()))
+			{
+				CastBarInstance = CreateWidget<UCastBarWidget>(PC, CastBarWidgetClass);
+			}
+		}
+
+		if (CastBarInstance && !CastBarInstance->IsInViewport())
+		{
+			CastBarInstance->AddToViewport();
+		}
+
+		if (CastBarInstance)
+		{
+			// C++ 위젯의 함수 직접 호출 (타이머 시작, 아이콘 적용)
+			CastBarInstance->StartCast(Duration, IconTexture);
+		}
+	}
+
+	// ==========================================
+	// 3. 타이머 로직
+	// ==========================================
+	GetWorldTimerManager().SetTimer(CastTimerHandle, [this]() {
+		bIsCasting = false;
+		GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
+
+		// 캐스팅 완료 시 화면에서 UI 제거
+		if (CastBarInstance && CastBarInstance->IsInViewport())
+		{
+			CastBarInstance->RemoveFromParent();
+		}
+
+		if (OnCastSuccessCallback) OnCastSuccessCallback();
+		}, Duration, false);
+}
+
+void AGun_phiriaCharacter::CancelCasting()
+{
+	if (!bIsCasting) return;
+
+	bIsCasting = false;
+	GetWorldTimerManager().ClearTimer(CastTimerHandle);
+	GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
+
+	// 취소 시 화면에서 UI 제거
+	if (CastBarInstance && CastBarInstance->IsInViewport())
+	{
+		CastBarInstance->RemoveFromParent();
+	}
+}
+
+void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
+{
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp) return;
+
+	// 1. 이미 버프가 걸려있다면? 기존 버프 수치를 빼고 타이머를 정지시킵니다.
+	if (bHasSpeedBuff)
+	{
+		GetWorldTimerManager().ClearTimer(SpeedBuffTimerHandle);
+		if (bIsCasting) OriginalWalkSpeed -= CurrentSpeedBoost;
+		else MoveComp->MaxWalkSpeed -= CurrentSpeedBoost;
+	}
+
+	// 2. 새로운 버프 적용 및 상태 갱신
+	bHasSpeedBuff = true;
+	CurrentSpeedBoost = BoostAmount;
+
+	if (bIsCasting) OriginalWalkSpeed += CurrentSpeedBoost;
+	else MoveComp->MaxWalkSpeed += CurrentSpeedBoost;
+
+	// 3. 타이머 새로 시작 (Duration 초 뒤에 원래 속도로 복구)
+	TWeakObjectPtr<AGun_phiriaCharacter> WeakThis(this);
+	GetWorldTimerManager().SetTimer(SpeedBuffTimerHandle, [WeakThis]()
+		{
+			if (WeakThis.IsValid())
+			{
+				WeakThis->bHasSpeedBuff = false;
+				if (WeakThis->bIsCasting) WeakThis->OriginalWalkSpeed -= WeakThis->CurrentSpeedBoost;
+				else WeakThis->GetCharacterMovement()->MaxWalkSpeed -= WeakThis->CurrentSpeedBoost;
+
+				WeakThis->CurrentSpeedBoost = 0.0f;
+			}
+		}, Duration, false);
+}
+
+void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
+{
+	// 1. 기존에 돌고 있던 회복 타이머가 있다면 즉시 정지 (초기화)
+	GetWorldTimerManager().ClearTimer(HOTTimerHandle);
+
+	// 2. 새로운 틱 계산
+	MaxHOTTicks = FMath::FloorToInt(Duration);
+	CurrentHOTTicks = 0;
+	HOTAmountPerTick = TotalHeal / Duration;
+
+	// 3. 1초마다 반복되는 타이머 새로 시작
+	TWeakObjectPtr<AGun_phiriaCharacter> WeakThis(this);
+	GetWorldTimerManager().SetTimer(HOTTimerHandle, [WeakThis]()
+		{
+			if (WeakThis.IsValid())
+			{
+				// 체력 회복
+				WeakThis->CurrentHealth = FMath::Clamp(WeakThis->CurrentHealth + WeakThis->HOTAmountPerTick, 0.0f, WeakThis->MaxHealth);
+				WeakThis->CurrentHOTTicks++;
+
+				// 목표 횟수에 도달하면 타이머 종료
+				if (WeakThis->CurrentHOTTicks >= WeakThis->MaxHOTTicks)
+				{
+					WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->HOTTimerHandle);
+				}
+			}
+		}, 1.0f, true);
 }
