@@ -20,9 +20,12 @@ void AGun_phiriaHUD::DrawHUD()
 	if (!PlayerChar) return;
 
 	// 1. Crosshair Logic
-	if (TObjectPtr<AWeaponBase> CurrentWeapon = PlayerChar->GetCurrentWeapon())
+	if (!PlayerChar->bIsCasting)
 	{
-		DrawCrosshair(PlayerChar, CurrentWeapon, Center);
+		if (TObjectPtr<AWeaponBase> CurrentWeapon = PlayerChar->GetCurrentWeapon())
+		{
+			DrawCrosshair(PlayerChar, CurrentWeapon, Center);
+		}
 	}
 
 	// 2. Health Bar Logic
