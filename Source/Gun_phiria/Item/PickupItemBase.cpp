@@ -5,20 +5,23 @@
 #include "Engine/DataTable.h"
 #include "../component/InventoryComponent.h"
 #include "../UI/InventoryMainWidget.h"
+#include "Components/SceneComponent.h"
 
 APickupItemBase::APickupItemBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	USceneComponent* DefaultRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DefaultRoot"));
+	RootComponent = DefaultRoot;
+
 	ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
-	RootComponent = ItemMesh;
-	ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // 라인트레이스에 맞도록 설정
+	ItemMesh->SetupAttachment(RootComponent); // 루트 아래로 들어갑니다!
+	ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	OverlapSphere = CreateDefaultSubobject<USphereComponent>(TEXT("OverlapSphere"));
 	OverlapSphere->SetupAttachment(RootComponent);
 	OverlapSphere->SetSphereRadius(150.0f);
 
-	// 기본값
 	Quantity = 1;
 }
 

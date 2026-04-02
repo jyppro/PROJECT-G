@@ -143,6 +143,9 @@ public:
 	UPROPERTY()
 	UCastBarWidget* CastBarInstance = nullptr;
 
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void UpdateEquipmentVisuals(EEquipType EquipType, class UStaticMesh* NewMesh);
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
@@ -268,6 +271,20 @@ protected:
 	// UI에서 재생할 기본 대기(Idle) 애니메이션 에셋
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<class UAnimationAsset> UI_IdleAnimation;
+
+	// --- 진짜 캐릭터 장비 메쉬 ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> HelmetMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> VestMesh;
+
+	// --- 인벤토리 UI용 가짜 몸통 장비 메쉬 ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> CloneHelmetMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> CloneVestMesh;
 
 private:
 	// --- Input Handlers ---

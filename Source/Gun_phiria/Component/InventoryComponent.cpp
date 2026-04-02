@@ -37,37 +37,58 @@ int32 UInventoryComponent::AddItem(FName ItemID, int32 Quantity)
 
 	if (AddableQuantity <= 0) return Quantity;
 
-	// =========================================================
-	// 1. 가방에 똑같은 아이템이 이미 있는지 먼저 확인 (겹치기)
-	// =========================================================
-	for (int32 i = 0; i < InventorySlots.Num(); i++)
-	{
-		// 빈 슬롯이 아니고, 아이템 ID가 일치한다면?
-		if (!InventorySlots[i].IsEmpty() && InventorySlots[i].ItemID == ItemID)
-		{
-			InventorySlots[i].Quantity += AddableQuantity;
-			CurrentWeight += (ItemInfo->ItemWeight * AddableQuantity);
+	int32 RemainingToAdd = AddableQuantity;
 
-			return Quantity - AddableQuantity;
+	// =========================================================
+	// 1. 가방에 똑같은 아이템이 이미 있는지 확인 (겹치기 시도)
+	// 장비처럼 MaxStackSize가 1인 아이템은 이 과정을 건너뜁니다.
+	// =========================================================
+	if (ItemInfo->MaxStackSize > 1)
+	{
+		for (int32 i = 0; i < InventorySlots.Num(); i++)
+		{
+			if (!InventorySlots[i].IsEmpty() && InventorySlots[i].ItemID == ItemID)
+			{
+				int32 SpaceLeft = ItemInfo->MaxStackSize - InventorySlots[i].Quantity;
+				if (SpaceLeft > 0)
+				{
+					int32 AmountToAdd = FMath::Min(RemainingToAdd, SpaceLeft);
+					InventorySlots[i].Quantity += AmountToAdd;
+					CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
+					RemainingToAdd -= AmountToAdd;
+
+					if (RemainingToAdd <= 0) return Quantity - AddableQuantity;
+				}
+			}
 		}
 	}
 
 	// =========================================================
-	// 2. 똑같은 아이템이 없다면 빈 슬롯을 찾아서 새로 넣기
+	// 2. 그래도 남은 수량이 있다면 빈 슬롯을 찾아서 새로 넣기
+	// (장비 아이템은 항상 여기로 와서 빈 슬롯을 차지합니다)
 	// =========================================================
 	for (int32 i = 0; i < InventorySlots.Num(); i++)
 	{
 		if (InventorySlots[i].IsEmpty())
 		{
 			InventorySlots[i].ItemID = ItemID;
-			InventorySlots[i].Quantity = AddableQuantity;
-			CurrentWeight += (ItemInfo->ItemWeight * AddableQuantity);
 
-			return Quantity - AddableQuantity;
+			// 이 슬롯에 넣을 개수 (최대 스택을 넘지 않도록)
+			int32 AmountToAdd = FMath::Min(RemainingToAdd, ItemInfo->MaxStackSize);
+			InventorySlots[i].Quantity = AmountToAdd;
+
+			// 획득 시 최대 내구도로 초기화
+			InventorySlots[i].CurrentDurability = ItemInfo->MaxDurability;
+
+			CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
+			RemainingToAdd -= AmountToAdd;
+
+			if (RemainingToAdd <= 0) return Quantity - AddableQuantity;
 		}
 	}
 
-	return Quantity;
+	// 가방 칸이 부족해서 남은 수량 반환
+	return (Quantity - AddableQuantity) + RemainingToAdd;
 }
 
 bool UInventoryComponent::RemoveItem(FName ItemID, int32 Quantity)
@@ -177,25 +198,86 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 	case EItemType::Equipment:
 	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Cyan, TEXT("장비 장착 시도!"));
+		int32 TargetIndex = -1;
+		float TargetDurability = 0.0f;
+		for (int32 i = 0; i < InventorySlots.Num(); i++)
+		{
+			if (InventorySlots[i].ItemID == UseItemID && InventorySlots[i].Quantity > 0)
+			{
+				TargetIndex = i;
+				TargetDurability = InventorySlots[i].CurrentDurability;
+				break;
+			}
+		}
+
+		if (TargetIndex != -1)
+		{
+			FName OldEquipID = NAME_None;
+			float OldDurability = 0.0f;
+
+			if (ItemInfo->EquipType == EEquipType::Helmet)
+			{
+				OldEquipID = EquippedHelmetID;
+				OldDurability = CurrentHelmetDurability;
+				EquippedHelmetID = UseItemID;
+				CurrentHelmetDurability = TargetDurability;
+			}
+			else if (ItemInfo->EquipType == EEquipType::Vest)
+			{
+				OldEquipID = EquippedVestID;
+				OldDurability = CurrentVestDurability;
+				EquippedVestID = UseItemID;
+				CurrentVestDurability = TargetDurability;
+			}
+
+			if (OldEquipID.IsNone())
+			{
+				InventorySlots[TargetIndex].Quantity--;
+				if (InventorySlots[TargetIndex].Quantity <= 0)
+				{
+					InventorySlots[TargetIndex].ItemID = NAME_None;
+					InventorySlots[TargetIndex].CurrentDurability = 0.0f;
+				}
+				CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
+			}
+			else
+			{
+				InventorySlots[TargetIndex].ItemID = OldEquipID;
+				InventorySlots[TargetIndex].Quantity = 1;
+				InventorySlots[TargetIndex].CurrentDurability = OldDurability;
+
+				if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeight")))
+				{
+					CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight + OldItemInfo->ItemWeight);
+				}
+			}
+
+			// =======================================================
+			// [추가] 3D 메쉬 시각적 업데이트 호출
+			// =======================================================
+			Player->UpdateEquipmentVisuals(ItemInfo->EquipType, ItemInfo->EquipmentMesh);
+
+			bUseSuccess = true;
+		}
 		break;
 	}
 
 	case EItemType::Weapon:
-	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("무기 장착 시도!"));
+		// ... 무기 로직 ...
 		break;
-	}
 
 	default:
 		break;
 	}
 
-	// 4. 사용/장착에 성공했다면 아이템을 소모하고 UI를 갱신합니다.
+	// 4. 사용/장착에 성공했다면 UI 갱신 및 소비 로직
 	if (bUseSuccess)
 	{
-		// 이 부분은 캐스팅 없이 즉시 사용(UseItem이 true 반환)되는 아이템을 위한 로직입니다.
-		RemoveItem(UseItemID, 1);
+		// [수정됨] 장비(Equipment)는 위에서 직접 슬롯을 교체/삭제했으므로 여기서 또 RemoveItem을 호출하면 안 됩니다!
+		if (ItemInfo->ItemType != EItemType::Equipment)
+		{
+			RemoveItem(UseItemID, 1);
+		}
 
 		if (Player->bIsInventoryOpen && Player->InventoryWidgetInstance)
 		{

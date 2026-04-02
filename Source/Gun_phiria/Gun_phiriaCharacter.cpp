@@ -90,6 +90,28 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 
 	InventoryCloneMesh->bVisibleInSceneCaptureOnly = true;
 	InventoryCloneMesh->SetCastShadow(false);
+
+	// ==========================================
+	// 진짜 캐릭터 장비 컴포넌트
+	// ==========================================
+	HelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HelmetMesh"));
+	// GetMesh()의 "head" 소켓(뼈)에 부착합니다. (SetLeaderPoseComponent는 삭제!)
+	HelmetMesh->SetupAttachment(GetMesh(), FName("head"));
+
+	VestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VestMesh"));
+	// GetMesh()의 가슴 부위 뼈에 부착합니다.
+	VestMesh->SetupAttachment(GetMesh(), FName("spine_03"));
+
+	// ==========================================
+	// UI용 가짜 몸통 장비 컴포넌트
+	// ==========================================
+	CloneHelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneHelmetMesh"));
+	CloneHelmetMesh->SetupAttachment(InventoryCloneMesh, FName("head"));
+	CloneHelmetMesh->bVisibleInSceneCaptureOnly = true;
+
+	CloneVestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneVestMesh"));
+	CloneVestMesh->SetupAttachment(InventoryCloneMesh, FName("spine_03"));
+	CloneVestMesh->bVisibleInSceneCaptureOnly = true;
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -810,4 +832,23 @@ void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
 				}
 			}
 		}, 1.0f, true);
+}
+
+void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticMesh* NewMesh)
+{
+	switch (EquipType)
+	{
+	case EEquipType::Helmet:
+		if (HelmetMesh) HelmetMesh->SetStaticMesh(NewMesh);
+		if (CloneHelmetMesh) CloneHelmetMesh->SetStaticMesh(NewMesh);
+		break;
+
+	case EEquipType::Vest:
+		if (VestMesh) VestMesh->SetStaticMesh(NewMesh);
+		if (CloneVestMesh) CloneVestMesh->SetStaticMesh(NewMesh);
+		break;
+
+	default:
+		break;
+	}
 }

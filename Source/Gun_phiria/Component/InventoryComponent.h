@@ -21,6 +21,15 @@ enum class EItemType : uint8
 	Misc			UMETA(DisplayName = "Misc")
 };
 
+UENUM(BlueprintType)
+enum class EEquipType : uint8
+{
+	None			UMETA(DisplayName = "None"),
+	Helmet			UMETA(DisplayName = "Helmet"),
+	Vest			UMETA(DisplayName = "Vest"),
+	Backpack		UMETA(DisplayName = "Backpack")
+};
+
 USTRUCT(BlueprintType)
 struct FItemData : public FTableRowBase
 {
@@ -65,12 +74,28 @@ public:
 
 	// [장비용] 캐릭터에게 입힐 3D 모델 (헬멧, 조끼, 가방 메쉬)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
-	TObjectPtr<class USkeletalMesh> EquipmentMesh;
+	TObjectPtr<class UStaticMesh> EquipmentMesh;
 
 	// [장비 & 아티팩트용] 범용 스탯 보너스 수치
 	// (예: 조끼면 방어력 50 증가, 가방이면 용량 50 증가, 아티팩트면 데미지 10% 증가 등)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Stats")
 	float StatBonus = 0.0f;
+
+	// ==========================================
+	// [추가] 장비 전용 스탯
+	// ==========================================
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	EEquipType EquipType = EEquipType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	int32 ItemLevel = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	float MaxDurability = 100.0f;
+
+	// 방어력 (예: 0.3 이면 30% 데미지 감소)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	float DefensePower = 0.0f;
 };
 
 // ========================================================
@@ -87,6 +112,10 @@ struct FInventorySlot
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 Quantity = 0;
+
+	// [추가] 현재 이 슬롯에 있는 아이템의 남은 내구도
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CurrentDurability = 0.0f;
 
 	// 빈 슬롯인지 확인하는 헬퍼 함수
 	bool IsEmpty() const { return Quantity <= 0 || ItemID.IsNone(); }
@@ -130,6 +159,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void UseItemByID(FName UseItemID);
+
+	// ==========================================
+	// [추가] 현재 착용 중인 장비 정보
+	// ==========================================
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Helmet")
+	FName EquippedHelmetID = NAME_None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Helmet")
+	float CurrentHelmetDurability = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Vest")
+	FName EquippedVestID = NAME_None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Vest")
+	float CurrentVestDurability = 0.0f;
 
 protected:
 	virtual void BeginPlay() override;

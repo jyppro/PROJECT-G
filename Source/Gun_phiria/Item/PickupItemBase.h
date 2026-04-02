@@ -22,7 +22,7 @@ public:
 
 protected:
 	// 눈에 보이는 모델링
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	class UStaticMeshComponent* ItemMesh;
 
 	// 상호작용 범위를 인식할 콜리전 (선택사항, 트레이스로만 할거면 없어도 무방)
