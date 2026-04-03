@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Image.h"
+#include "DropZoneWidget.h"
 #include "InventoryMainWidget.generated.h"
 
 // 전방 선언을 통해 헤더 포함을 최소화합니다.
@@ -26,6 +28,12 @@ public:
 	// 슬롯에서 호출할 함수
 	void ShowTooltip(FName ItemID, UDataTable* DataTable);
 	void HideTooltip();
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Equipment")
+	void UpdateEquipmentUI();
+
+	// 드롭존이 호출할 마스터 처리 함수
+	void HandleItemDrop(class UItemDragOperation* Operation, EDropZoneType TargetZone);
 
 protected:
 	// 초기화 및 타이머 설정
@@ -57,6 +65,14 @@ protected:
 	// 에디터에서 설정할 툴팁 클래스
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory | Settings")
 	TSubclassOf<class UItemTooltipWidget> TooltipClass;
+
+	// 위젯 블루프린트에서 만든 이미지의 이름(IMG_EquippedVest)과 정확히 똑같아야 연결됨!
+	UPROPERTY(meta = (BindWidget))
+	class UImage* IMG_EquippedVest;
+
+	// virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	// 
+
 
 private:
 	// 주기적으로 주변 아이템을 검사하는 함수

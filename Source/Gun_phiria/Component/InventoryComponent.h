@@ -72,6 +72,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
 	TSubclassOf<class AWeaponBase> WeaponClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Drop")
+	TSubclassOf<class APickupItemBase> ItemClass;
+
 	// [장비용] 캐릭터에게 입힐 3D 모델 (헬멧, 조끼, 가방 메쉬)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
 	TObjectPtr<class UStaticMesh> EquipmentMesh;
@@ -174,6 +177,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Vest")
 	float CurrentVestDurability = 0.0f;
+
+	// 장착된 아이템을 해제하는 함수
+	void UnequipItemByID(FName ItemID);
 
 protected:
 	virtual void BeginPlay() override;

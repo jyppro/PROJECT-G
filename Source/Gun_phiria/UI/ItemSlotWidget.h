@@ -24,11 +24,11 @@ public:
 	TSubclassOf<UUserWidget> TooltipWidgetClass;
 
 	// 이 슬롯이 바닥에 있는 아이템인지 체크하는 변수
-	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	bool bIsVicinitySlot = false;
 
 	// [추가된 부분] 바닥에 있는 실제 아이템 액터를 가리키는 포인터
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	APickupItemBase* TargetItemActor = nullptr;
 
 protected:
@@ -40,14 +40,14 @@ protected:
 	// 마우스가 나갈 때 (이 줄이 빠져있었습니다!)
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	FName CurrentItemID;
 
 	// ==========================================
 	// C++ UI 바인딩 (이름이 블루프린트 UI 이름과 완전히 똑같아야 합니다!)
 	// ==========================================
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UImage* IMG_ItemIcon;
 
 	UPROPERTY(meta = (BindWidget))

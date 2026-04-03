@@ -230,27 +230,39 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 				CurrentVestDurability = TargetDurability;
 			}
 
+			// 3. 인벤토리 슬롯 조작 및 가방 용량/무게 계산
 			if (OldEquipID.IsNone())
 			{
+				// 기존에 입고 있던 게 없으면
 				InventorySlots[TargetIndex].Quantity--;
 				if (InventorySlots[TargetIndex].Quantity <= 0)
 				{
 					InventorySlots[TargetIndex].ItemID = NAME_None;
 					InventorySlots[TargetIndex].CurrentDurability = 0.0f;
 				}
+				// 가방 무게는 줄이고, 조끼의 StatBonus(+50)만큼 가방 최대 용량(MaxWeight)을 늘려줍니다.
 				CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
+				MaxWeight += ItemInfo->StatBonus;
 			}
 			else
 			{
+				// 스왑(교체)하는 경우
 				InventorySlots[TargetIndex].ItemID = OldEquipID;
 				InventorySlots[TargetIndex].Quantity = 1;
 				InventorySlots[TargetIndex].CurrentDurability = OldDurability;
 
 				if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeight")))
 				{
+					// 무게 재계산
 					CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight + OldItemInfo->ItemWeight);
+
+					// 기존 조끼가 올려주던 용량을 빼고, 새 조끼의 용량을 더해줍니다.
+					MaxWeight = MaxWeight - OldItemInfo->StatBonus + ItemInfo->StatBonus;
 				}
 			}
+
+			// 3D 메쉬 시각적 업데이트 호출
+			Player->UpdateEquipmentVisuals(ItemInfo->EquipType, ItemInfo->EquipmentMesh);
 
 			// =======================================================
 			// [추가] 3D 메쉬 시각적 업데이트 호출
@@ -287,4 +299,36 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 			}
 		}
 	}
+}
+
+void UInventoryComponent::UnequipItemByID(FName ItemID)
+{
+	if (ItemID.IsNone() || !ItemDataTable) return;
+
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner());
+	if (!Player) return;
+
+	FItemData* ItemData = ItemDataTable->FindRow<FItemData>(ItemID, TEXT("Unequip"));
+	if (!ItemData) return;
+
+	// 1. 조끼 해제
+	if (EquippedVestID == ItemID)
+	{
+		EquippedVestID = NAME_None;
+		MaxWeight -= ItemData->StatBonus; // 깎였던 가방 최대 용량 원상복구!
+		Player->UpdateEquipmentVisuals(EEquipType::Vest, nullptr); // 캐릭터 메쉬 벗기기
+	}
+	// 2. 헬멧 해제 (구현되어 있다면)
+	else if (EquippedHelmetID == ItemID)
+	{
+		EquippedHelmetID = NAME_None;
+		Player->UpdateEquipmentVisuals(EEquipType::Helmet, nullptr);
+	}
+	else
+	{
+		return; // 장착 부위가 아니면 무시
+	}
+
+	// 3. 벗은 아이템을 가방에 추가 (무게도 AddItem에서 알아서 늘어날 것입니다!)
+	AddItem(ItemID, 1);
 }

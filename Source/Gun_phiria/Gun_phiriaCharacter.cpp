@@ -91,26 +91,18 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	InventoryCloneMesh->bVisibleInSceneCaptureOnly = true;
 	InventoryCloneMesh->SetCastShadow(false);
 
-	// ==========================================
-	// 진짜 캐릭터 장비 컴포넌트
-	// ==========================================
 	HelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HelmetMesh"));
-	// GetMesh()의 "head" 소켓(뼈)에 부착합니다. (SetLeaderPoseComponent는 삭제!)
-	HelmetMesh->SetupAttachment(GetMesh(), FName("head"));
+	HelmetMesh->SetupAttachment(GetMesh(), FName("HelmetSocket"));
 
 	VestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VestMesh"));
-	// GetMesh()의 가슴 부위 뼈에 부착합니다.
-	VestMesh->SetupAttachment(GetMesh(), FName("spine_03"));
+	VestMesh->SetupAttachment(GetMesh(), FName("VestSocket"));
 
-	// ==========================================
-	// UI용 가짜 몸통 장비 컴포넌트
-	// ==========================================
 	CloneHelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneHelmetMesh"));
-	CloneHelmetMesh->SetupAttachment(InventoryCloneMesh, FName("head"));
+	CloneHelmetMesh->SetupAttachment(InventoryCloneMesh, FName("HelmetSocket"));
 	CloneHelmetMesh->bVisibleInSceneCaptureOnly = true;
 
 	CloneVestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneVestMesh"));
-	CloneVestMesh->SetupAttachment(InventoryCloneMesh, FName("spine_03"));
+	CloneVestMesh->SetupAttachment(InventoryCloneMesh, FName("VestSocket"));
 	CloneVestMesh->bVisibleInSceneCaptureOnly = true;
 }
 
@@ -156,8 +148,11 @@ void AGun_phiriaCharacter::BeginPlay()
 
 	if (InventoryCamera)
 	{
+		// [핵심] 카메라가 "내가 지정한 컴포넌트만 찍겠다(ShowOnlyList)"고 선언하는 필수 설정입니다.
 		InventoryCamera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 		InventoryCamera->ShowOnlyComponent(InventoryCloneMesh);
+		if (CloneHelmetMesh) InventoryCamera->ShowOnlyComponent(CloneHelmetMesh);
+		if (CloneVestMesh) InventoryCamera->ShowOnlyComponent(CloneVestMesh);
 	}
 }
 
@@ -414,15 +409,90 @@ float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
 	if (bIsDead) return 0.0f;
 
 	float ActualDamage = DamageAmount;
+	bool bIsHeadshot = false;
+	FName HitBoneName = NAME_None;
+
+	// 1. 맞은 부위(뼈 이름) 확인 및 헤드샷 판별
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
-		if (static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName == FName("head")) ActualDamage *= 2.5f;
+		HitBoneName = static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName;
+
+		// 화면에 맞은 부위 출력 (흰색)
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::White, FString::Printf(TEXT("피격 부위: %s / 초기 데미지: %.1f"), *HitBoneName.ToString(), ActualDamage));
+
+		if (HitBoneName == FName("head"))
+		{
+			ActualDamage *= 2.5f;
+			bIsHeadshot = true;
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("!!! 헤드샷 !!! 증폭된 데미지: %.1f"), ActualDamage));
+		}
 	}
 
+	// ==========================================
+	// 2. 장비(조끼/헬멧) 방어력 및 내구도 적용 로직 (배틀그라운드 방식)
+	// ==========================================
+
+	// 방어구에 의해 깎이기 전의 '원본 데미지'를 기억해둡니다.
+	float OriginalDamage = ActualDamage;
+
+	if (PlayerInventory)
+	{
+		if (bIsHeadshot && !PlayerInventory->EquippedHelmetID.IsNone())
+		{
+			// (나중에 헬멧 로직 추가 시 여기도 똑같이 적용)
+		}
+		else if (!bIsHeadshot && !PlayerInventory->EquippedVestID.IsNone())
+		{
+			if (FItemData* VestData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedVestID, TEXT("VestDefense")))
+			{
+				// [배그 매커니즘 1] 내구도가 1이라도 남아있다면, 정해진 방어율(예: 55%)만큼 무조건 데미지를 깎아줍니다.
+				float BlockedDamage = OriginalDamage * VestData->DefensePower;
+				ActualDamage -= BlockedDamage;
+
+				// [배그 매커니즘 2] 조끼의 내구도는 '막아낸 수치'가 아니라, '적의 원본 데미지(OriginalDamage)'만큼 통째로 깎입니다.
+				PlayerInventory->CurrentVestDurability -= OriginalDamage;
+
+				// 디버그 출력 (청록색)
+				if (GEngine)
+				{
+					FString DebugMsg = FString::Printf(TEXT("[Vest Defense] % .1f Damage Blocked!/ Remaining Durability : % .1f"), BlockedDamage, PlayerInventory->CurrentVestDurability);
+					GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, DebugMsg);
+				}
+
+				if (PlayerInventory->CurrentVestDurability <= 0.0f)
+				{
+					PlayerInventory->MaxWeight -= VestData->StatBonus;
+					PlayerInventory->EquippedVestID = NAME_None;
+					PlayerInventory->CurrentVestDurability = 0.0f;
+					UpdateEquipmentVisuals(EEquipType::Vest, nullptr);
+
+					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Vest Destroyed !!!"));
+
+					// ==========================================
+					// [여기에 추가] 인벤토리가 열려있을 때 파괴되면 UI 즉시 갱신
+					// ==========================================
+					if (bIsInventoryOpen && InventoryWidgetInstance)
+					{
+						if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
+						{
+							MainWidget->UpdateEquipmentUI(); // 조끼가 파괴되었으니 아이콘을 즉시 지움!
+						}
+					}
+				}
+			}
+		}
+	}
+	// ==========================================
+
+	// 3. 최종 데미지 적용
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
 	if (HitMontages.Num() > 0) PlayAnimMontage(HitMontages[FMath::RandRange(0, HitMontages.Num() - 1)]);
 
 	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
+
+	// 화면에 최종 결과 출력 (빨간색)
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, FString::Printf(TEXT("-> Player Final Attack Damage: %.1f / Remain Health: %.1f"), ActualDamage, CurrentHealth));
+
 	if (CurrentHealth <= 0.0f) Die();
 
 	return ActualDamage;
@@ -850,5 +920,37 @@ void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticM
 
 	default:
 		break;
+	}
+}
+
+void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
+{
+	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
+
+	// 1. 인벤토리에서 해당 아이템 1개 제거 (무게 감소까지 완벽하게 처리됨!)
+	bool bRemoved = PlayerInventory->RemoveItem(ItemID, 1);
+	if (!bRemoved) return;
+
+	// 2. 데이터 테이블에서 스폰할 3D 아이템 클래스 가져오기
+	FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropItem"));
+
+	// [중요] FItemData 구조체 안에 TSubclassOf<APickupItemBase> ItemClass 변수가 존재해야 합니다!
+	if (ItemData && ItemData->ItemClass)
+	{
+		// 3. 내 캐릭터 앞쪽 바닥 위치 계산
+		FVector SpawnLoc = GetActorLocation() + (GetActorForwardVector() * 100.0f);
+		SpawnLoc.Z -= 80.0f; // 캡슐 바닥 쪽으로 내림
+
+		// 4. 월드에 아이템 액터 스폰
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		APickupItemBase* DroppedItem = GetWorld()->SpawnActor<APickupItemBase>(ItemData->ItemClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+
+		if (DroppedItem)
+		{
+			DroppedItem->ItemID = ItemID;
+			DroppedItem->Quantity = 1;
+		}
 	}
 }

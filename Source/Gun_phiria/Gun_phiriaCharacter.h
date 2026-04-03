@@ -146,6 +146,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
 	void UpdateEquipmentVisuals(EEquipType EquipType, class UStaticMesh* NewMesh);
 
+	// 아이템을 바닥에 버리는(스폰하는) 함수
+	void DropItemToGround(FName ItemID);
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
