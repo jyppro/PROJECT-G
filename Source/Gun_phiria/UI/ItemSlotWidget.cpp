@@ -6,7 +6,10 @@
 #include "../component/InventoryComponent.h"
 #include "InventoryMainWidget.h"
 #include "Components/PanelWidget.h"
+#include "ItemDragOperation.h"
 #include "../Item/PickupItemBase.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "DragVisualWidget.h"
 
 // FItemData 구조체가 정의된 헤더를 반드시 포함해야 합니다! 
 // (본인의 프로젝트 경로에 맞게 수정해 주세요. 예: #include "Item/ItemData.h")
@@ -14,47 +17,44 @@
 
 void UItemSlotWidget::SetItemInfo(FName InItemID, int32 InQuantity)
 {
-	// 1. 아이템 ID 저장 (우클릭 사용을 위해)
 	CurrentItemID = InItemID;
+	CurrentQuantity = InQuantity;
 
-	// 2. 수량 텍스트 업데이트 (숫자를 텍스트로 변환)
-	if (TXT_ItemQuantity)
+	// 아이템이 없으면 UI 숨기기
+	if (CurrentItemID.IsNone() || CurrentQuantity <= 0)
 	{
-		TXT_ItemQuantity->SetText(FText::AsNumber(InQuantity));
-	}
-
-	// 3. 데이터 테이블이 에디터에서 잘 연결되었는지 확인
-	if (!ItemDataTable)
-	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("ItemSlotWidget에 데이터 테이블(ItemDataTable)이 설정되지 않았습니다!"));
+		if (IMG_ItemIcon) IMG_ItemIcon->SetVisibility(ESlateVisibility::Hidden);
+		if (TXT_ItemName) TXT_ItemName->SetVisibility(ESlateVisibility::Hidden);
+		if (TXT_ItemQuantity) TXT_ItemQuantity->SetVisibility(ESlateVisibility::Hidden);
 		return;
 	}
 
-	// 4. 데이터 테이블에서 아이템 정보 검색
-	static const FString ContextString(TEXT("Item Slot Lookup"));
-	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(InItemID, ContextString);
-
-	// 5. 아이템을 찾았다면 UI에 정보 적용
-	if (ItemInfo)
+	// 데이터 테이블 기반 UI 갱신
+	if (ItemDataTable)
 	{
-		// 아이콘 이미지 변경
-		if (IMG_ItemIcon && ItemInfo->ItemIcon)
+		FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(CurrentItemID, TEXT("SlotUpdate"));
+		if (ItemInfo)
 		{
-			IMG_ItemIcon->SetBrushFromTexture(ItemInfo->ItemIcon);
-		}
+			if (IMG_ItemIcon && ItemInfo->ItemIcon)
+			{
+				IMG_ItemIcon->SetBrushFromTexture(ItemInfo->ItemIcon);
+				IMG_ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			}
 
-		// 아이템 이름 변경
-		if (TXT_ItemName)
-		{
-			// 만약 FItemData의 ItemName이 FString이면 FText::FromString(ItemInfo->ItemName)을 사용하세요.
-			// FText로 선언되어 있다면 그대로 ItemInfo->ItemName 을 사용하시면 됩니다.
-			TXT_ItemName->SetText(ItemInfo->ItemName);
+			if (TXT_ItemName)
+			{
+				TXT_ItemName->SetText(ItemInfo->ItemName);
+				TXT_ItemName->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			}
 		}
 	}
-	else
+
+	// 수량 표시
+	if (TXT_ItemQuantity)
 	{
-		// 아이템을 찾지 못했을 때의 예외 처리 (디버그용)
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("데이터 테이블에서 아이템을 찾을 수 없습니다: %s"), *InItemID.ToString()));
+		TXT_ItemQuantity->SetText(FText::AsNumber(CurrentQuantity));
+		// 1개보다 많을 때만 수량 텍스트를 보여줌
+		TXT_ItemQuantity->SetVisibility(CurrentQuantity > 1 ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Hidden);
 	}
 }
 
@@ -93,39 +93,103 @@ void UItemSlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 
 FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	if (CurrentItemID.IsNone()) return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+
+	// [1] 우클릭 (빠른 이동 및 장착/사용 로직)
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn()))
+		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+		if (Player && Player->PlayerInventory)
 		{
 			if (bIsVicinitySlot)
 			{
-				// [바닥 슬롯] 우클릭 -> 인벤토리에 넣기 (습득)
-				int32 Remainder = Player->PlayerInventory->AddItem(CurrentItemID, 1);
-
-				if (Remainder == 0) // 가방 공간이 있어서 성공했다면
-				{
-					if (TargetItemActor && IsValid(TargetItemActor))
-					{
-						TargetItemActor->Destroy();
-						TargetItemActor = nullptr;
-					}
-
-					if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
-					{
-						// (지웠던 HideTooltip의 빈자리. 이제 MainUI가 알아서 꺼줍니다!)
-						MainUI->RefreshInventory();
-						MainUI->ForceNearbyRefresh();
-					}
-				}
+				// 바닥 -> 가방 (줍기)
+				Player->PlayerInventory->AddItem(CurrentItemID, CurrentQuantity);
+				if (TargetItemActor) TargetItemActor->Destroy();
+			}
+			else if (bIsEquipSlot)
+			{
+				// 장착 -> 가방 (장비 해제)
+				Player->PlayerInventory->UnequipItemByID(CurrentItemID);
 			}
 			else
 			{
-				// [가방 슬롯] 우클릭 -> 아이템 사용
-				// (여기도 HideTooltip 삭제 완료!)
+				// 가방 -> 장착 또는 사용
 				Player->PlayerInventory->UseItemByID(CurrentItemID);
 			}
-			return FReply::Handled();
+
+			// UI 새로고침
+			if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+			{
+				MainUI->RefreshInventory();
+				MainUI->ForceNearbyRefresh();
+			}
 		}
+		return FReply::Handled();
 	}
+
+	// [2] 좌클릭 (드래그 감지 시작 - Detect Drag If Pressed 대체)
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+	}
+
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UItemSlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
+{
+	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+
+	if (CurrentItemID.IsNone()) return;
+
+	UItemDragOperation* DragOp = NewObject<UItemDragOperation>(this);
+	if (DragOp)
+	{
+		DragOp->DraggedItemID = CurrentItemID;
+		DragOp->bIsFromGround = bIsVicinitySlot;
+		DragOp->bIsFromEquip = bIsEquipSlot;
+		DragOp->DraggedActor = TargetItemActor;
+
+		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+		if (Player && Player->PlayerInventory && DragVisualClass)
+		{
+			UDragVisualWidget* DragVisual = CreateWidget<UDragVisualWidget>(GetOwningPlayer(), DragVisualClass);
+
+			if (DragVisual)
+			{
+				// 안전하게 PlayerInventory의 데이터 테이블을 사용
+				FItemData* ItemInfo = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(CurrentItemID, TEXT("DragVisual Setup"));
+				if (ItemInfo && ItemInfo->ItemIcon)
+				{
+					DragVisual->SetDragIcon(ItemInfo->ItemIcon);
+				}
+
+				// ========================================================
+				// [핵심 해결책] 엔진이 위젯 크기(100x100)를 즉시 계산하도록 강제!
+				// (이 한 줄이 0,0에서 날아오는 버그와 멈춤 버그를 모두 고칩니다)
+				// ========================================================
+				DragVisual->ForceLayoutPrepass();
+
+				DragOp->DefaultDragVisual = DragVisual;
+				DragOp->Pivot = EDragPivot::CenterCenter; // CenterCenter로 복구
+			}
+		}
+
+		OutOperation = DragOp;
+	}
+}
+
+void UItemSlotWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+	Super::NativeOnDragCancelled(InDragDropEvent, InOperation);
+
+	UItemDragOperation* DragOp = Cast<UItemDragOperation>(InOperation);
+	UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>();
+
+	if (DragOp && MainUI)
+	{
+		// 드래그가 취소되었다 = 바닥 영역에 마우스를 놨다!
+		MainUI->HandleItemDrop(DragOp, EDropZoneType::Nearby);
+	}
 }

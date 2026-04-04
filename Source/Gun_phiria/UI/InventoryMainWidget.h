@@ -10,6 +10,7 @@
 class UScrollBox;
 class APickupItemBase;
 class UItemSlotWidget; // 이전에 만든 슬롯 위젯 클래스
+class UDragVisualWidget;
 
 UCLASS()
 class GUN_PHIRIA_API UInventoryMainWidget : public UUserWidget
@@ -66,13 +67,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory | Settings")
 	TSubclassOf<class UItemTooltipWidget> TooltipClass;
 
-	// 위젯 블루프린트에서 만든 이미지의 이름(IMG_EquippedVest)과 정확히 똑같아야 연결됨!
 	UPROPERTY(meta = (BindWidget))
-	class UImage* IMG_EquippedVest;
+	UItemSlotWidget* WBP_VestSlot;
 
-	// virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
-	// 
+	UPROPERTY(meta = (BindWidget))
+	UItemSlotWidget* WBP_HelmetSlot;
 
+	UPROPERTY(meta = (BindWidget))
+	UItemSlotWidget* WBP_BackpackSlot;
+
+	UPROPERTY(meta = (BindWidget))
+	UImage* IMG_CharacterPreview;
+
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Drag And Drop")
+	TSubclassOf<UDragVisualWidget> DragVisualClass;
+
+	// [추가] 드래그가 어떤 드롭존에도 들어가지 못하고 취소되었을 때 호출되는 함수
+	virtual void NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 
 private:
 	// 주기적으로 주변 아이템을 검사하는 함수
@@ -87,4 +100,7 @@ private:
 
 	UPROPERTY()
 	UItemTooltipWidget* CachedTooltip;
+
+	// 장착 칸에서 드래그를 시작할 때 어떤 장비를 잡았는지 기억하는 변수
+	FName DraggedEquipmentID;
 };

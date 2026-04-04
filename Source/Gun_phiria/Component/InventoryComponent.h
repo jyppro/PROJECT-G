@@ -178,6 +178,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Vest")
 	float CurrentVestDurability = 0.0f;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Backpack")
+	FName EquippedBackpackID = NAME_None;
+
 	// 장착된 아이템을 해제하는 함수
 	void UnequipItemByID(FName ItemID);
 

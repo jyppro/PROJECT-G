@@ -282,12 +282,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
 	TObjectPtr<class UStaticMeshComponent> VestMesh;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> BackpackMesh;
+
 	// --- 인벤토리 UI용 가짜 몸통 장비 메쉬 ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
 	TObjectPtr<class UStaticMeshComponent> CloneHelmetMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
 	TObjectPtr<class UStaticMeshComponent> CloneVestMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> CloneBackpackMesh;
 
 private:
 	// --- Input Handlers ---

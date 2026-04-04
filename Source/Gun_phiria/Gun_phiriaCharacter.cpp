@@ -97,6 +97,9 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	VestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VestMesh"));
 	VestMesh->SetupAttachment(GetMesh(), FName("VestSocket"));
 
+	BackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BackpackMesh"));
+	BackpackMesh->SetupAttachment(GetMesh(), FName("BackpackSocket")); // 规陛 父电 家南 捞抚
+
 	CloneHelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneHelmetMesh"));
 	CloneHelmetMesh->SetupAttachment(InventoryCloneMesh, FName("HelmetSocket"));
 	CloneHelmetMesh->bVisibleInSceneCaptureOnly = true;
@@ -104,6 +107,10 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	CloneVestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneVestMesh"));
 	CloneVestMesh->SetupAttachment(InventoryCloneMesh, FName("VestSocket"));
 	CloneVestMesh->bVisibleInSceneCaptureOnly = true;
+
+	CloneBackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneBackpackMesh"));
+	CloneBackpackMesh->SetupAttachment(InventoryCloneMesh, FName("BackpackSocket"));
+	CloneBackpackMesh->bVisibleInSceneCaptureOnly = true;
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -153,6 +160,7 @@ void AGun_phiriaCharacter::BeginPlay()
 		InventoryCamera->ShowOnlyComponent(InventoryCloneMesh);
 		if (CloneHelmetMesh) InventoryCamera->ShowOnlyComponent(CloneHelmetMesh);
 		if (CloneVestMesh) InventoryCamera->ShowOnlyComponent(CloneVestMesh);
+		if (CloneBackpackMesh) InventoryCamera->ShowOnlyComponent(CloneBackpackMesh);
 	}
 }
 
@@ -916,6 +924,11 @@ void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticM
 	case EEquipType::Vest:
 		if (VestMesh) VestMesh->SetStaticMesh(NewMesh);
 		if (CloneVestMesh) CloneVestMesh->SetStaticMesh(NewMesh);
+		break;
+
+	case EEquipType::Backpack:
+		if (BackpackMesh) BackpackMesh->SetStaticMesh(NewMesh);
+		if (CloneBackpackMesh) CloneBackpackMesh->SetStaticMesh(NewMesh);
 		break;
 
 	default:

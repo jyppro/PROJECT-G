@@ -154,7 +154,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 {
 	if (UseItemID.IsNone() || !ItemDataTable) return;
 
-	// 1. 가방 안에 진짜 이 아이템이 있는지 먼저 검사!
 	bool bHasItem = false;
 	for (int32 i = 0; i < InventorySlots.Num(); i++)
 	{
@@ -167,7 +166,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 	if (!bHasItem) return;
 
-	// 2. 데이터 테이블에서 아이템 정보 가져오기
 	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(UseItemID, TEXT("UseItem"));
 	if (!ItemInfo) return;
 
@@ -176,7 +174,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 	bool bUseSuccess = false;
 
-	// 3. 아이템 타입에 따른 분기 처리
 	switch (ItemInfo->ItemType)
 	{
 	case EItemType::Consumable:
@@ -186,8 +183,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 		if (ItemInfo->ItemEffectClass)
 		{
 			UItemEffectBase* EffectCDO = ItemInfo->ItemEffectClass->GetDefaultObject<UItemEffectBase>();
-
-			// [수정됨] UseItem 호출 시 UseItemID를 함께 넘겨줍니다!
 			if (EffectCDO && EffectCDO->UseItem(Player, UseItemID))
 			{
 				bUseSuccess = true;
@@ -229,63 +224,72 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 				EquippedVestID = UseItemID;
 				CurrentVestDurability = TargetDurability;
 			}
+			else if (ItemInfo->EquipType == EEquipType::Backpack)
+			{
+				OldEquipID = EquippedBackpackID;
+				// [수정] 가방은 내구도를 안 쓰지만, 스왑할 때 0으로 초기화되는 것을 막기 위해 값을 보존해 줍니다.
+				OldDurability = TargetDurability;
+				EquippedBackpackID = UseItemID;
+			}
 
-			// 3. 인벤토리 슬롯 조작 및 가방 용량/무게 계산
+			// [추가] 배그 고증: 더 작은 가방/조끼로 교체할 때, 무게가 넘친다면 장착 거부!
+			if (!OldEquipID.IsNone())
+			{
+				if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeightCheck")))
+				{
+					float NewMaxWeight = MaxWeight - OldItemInfo->StatBonus + ItemInfo->StatBonus;
+					if (CurrentWeight > NewMaxWeight)
+					{
+						if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("용량이 부족하여 교체할 수 없습니다!"));
+
+						// 장착 거부되었으므로 변수들 원상복구
+						if (ItemInfo->EquipType == EEquipType::Helmet) { EquippedHelmetID = OldEquipID; CurrentHelmetDurability = OldDurability; }
+						else if (ItemInfo->EquipType == EEquipType::Vest) { EquippedVestID = OldEquipID; CurrentVestDurability = OldDurability; }
+						else if (ItemInfo->EquipType == EEquipType::Backpack) { EquippedBackpackID = OldEquipID; }
+						return;
+					}
+				}
+			}
+
 			if (OldEquipID.IsNone())
 			{
-				// 기존에 입고 있던 게 없으면
 				InventorySlots[TargetIndex].Quantity--;
 				if (InventorySlots[TargetIndex].Quantity <= 0)
 				{
 					InventorySlots[TargetIndex].ItemID = NAME_None;
 					InventorySlots[TargetIndex].CurrentDurability = 0.0f;
 				}
-				// 가방 무게는 줄이고, 조끼의 StatBonus(+50)만큼 가방 최대 용량(MaxWeight)을 늘려줍니다.
 				CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
-				MaxWeight += ItemInfo->StatBonus;
+				MaxWeight += ItemInfo->StatBonus; // 장비 장착 시 용량 증가
 			}
 			else
 			{
-				// 스왑(교체)하는 경우
 				InventorySlots[TargetIndex].ItemID = OldEquipID;
 				InventorySlots[TargetIndex].Quantity = 1;
 				InventorySlots[TargetIndex].CurrentDurability = OldDurability;
 
 				if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeight")))
 				{
-					// 무게 재계산
 					CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight + OldItemInfo->ItemWeight);
-
-					// 기존 조끼가 올려주던 용량을 빼고, 새 조끼의 용량을 더해줍니다.
 					MaxWeight = MaxWeight - OldItemInfo->StatBonus + ItemInfo->StatBonus;
 				}
 			}
 
-			// 3D 메쉬 시각적 업데이트 호출
 			Player->UpdateEquipmentVisuals(ItemInfo->EquipType, ItemInfo->EquipmentMesh);
-
-			// =======================================================
-			// [추가] 3D 메쉬 시각적 업데이트 호출
-			// =======================================================
-			Player->UpdateEquipmentVisuals(ItemInfo->EquipType, ItemInfo->EquipmentMesh);
-
 			bUseSuccess = true;
 		}
 		break;
 	}
 
 	case EItemType::Weapon:
-		// ... 무기 로직 ...
 		break;
 
 	default:
 		break;
 	}
 
-	// 4. 사용/장착에 성공했다면 UI 갱신 및 소비 로직
 	if (bUseSuccess)
 	{
-		// [수정됨] 장비(Equipment)는 위에서 직접 슬롯을 교체/삭제했으므로 여기서 또 RemoveItem을 호출하면 안 됩니다!
 		if (ItemInfo->ItemType != EItemType::Equipment)
 		{
 			RemoveItem(UseItemID, 1);
@@ -311,24 +315,43 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 	FItemData* ItemData = ItemDataTable->FindRow<FItemData>(ItemID, TEXT("Unequip"));
 	if (!ItemData) return;
 
+	// =========================================================================
+	// [핵심 추가] 배틀그라운드 고증: 가방/조끼를 벗었을 때 현재 아이템 무게가 최대 용량을 초과한다면 벗지 못하게 막음!
+	// =========================================================================
+	if (EquippedBackpackID == ItemID || EquippedVestID == ItemID)
+	{
+		if (CurrentWeight > (MaxWeight - ItemData->StatBonus))
+		{
+			// if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("공간이 부족하여 장비를 해제할 수 없습니다! (아이템을 먼저 버리세요)"));
+			return; // 해제 취소!
+		}
+	}
+
 	// 1. 조끼 해제
 	if (EquippedVestID == ItemID)
 	{
 		EquippedVestID = NAME_None;
-		MaxWeight -= ItemData->StatBonus; // 깎였던 가방 최대 용량 원상복구!
-		Player->UpdateEquipmentVisuals(EEquipType::Vest, nullptr); // 캐릭터 메쉬 벗기기
+		MaxWeight -= ItemData->StatBonus;
+		Player->UpdateEquipmentVisuals(EEquipType::Vest, nullptr);
 	}
-	// 2. 헬멧 해제 (구현되어 있다면)
+	// 2. 헬멧 해제 
 	else if (EquippedHelmetID == ItemID)
 	{
 		EquippedHelmetID = NAME_None;
 		Player->UpdateEquipmentVisuals(EEquipType::Helmet, nullptr);
 	}
+	// 3. [추가] 가방 해제
+	else if (EquippedBackpackID == ItemID)
+	{
+		EquippedBackpackID = NAME_None;
+		MaxWeight -= ItemData->StatBonus; // 늘어났던 가방 용량을 다시 뺌
+		Player->UpdateEquipmentVisuals(EEquipType::Backpack, nullptr); // 캐릭터 가방 메쉬 숨기기
+	}
 	else
 	{
-		return; // 장착 부위가 아니면 무시
+		return;
 	}
 
-	// 3. 벗은 아이템을 가방에 추가 (무게도 AddItem에서 알아서 늘어날 것입니다!)
+	// 벗은 아이템을 가방에 추가 
 	AddItem(ItemID, 1);
 }

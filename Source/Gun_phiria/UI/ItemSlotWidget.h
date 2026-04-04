@@ -9,6 +9,7 @@
 class UImage;
 class UTextBlock;
 class APickupItemBase;
+class UDragVisualWidget;
 
 UCLASS()
 class GUN_PHIRIA_API UItemSlotWidget : public UUserWidget
@@ -31,6 +32,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	APickupItemBase* TargetItemActor = nullptr;
 
+	// [추가 1] 이 슬롯이 "장비 장착 슬롯"인지 체크하는 변수
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
+	bool bIsEquipSlot = false;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
@@ -40,8 +45,15 @@ protected:
 	// 마우스가 나갈 때 (이 줄이 빠져있었습니다!)
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
+	// [추가 2] 블루프린트의 OnDragDetected 노드를 대체할 함수
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	FName CurrentItemID;
+
+	// [추가 3] 아이템의 수량을 기억할 변수 (SetItemInfo에서 받은 값을 저장)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
+	int32 CurrentQuantity = 0;
 
 	// ==========================================
 	// C++ UI 바인딩 (이름이 블루프린트 UI 이름과 완전히 똑같아야 합니다!)
@@ -50,13 +62,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	UImage* IMG_ItemIcon;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(meta = (BindWidgetOptional))
 	UImage* IMG_Background;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* TXT_ItemName;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* TXT_ItemQuantity;
 
 	// ==========================================
@@ -66,4 +78,10 @@ protected:
 	// 블루프린트 디테일 패널에서 사용할 데이터 테이블을 할당할 수 있도록 만듭니다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory Data")
 	UDataTable* ItemDataTable;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Drag And Drop")
+	TSubclassOf<UDragVisualWidget> DragVisualClass;
+
+	// [추가] 드래그가 어떤 드롭존에도 들어가지 못하고 취소되었을 때 호출되는 함수
+	virtual void NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 };
