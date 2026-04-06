@@ -149,6 +149,9 @@ public:
 	// 아이템을 바닥에 버리는(스폰하는) 함수
 	void DropItemToGround(FName ItemID);
 
+	// 인벤토리 토글 함수
+	void ToggleInventory();
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
@@ -260,9 +263,6 @@ protected:
 	// 인벤토리 열기/닫기 단축키 (Tab 또는 I)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	class UInputAction* InventoryAction;
-
-	// 인벤토리 토글 함수
-	void ToggleInventory();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<class USceneCaptureComponent2D> InventoryCamera;

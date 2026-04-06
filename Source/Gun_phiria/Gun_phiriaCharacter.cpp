@@ -426,13 +426,13 @@ float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
 		HitBoneName = static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName;
 
 		// 화면에 맞은 부위 출력 (흰색)
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::White, FString::Printf(TEXT("피격 부위: %s / 초기 데미지: %.1f"), *HitBoneName.ToString(), ActualDamage));
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::White, FString::Printf(TEXT("Hit Part: %s / Damage: %.1f"), *HitBoneName.ToString(), ActualDamage));
 
 		if (HitBoneName == FName("head"))
 		{
 			ActualDamage *= 2.5f;
 			bIsHeadshot = true;
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("!!! 헤드샷 !!! 증폭된 데미지: %.1f"), ActualDamage));
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("!!! HeadShot !!! Powerful Damage: %.1f"), ActualDamage));
 		}
 	}
 
@@ -626,7 +626,7 @@ void AGun_phiriaCharacter::AddGold(int32 Amount)
 	{
 		CurrentGold += Amount;
 		// 디버그용 출력 (나중에 지워도 됩니다)
-		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("골드 획득! 현재 골드: %d"), CurrentGold));
+		//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("골드 획득! 현재 골드: %d"), CurrentGold));
 	}
 }
 
@@ -644,7 +644,7 @@ bool AGun_phiriaCharacter::SpendGold(int32 Amount)
 void AGun_phiriaCharacter::ResetGold()
 {
 	CurrentGold = 0;
-	GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("마을 귀환: 골드가 초기화되었습니다."));
+	//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("마을 귀환: 골드가 초기화되었습니다."));
 }
 
 void AGun_phiriaCharacter::AddSapphire(int32 Amount)
@@ -652,7 +652,7 @@ void AGun_phiriaCharacter::AddSapphire(int32 Amount)
 	if (Amount > 0)
 	{
 		CurrentSapphire += Amount;
-		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, FString::Printf(TEXT("사파이어 획득! 현재 사파이어: %d"), CurrentSapphire));
+		//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, FString::Printf(TEXT("사파이어 획득! 현재 사파이어: %d"), CurrentSapphire));
 	}
 }
 
@@ -671,7 +671,7 @@ void AGun_phiriaCharacter::CheatCurrency(int32 GoldAmount, int32 SapphireAmount)
 {
 	AddGold(GoldAmount);
 	AddSapphire(SapphireAmount);
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("[치트 발동] 골드 +%d, 사파이어 +%d"), GoldAmount, SapphireAmount));
+	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("[치트 발동] 골드 +%d, 사파이어 +%d"), GoldAmount, SapphireAmount));
 }
 
 void AGun_phiriaCharacter::ForceBlackScreen()
@@ -700,31 +700,31 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 
 void AGun_phiriaCharacter::ToggleInventory()
 {
-	// 위젯이 생성되지 않았거나 플레이어 컨트롤러가 없으면 중단
 	if (!InventoryWidgetInstance) return;
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
-	// 상태 뒤집기 (열려있으면 닫고, 닫혀있으면 열기)
 	bIsInventoryOpen = !bIsInventoryOpen;
 
 	if (bIsInventoryOpen)
 	{
-		// 1. UI 보이기
 		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Visible);
 
-		// 블루프린트 이벤트 호출 (가방 업데이트)
 		UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
 		if (RefreshFunc) InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
 
-		// 방금 만든 C++ 강제 새로고침 호출! (주변 아이템 업데이트)
 		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
 		{
+			// 키보드로 직접 열었을 때는 항상 '일반 파밍 모드'로 열리도록 보장
+			MainWidget->CurrentMode = EInventoryMode::IM_Normal;
+
+			// [수정됨] 위젯의 공개 함수를 호출하여 타이머 시작!
+			MainWidget->StartNearbyTimer();
+
 			MainWidget->ForceNearbyRefresh();
 		}
 
-		// 3. 마우스 켜기 및 UI 조작 모드로 전환
 		PC->SetShowMouseCursor(true);
 		FInputModeGameAndUI InputMode;
 		InputMode.SetWidgetToFocus(InventoryWidgetInstance->TakeWidget());
@@ -732,10 +732,14 @@ void AGun_phiriaCharacter::ToggleInventory()
 	}
 	else
 	{
-		// 1. UI 숨기기
 		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
 
-		// 2. 마우스 끄기 및 게임 전용 모드로 복귀
+		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
+		{
+			// [수정됨] 위젯의 공개 함수를 호출하여 타이머 정지!
+			MainWidget->StopNearbyTimer();
+		}
+
 		PC->SetShowMouseCursor(false);
 		FInputModeGameOnly InputMode;
 		PC->SetInputMode(InputMode);

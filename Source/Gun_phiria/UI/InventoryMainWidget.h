@@ -12,6 +12,13 @@ class APickupItemBase;
 class UItemSlotWidget; // 이전에 만든 슬롯 위젯 클래스
 class UDragVisualWidget;
 
+UENUM(BlueprintType)
+enum class EInventoryMode : uint8
+{
+	IM_Normal UMETA(DisplayName = "Normal Looting"),
+	IM_Shop   UMETA(DisplayName = "Shop Mode")
+};
+
 UCLASS()
 class GUN_PHIRIA_API UInventoryMainWidget : public UUserWidget
 {
@@ -35,6 +42,39 @@ public:
 
 	// 드롭존이 호출할 마스터 처리 함수
 	void HandleItemDrop(class UItemDragOperation* Operation, EDropZoneType TargetZone);
+
+	// 현재 인벤토리 상태
+	UPROPERTY(BlueprintReadWrite, Category = "Inventory State")
+	EInventoryMode CurrentMode = EInventoryMode::IM_Normal;
+
+	// 구매/판매 처리 함수
+	void BuyItem(FName ItemID);
+	void SellItem(FName ItemID);
+
+	void StartNearbyTimer();
+	void StopNearbyTimer();
+
+	UPROPERTY(BlueprintReadWrite, Category = "Shop")
+	class AShopNPC* CurrentShopNPC;
+
+	// TArray에서 TMap으로 변경
+	UFUNCTION(BlueprintCallable, Category = "Shop")
+	void OpenShopMode(const TMap<FName, int32>& ShopItems);
+
+	void UpdateShopUI(const TMap<FName, int32>& ShopItems);
+
+	void PromptQuantitySelection(FName ItemID, int32 MaxAvailable, bool bIsBuying);
+
+	// 팝업창에서 수량을 정하고 '확인'을 눌렀을 때 C++로 호출될 함수
+	UFUNCTION(BlueprintCallable, Category = "Shop")
+	void ConfirmBuyItem(FName ItemID, int32 AmountToBuy);
+
+	UFUNCTION(BlueprintCallable, Category = "Shop")
+	void ConfirmSellItem(FName ItemID, int32 AmountToSell);
+
+	// 재화 UI를 업데이트하는 함수
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void UpdateCurrencyUI();
 
 protected:
 	// 초기화 및 타이머 설정
@@ -86,6 +126,16 @@ protected:
 
 	// [추가] 드래그가 어떤 드롭존에도 들어가지 못하고 취소되었을 때 호출되는 함수
 	virtual void NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
+	UPROPERTY(EditAnywhere, Category = "Shop UI")
+	TSubclassOf<class UQuantityPopupWidget> QuantityPopupClass;
+
+	// 재화 표시용 텍스트 바인딩
+	UPROPERTY(meta = (BindWidget))
+	class UTextBlock* Txt_GoldAmount;
+
+	UPROPERTY(meta = (BindWidget))
+	class UTextBlock* Txt_SapphireAmount;
 
 private:
 	// 주기적으로 주변 아이템을 검사하는 함수

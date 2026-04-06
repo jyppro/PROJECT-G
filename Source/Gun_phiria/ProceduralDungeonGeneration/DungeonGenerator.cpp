@@ -172,18 +172,15 @@ void ADungeonGenerator::ConnectMainRooms()
 	for (int32 i = 0; i < RoomList.Num(); i++) if (RoomList[i].bIsMainRoom) MainRoomIndices.Add(i);
 
 	if (MainRoomIndices.Num() == 0) return;
-
 	TArray<int32> Reached = { MainRoomIndices[0] };
 	TArray<int32> Unreached = MainRoomIndices;
 	Unreached.RemoveAt(0);
-
 	TArray<FRoomEdge> ExtraPaths;
 
 	while (Unreached.Num() > 0)
 	{
 		float MinDist = MAX_flt;
 		int32 R_Idx = -1, U_Idx = -1;
-
 		for (int32 r : Reached)
 		{
 			for (int32 u : Unreached)
@@ -193,12 +190,10 @@ void ADungeonGenerator::ConnectMainRooms()
 				if (Dist < MinDist) { MinDist = Dist; R_Idx = r; U_Idx = u; }
 			}
 		}
-
 		FinalPaths.Add({ R_Idx, U_Idx, MinDist });
 		Reached.Add(U_Idx);
 		Unreached.Remove(U_Idx);
 	}
-
 	for (const auto& Edge : ExtraPaths)
 	{
 		if (!FinalPaths.Contains(Edge) && FMath::FRand() <= AdditionalPathProbability) FinalPaths.Add(Edge);

@@ -11,6 +11,9 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "DragVisualWidget.h"
 #include "Blueprint/SlateBlueprintLibrary.h"
+#include "../NPC/ShopNPC.h"
+#include "QuantityPopupWidget.h"
+#include "Components/TextBlock.h"
 
 void UInventoryMainWidget::NativeConstruct()
 {
@@ -62,6 +65,7 @@ void UInventoryMainWidget::RefreshInventory()
 	}
 
 	UpdateEquipmentUI();
+	UpdateCurrencyUI();
 }
 
 void UInventoryMainWidget::UpdateNearbyUI(const TArray<APickupItemBase*>& NearbyItems)
@@ -200,6 +204,36 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 
 	if (SourceZone == TargetZone) return;
 
+	if (CurrentMode == EInventoryMode::IM_Shop)
+	{
+		// 1. 상점 -> 가방 (구매)
+		if (SourceZone == EDropZoneType::Nearby && TargetZone == EDropZoneType::Backpack)
+		{
+			if (CurrentShopNPC && CurrentShopNPC->ShopInventory.Contains(ItemID))
+			{
+				int32 MaxNPCStock = CurrentShopNPC->ShopInventory[ItemID];
+				PromptQuantitySelection(ItemID, MaxNPCStock, true); // true = 구매
+			}
+		}
+		// 2. 가방 -> 상점 (판매)
+		else if (SourceZone == EDropZoneType::Backpack && TargetZone == EDropZoneType::Nearby)
+		{
+			// 플레이어 인벤토리를 뒤져서 이 아이템을 총 몇 개 가졌는지 확인
+			int32 TotalPlayerStock = 0;
+			for (const FInventorySlot& InvSlot : Player->PlayerInventory->InventorySlots)
+			{
+				if (InvSlot.ItemID == ItemID) TotalPlayerStock += InvSlot.Quantity;
+			}
+
+			if (TotalPlayerStock > 0)
+			{
+				PromptQuantitySelection(ItemID, TotalPlayerStock, false); // false = 판매
+			}
+		}
+
+		return; // 일반 파밍 로직 실행 방지
+	}
+
 	if (TargetZone == EDropZoneType::Equipment)
 	{
 		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropTypeCheck"));
@@ -252,5 +286,228 @@ void UInventoryMainWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDro
 	{
 		// 드래그가 취소되면(허공에 놓으면) 바닥에 버리는 로직
 		HandleItemDrop(DragOp, EDropZoneType::Nearby);
+	}
+}
+
+void UInventoryMainWidget::OpenShopMode(const TMap<FName, int32>& ShopItems)
+{
+	CurrentMode = EInventoryMode::IM_Shop;
+	GetWorld()->GetTimerManager().ClearTimer(NearbyCheckTimer);
+	UpdateShopUI(ShopItems);
+}
+
+void UInventoryMainWidget::UpdateShopUI(const TMap<FName, int32>& ShopItems)
+{
+	if (!VicinityScrollBox || !ItemSlotWidgetClass) return;
+
+	HideTooltip();
+	VicinityScrollBox->ClearChildren();
+
+	// TMap 순회 (Pair.Key가 ItemID, Pair.Value가 Quantity)
+	for (const TPair<FName, int32>& Pair : ShopItems)
+	{
+		UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass);
+		if (NewSlot)
+		{
+			NewSlot->bIsVicinitySlot = true;
+			NewSlot->TargetItemActor = nullptr;
+			NewSlot->SetItemInfo(Pair.Key, Pair.Value); // NPC가 가진 수량 띄우기
+			VicinityScrollBox->AddChild(NewSlot);
+		}
+	}
+}
+
+void UInventoryMainWidget::BuyItem(FName ItemID)
+{
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
+	if (!ItemData) return;
+
+	// 돈이 충분한지 확인
+	if (Player->SpendGold(ItemData->BuyPrice))
+	{
+		// 아이템 추가 시도 (무게 체크 등은 네가 만든 AddItem이 다 해줌!)
+		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, 1);
+
+		if (UnaddedAmount > 0)
+		{
+			// 가방 공간이 없어서 못 샀다면 돈을 환불해 줍니다.
+			Player->AddGold(ItemData->BuyPrice);
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Full Backpack!"));
+		}
+		else
+		{
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, FString::Printf(TEXT("%s Complete Buy!"), *ItemData->ItemName.ToString()));
+		}
+	}
+	else
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Need More Gold!"));
+	}
+
+	RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+	UpdateShopUI(CurrentShopNPC->ShopInventory);
+}
+
+void UInventoryMainWidget::SellItem(FName ItemID)
+{
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("SellCheck"));
+	if (!ItemData) return;
+
+	// 인벤토리에서 아이템 1개 제거 (네가 만든 RemoveItem 활용)
+	if (Player->PlayerInventory->RemoveItem(ItemID, 1))
+	{
+		// 골드 지급
+		Player->AddGold(ItemData->SellPrice);
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, FString::Printf(TEXT("%s Complete Sell! +%d G"), *ItemData->ItemName.ToString(), ItemData->SellPrice));
+	}
+
+	RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+	UpdateShopUI(CurrentShopNPC->ShopInventory);
+}
+
+void UInventoryMainWidget::StartNearbyTimer()
+{
+	// 타이머가 이미 돌고 있지 않을 때만 새로 시작
+	if (!GetWorld()->GetTimerManager().IsTimerActive(NearbyCheckTimer))
+	{
+		GetWorld()->GetTimerManager().SetTimer(NearbyCheckTimer, this, &UInventoryMainWidget::CheckNearbyItems, 0.2f, true);
+	}
+}
+
+void UInventoryMainWidget::StopNearbyTimer()
+{
+	// 타이머 정지
+	GetWorld()->GetTimerManager().ClearTimer(NearbyCheckTimer);
+}
+
+void UInventoryMainWidget::ConfirmBuyItem(FName ItemID, int32 AmountToBuy)
+{
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	if (!Player || !CurrentShopNPC || !CurrentShopNPC->ShopInventory.Contains(ItemID)) return;
+
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
+	if (!ItemData || AmountToBuy <= 0) return;
+
+	// 내가 사려는 개수만큼의 총 가격 계산
+	int32 TotalCost = ItemData->BuyPrice * AmountToBuy;
+
+	// NPC 재고 체크 방어 코드
+	if (AmountToBuy > CurrentShopNPC->ShopInventory[ItemID]) return;
+
+	if (Player->SpendGold(TotalCost))
+	{
+		// 인벤토리에 아이템 추가 시도
+		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, AmountToBuy);
+		int32 SuccessfullyAdded = AmountToBuy - UnaddedAmount;
+
+		if (SuccessfullyAdded > 0)
+		{
+			// 성공적으로 가방에 넣은 개수만큼만 NPC 재고에서 차감
+			CurrentShopNPC->ShopInventory[ItemID] -= SuccessfullyAdded;
+
+			// NPC 재고가 0이 되면 리스트에서 삭제
+			if (CurrentShopNPC->ShopInventory[ItemID] <= 0)
+			{
+				CurrentShopNPC->ShopInventory.Remove(ItemID);
+			}
+
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, FString::Printf(TEXT("%s %d Buy Complete!"), *ItemData->ItemName.ToString(), SuccessfullyAdded));
+		}
+
+		// 가방 공간 부족으로 못 산 아이템이 있다면 골드 환불
+		if (UnaddedAmount > 0)
+		{
+			Player->AddGold(UnaddedAmount * ItemData->BuyPrice);
+			//if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("가방 용량이 부족하여 일부만 구매했습니다!"));
+		}
+
+		// UI들 새로고침
+		RefreshInventory();
+		UpdateShopUI(CurrentShopNPC->ShopInventory); // NPC 쪽 리스트 새로고침
+	}
+	else
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Need More Gold!"));
+	}
+}
+
+void UInventoryMainWidget::ConfirmSellItem(FName ItemID, int32 AmountToSell)
+{
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	if (!Player || AmountToSell <= 0) return;
+
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("SellCheck"));
+	if (!ItemData) return;
+
+	// 인벤토리에서 지정한 개수(AmountToSell)만큼 아이템 제거
+	if (Player->PlayerInventory->RemoveItem(ItemID, AmountToSell))
+	{
+		// 개수만큼 판매 금액 정산
+		int32 TotalEarned = ItemData->SellPrice * AmountToSell;
+		Player->AddGold(TotalEarned);
+
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, FString::Printf(TEXT("%s %d Sell Complete! +%d G"), *ItemData->ItemName.ToString(), AmountToSell, TotalEarned));
+
+		// 화면 갱신
+		RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+		UpdateShopUI(CurrentShopNPC->ShopInventory);
+	}
+}
+
+void UInventoryMainWidget::PromptQuantitySelection(FName ItemID, int32 MaxAvailable, bool bIsBuying)
+{
+	if (QuantityPopupClass)
+	{
+		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+		if (!Player || !Player->PlayerInventory || !Player->PlayerInventory->ItemDataTable) return;
+
+		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("PopupPriceCheck"));
+		if (!ItemData) return;
+
+		int32 TargetUnitPrice = bIsBuying ? ItemData->BuyPrice : ItemData->SellPrice;
+
+		// ==========================================================
+		// [추가된 부분] 내 돈으로 살 수 있는 개수 계산!
+		// ==========================================================
+		int32 AffordableQty = MaxAvailable; // 기본은 상점 재고만큼
+
+		if (bIsBuying && TargetUnitPrice > 0)
+		{
+			// 현재 골드 나누기 가격 = 살 수 있는 개수
+			// (주의: Player->CurrentGold 변수가 protected로 되어있어 에러가 난다면,
+			// 캐릭터 헤더에서 public으로 바꾸거나 GetGold() 같은 함수를 만들어야 해!)
+			AffordableQty = Player->CurrentGold / TargetUnitPrice;
+		}
+
+		UQuantityPopupWidget* Popup = CreateWidget<UQuantityPopupWidget>(this, QuantityPopupClass);
+		if (Popup)
+		{
+			// 변경된 SetupPopup! AffordableQty를 넘겨줍니다.
+			Popup->SetupPopup(ItemID, MaxAvailable, AffordableQty, TargetUnitPrice, bIsBuying, this);
+			Popup->AddToViewport();
+
+			Popup->SetKeyboardFocus();
+		}
+	}
+}
+
+void UInventoryMainWidget::UpdateCurrencyUI()
+{
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	if (!Player) return;
+
+	// 골드 텍스트 갱신
+	if (Txt_GoldAmount)
+	{
+		// Player->CurrentGold 변수에 접근할 수 있다고 가정합니다.
+		Txt_GoldAmount->SetText(FText::AsNumber(Player->CurrentGold));
+	}
+
+	// 사파이어 텍스트 갱신
+	if (Txt_SapphireAmount)
+	{
+		Txt_SapphireAmount->SetText(FText::AsNumber(Player->CurrentSapphire));
 	}
 }

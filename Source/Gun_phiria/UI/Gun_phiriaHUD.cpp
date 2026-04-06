@@ -38,7 +38,7 @@ void AGun_phiriaHUD::DrawHUD()
 	}
 
 	DrawInteractPrompt(PlayerChar, Center);
-	DrawCurrency(PlayerChar);
+	// DrawCurrency(PlayerChar);
 }
 
 void AGun_phiriaHUD::DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center)
@@ -174,24 +174,24 @@ void AGun_phiriaHUD::DrawInteractPrompt(TObjectPtr<AGun_phiriaCharacter> PlayerC
 	}
 }
 
-void AGun_phiriaHUD::DrawCurrency(TObjectPtr<AGun_phiriaCharacter> PlayerChar)
-{
-	// 1. 표시할 텍스트 문자열 만들기 (캐릭터의 재화 변수 접근)
-	// 나중에 인벤토리 구조체가 생기면 이 부분의 참조 위치만 살짝 바꿔주면 돼!
-	FString GoldText = FString::Printf(TEXT("Gold : %d"), PlayerChar->CurrentGold);
-	FString SapphireText = FString::Printf(TEXT("Sapphire : %d"), PlayerChar->CurrentSapphire);
-
-	// 2. 폰트 및 배율 설정
-	UFont* DrawFont = GEngine->GetMediumFont();
-	float TextScale = 1.5f; // 글씨가 잘 보이도록 조금 키웠어
-
-	// 3. 텍스트를 그릴 화면 좌표 설정 (화면 우측 상단)
-	// Canvas->ClipX는 화면의 전체 가로 길이입니다. 오른쪽 끝에서 조금 안쪽으로 당겨옵니다.
-	float PosX = Canvas->ClipX - 250.0f;
-	float PosY = 50.0f; // 위에서부터 50픽셀 아래
-
-	// 4. 화면에 텍스트 그리기 (골드는 노란색, 사파이어는 청록색)
-	// 그림자 효과를 주기 위해 검은색 텍스트를 살짝 어긋나게 먼저 그릴 수도 있지만, 직관성을 위해 바로 그립니다.
-	DrawText(GoldText, FLinearColor::Yellow, PosX, PosY, DrawFont, TextScale);
-	DrawText(SapphireText, FLinearColor(0.0f, 1.0f, 1.0f, 1.0f), PosX, PosY + 40.0f, DrawFont, TextScale);
-}
+//void AGun_phiriaHUD::DrawCurrency(TObjectPtr<AGun_phiriaCharacter> PlayerChar)
+//{
+//	// 1. 표시할 텍스트 문자열 만들기 (캐릭터의 재화 변수 접근)
+//	// 나중에 인벤토리 구조체가 생기면 이 부분의 참조 위치만 살짝 바꿔주면 돼!
+//	FString GoldText = FString::Printf(TEXT("Gold : %d"), PlayerChar->CurrentGold);
+//	FString SapphireText = FString::Printf(TEXT("Sapphire : %d"), PlayerChar->CurrentSapphire);
+//
+//	// 2. 폰트 및 배율 설정
+//	UFont* DrawFont = GEngine->GetMediumFont();
+//	float TextScale = 1.5f; // 글씨가 잘 보이도록 조금 키웠어
+//
+//	// 3. 텍스트를 그릴 화면 좌표 설정 (화면 우측 상단)
+//	// Canvas->ClipX는 화면의 전체 가로 길이입니다. 오른쪽 끝에서 조금 안쪽으로 당겨옵니다.
+//	float PosX = Canvas->ClipX - 250.0f;
+//	float PosY = 50.0f; // 위에서부터 50픽셀 아래
+//
+//	// 4. 화면에 텍스트 그리기 (골드는 노란색, 사파이어는 청록색)
+//	// 그림자 효과를 주기 위해 검은색 텍스트를 살짝 어긋나게 먼저 그릴 수도 있지만, 직관성을 위해 바로 그립니다.
+//	DrawText(GoldText, FLinearColor::Yellow, PosX, PosY, DrawFont, TextScale);
+//	DrawText(SapphireText, FLinearColor(0.0f, 1.0f, 1.0f, 1.0f), PosX, PosY + 40.0f, DrawFont, TextScale);
+//}
