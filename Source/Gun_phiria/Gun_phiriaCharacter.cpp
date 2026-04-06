@@ -7,6 +7,7 @@
 #include "Item/PickupItemBase.h"
 #include "UI/InventoryMainWidget.h"
 #include "UI/CastBarWidget.h"
+#include "Gun_phiriaGameInstance.h"
 
 // Engine Headers
 #include "Kismet/GameplayStatics.h"
@@ -118,6 +119,16 @@ void AGun_phiriaCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	CurrentHealth = MaxHealth;
+
+	// [데이터 불러오기!]
+	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
+	{
+		// 1. 인벤토리 데이터(ID 등) 복구
+		GameInst->LoadPlayerData(this);
+
+		// 2. [추가된 부분] 복구된 ID를 바탕으로 3D 외형을 다시 입습니다!
+		RestoreEquipmentVisuals();
+	}
 
 	// Interaction Timer
 	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
@@ -447,8 +458,43 @@ float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
 	{
 		if (bIsHeadshot && !PlayerInventory->EquippedHelmetID.IsNone())
 		{
-			// (나중에 헬멧 로직 추가 시 여기도 똑같이 적용)
+			if (FItemData* HelmetData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedHelmetID, TEXT("HelmetDefense")))
+			{
+				// 방어율(DefensePower)만큼 데미지 감소
+				float BlockedDamage = OriginalDamage * HelmetData->DefensePower;
+				ActualDamage -= BlockedDamage;
+
+				// 내구도는 적의 원본 데미지(OriginalDamage)만큼 통째로 깎임
+				PlayerInventory->CurrentHelmetDurability -= OriginalDamage;
+
+				if (GEngine)
+				{
+					FString DebugMsg = FString::Printf(TEXT("[Helmet Defense] %.1f Damage Blocked! / Remaining Durability: %.1f"), BlockedDamage, PlayerInventory->CurrentHelmetDurability);
+					GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, DebugMsg);
+				}
+
+				// 헬멧 파괴 처리
+				if (PlayerInventory->CurrentHelmetDurability <= 0.0f)
+				{
+					PlayerInventory->MaxWeight -= HelmetData->StatBonus;
+					PlayerInventory->EquippedHelmetID = NAME_None;
+					PlayerInventory->CurrentHelmetDurability = 0.0f;
+					UpdateEquipmentVisuals(EEquipType::Helmet, nullptr);
+
+					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Helmet Destroyed !!!"));
+
+					// 인벤토리가 열려있을 때 파괴되면 UI 즉시 갱신
+					if (bIsInventoryOpen && InventoryWidgetInstance)
+					{
+						if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
+						{
+							MainWidget->UpdateEquipmentUI();
+						}
+					}
+				}
+			}
 		}
+		// 기존 조끼 로직 (헤드샷이 아닐 때)
 		else if (!bIsHeadshot && !PlayerInventory->EquippedVestID.IsNone())
 		{
 			if (FItemData* VestData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedVestID, TEXT("VestDefense")))
@@ -579,7 +625,7 @@ void AGun_phiriaCharacter::CheckForInteractables()
 
 	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
 	{
-		float MinDist = 200.f;
+		float MinDist = MAX_FLT;
 		for (const auto& Res : Overlaps)
 		{
 			if (Res.GetActor() && Res.GetActor()->Implements<UInteractInterface>())
@@ -970,4 +1016,32 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 			DroppedItem->Quantity = 1;
 		}
 	}
+}
+
+void AGun_phiriaCharacter::RestoreEquipmentVisuals()
+{
+	// 인벤토리와 데이터 테이블이 유효한지 확인
+	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
+
+	// 중복 코드를 줄이기 위한 람다(Lambda) 함수
+	auto ApplyEquipMesh = [&](FName ItemID, EEquipType EquipType, const TCHAR* Context)
+		{
+			if (!ItemID.IsNone())
+			{
+				// 데이터 테이블에서 아이템 정보를 찾습니다.
+				if (FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, Context))
+				{
+					// =========================================================
+					// [주의] ItemData->ItemMesh 부분은 네가 만든 구조체(FItemData) 안에 있는 
+					// 실제 '스태틱 메시 변수명'으로 꼭 바꿔 적어줘야 해!! (예: EquipMesh 등)
+					// =========================================================
+					UpdateEquipmentVisuals(EquipType, ItemData->EquipmentMesh);
+				}
+			}
+		};
+
+	// 헬멧, 조끼, 가방 순서대로 복구 실행
+	ApplyEquipMesh(PlayerInventory->EquippedHelmetID, EEquipType::Helmet, TEXT("RestoreHelmet"));
+	ApplyEquipMesh(PlayerInventory->EquippedVestID, EEquipType::Vest, TEXT("RestoreVest"));
+	ApplyEquipMesh(PlayerInventory->EquippedBackpackID, EEquipType::Backpack, TEXT("RestoreBackpack"));
 }

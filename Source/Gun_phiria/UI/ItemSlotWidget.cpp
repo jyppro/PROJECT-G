@@ -26,6 +26,12 @@ void UItemSlotWidget::SetItemInfo(FName InItemID, int32 InQuantity)
 		if (IMG_ItemIcon) IMG_ItemIcon->SetVisibility(ESlateVisibility::Hidden);
 		if (TXT_ItemName) TXT_ItemName->SetVisibility(ESlateVisibility::Hidden);
 		if (TXT_ItemQuantity) TXT_ItemQuantity->SetVisibility(ESlateVisibility::Hidden);
+
+		if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+		{
+			MainUI->HideTooltip();
+		}
+
 		return;
 	}
 
@@ -68,9 +74,12 @@ void UItemSlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPoi
 		IMG_Background->SetColorAndOpacity(FLinearColor(0.5f, 0.5f, 0.5f, 0.5f));
 	}
 
-	if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+	if (!CurrentItemID.IsNone())
 	{
-		MainUI->ShowTooltip(CurrentItemID, ItemDataTable);
+		if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
+		{
+			MainUI->ShowTooltip(CurrentItemID, ItemDataTable);
+		}
 	}
 }
 

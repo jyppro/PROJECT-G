@@ -152,6 +152,9 @@ public:
 	// 인벤토리 토글 함수
 	void ToggleInventory();
 
+	// [추가] 다음 스테이지로 넘어갔을 때 장비 외형을 다시 입혀주는 함수
+	void RestoreEquipmentVisuals();
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;

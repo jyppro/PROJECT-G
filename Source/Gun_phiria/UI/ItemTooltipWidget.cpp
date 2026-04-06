@@ -6,42 +6,49 @@
 
 void UItemTooltipWidget::UpdateTooltip(FName ItemID, UDataTable* ItemDataTable)
 {
-	if (!ItemDataTable) return;
+	// 1. 데이터 테이블이 없거나 아이템 ID가 비어있다면(파괴됨/빈칸) 툴팁을 즉시 숨깁니다!
+	if (!ItemDataTable || ItemID.IsNone())
+	{
+		SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
 
 	static const FString ContextString(TEXT("Tooltip Lookup"));
 	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(ItemID, ContextString);
 
+	// 2. 아이템 정보가 존재할 때
 	if (ItemInfo)
 	{
+		// 툴팁을 다시 화면에 보이게 만듭니다. (마우스 클릭을 방해하지 않게 HitTestInvisible 사용)
+		SetVisibility(ESlateVisibility::HitTestInvisible);
+
 		if (TXT_Name) TXT_Name->SetText(ItemInfo->ItemName);
 		if (TXT_Description) TXT_Description->SetText(ItemInfo->ItemDescription);
 
-		// 1. 아이콘 이미지 설정
 		if (IMG_ItemIcon && ItemInfo->ItemIcon)
 		{
 			IMG_ItemIcon->SetBrushFromTexture(ItemInfo->ItemIcon);
 		}
 
-		// 2. 타입 텍스트 변환 및 설정 (Consumable, Weapon 등)
 		if (TXT_Type)
 		{
-			// 주의: EItemType 자리에 본인이 헤더 파일에 정의한 실제 Enum 이름을 적어주세요. 
-			// (예: EItemType, E_ItemType 등)
 			const UEnum* EnumPtr = StaticEnum<EItemType>();
-
 			if (EnumPtr)
 			{
-				// Enum 값을 에디터에 설정한 Display Name(표시 이름)으로 변환합니다.
 				FText TypeText = EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(ItemInfo->ItemType));
 				TXT_Type->SetText(TypeText);
 			}
 		}
 
-		// 3. 용량/무게 텍스트
 		if (TXT_Capacity)
 		{
 			FString CapacityStr = FString::Printf(TEXT("%.0f Capacity"), ItemInfo->ItemWeight);
 			TXT_Capacity->SetText(FText::FromString(CapacityStr));
 		}
+	}
+	else
+	{
+		// ID는 있는데 테이블에 정보가 없는 경우에도 안전하게 숨깁니다.
+		SetVisibility(ESlateVisibility::Collapsed);
 	}
 }

@@ -190,6 +190,13 @@ protected:
 	/*UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Loot")
 	TArray<FName> LootPool;*/
 
+	// 다음 스테이지로 가는 문 프리팹
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Prefabs")
+	TSubclassOf<class ADungeonStageDoor> StageDoorPrefab;
+
+	// 다음 스테이지 문을 스폰하는 함수
+	void SpawnStageDoor();
+
 private:
 	// --- Internal Helpers ---
 	float SnapToGrid(float Value);

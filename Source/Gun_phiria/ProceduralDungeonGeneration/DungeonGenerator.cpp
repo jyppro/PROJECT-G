@@ -4,6 +4,7 @@
 #include "../Gun_phiriaCharacter.h"
 #include "../NPC/ShopNPC.h"
 #include "../Item/PickupItemBase.h"
+#include "../Interactable/DungeonStageDoor.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -11,10 +12,12 @@
 #include "Engine/World.h"
 #include "Engine/OverlapResult.h"
 #include "TimerManager.h"
+#include "Engine/StaticMesh.h"
 
 // Component Headers
 #include "Components/BoxComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 ADungeonGenerator::ADungeonGenerator()
 {
@@ -54,6 +57,7 @@ void ADungeonGenerator::ExecuteGeneration()
 	ConnectMainRooms();
 	CreateCorridors();
 	SpawnDungeonActors();
+	SpawnStageDoor();
 
 	TeleportPlayerToRandomRoom();
 
@@ -580,5 +584,135 @@ void ADungeonGenerator::SpawnShopNPC()
 	if (SpawnedNPC && ShopStallPrefab)
 	{
 		GetWorld()->SpawnActor<AActor>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
+	}
+}
+
+void ADungeonGenerator::SpawnStageDoor()
+{
+	if (!StageDoorPrefab) return;
+
+	TArray<int32> CandidateRooms;
+
+	for (int32 i = 0; i < RoomList.Num(); i++)
+	{
+		if (RoomList[i].bIsMainRoom && i != PlayerSpawnRoomIndex && !RoomList[i].bIsShopRoom)
+		{
+			CandidateRooms.Add(i);
+		}
+	}
+
+	if (CandidateRooms.IsEmpty()) return;
+
+	for (int32 i = CandidateRooms.Num() - 1; i > 0; i--)
+	{
+		int32 j = FMath::RandRange(0, i);
+		CandidateRooms.Swap(i, j);
+	}
+
+	FCollisionObjectQueryParams ObjectParams = FCollisionObjectQueryParams::AllObjects;
+
+	for (int32 TargetRoomIndex : CandidateRooms)
+	{
+		FVector RoomCenter = RoomList[TargetRoomIndex].CenterLocation;
+		FVector CheckLocation = RoomCenter + FVector(0.0f, 0.0f, 150.0f);
+		FVector BoxHalfExtent = FVector(RoomList[TargetRoomIndex].Size.X * 0.55f, RoomList[TargetRoomIndex].Size.Y * 0.55f, 500.f);
+
+		TArray<FOverlapResult> Overlaps;
+		if (GetWorld()->OverlapMultiByObjectType(Overlaps, CheckLocation, FQuat::Identity, ObjectParams, FCollisionShape::MakeBox(BoxHalfExtent)))
+		{
+			TArray<UPrimitiveComponent*> RemainingFakeWalls;
+
+			for (const auto& Result : Overlaps)
+			{
+				if (Result.GetComponent() && Result.GetComponent()->ComponentHasTag(TEXT("FakeWall")))
+				{
+					RemainingFakeWalls.Add(Result.GetComponent());
+				}
+			}
+
+			if (RemainingFakeWalls.Num() > 0)
+			{
+				UPrimitiveComponent* ChosenWall = RemainingFakeWalls[FMath::RandRange(0, RemainingFakeWalls.Num() - 1)];
+
+				// =========================================================
+				// 1단계: 벽의 실제 정보 파악 (가로로 긴지, 세로로 긴지)
+				// =========================================================
+				FTransform WallTransform = ChosenWall->GetComponentTransform();
+				FVector WallScale = WallTransform.GetScale3D();
+
+				// 벽 큐브의 기본 크기는 100x100x100cm라고 가정합니다.
+				// 벽이 X축으로 길게 늘어났는지, Y축으로 늘어났는지 판별합니다.
+				bool bIsWideAlongX = FMath::Abs(WallScale.X) > FMath::Abs(WallScale.Y);
+
+				float WallWidth = bIsWideAlongX ? (100.0f * FMath::Abs(WallScale.X)) : (100.0f * FMath::Abs(WallScale.Y));
+				float WallThickness = bIsWideAlongX ? (100.0f * FMath::Abs(WallScale.Y)) : (100.0f * FMath::Abs(WallScale.X));
+				float WallHeight = 100.0f * FMath::Abs(WallScale.Z);
+
+				// =========================================================
+				// 2단계: 문이 무조건 방 안쪽(RoomCenter)을 바라보게 회전 계산
+				// =========================================================
+				FVector SpawnLoc = WallTransform.GetLocation();
+
+				// 문 위치에서 방 중심을 향하는 방향 벡터 계산
+				FVector DirectionToCenter = RoomCenter - SpawnLoc;
+				DirectionToCenter.Z = 0.0f; // Z축(위아래) 기울기는 무시
+				DirectionToCenter.Normalize();
+
+				// 방향 벡터를 회전값(FRotator)으로 변환
+				FRotator LookAtRot = DirectionToCenter.Rotation();
+
+				// [주의] 만약 문의 스태틱 메시 원본이 앞면(Front)을 X축으로 바라보고 있지 않다면,
+				// 여기서 Yaw 값을 ±90도 또는 180도 추가로 보정해 줘야 합니다.
+				// (예: LookAtRot.Yaw += 90.0f;) 
+				// 지금 모델링 상태에 맞춰 필요하다면 주석을 풀고 숫자를 바꿔보세요!
+
+				// =========================================================
+				// 3단계: 위치 맞추기 (벽의 정중앙에서 바닥으로 내림)
+				// =========================================================
+				SpawnLoc.Z -= (WallHeight * 0.5f); // 벽의 절반만큼 아래로 내려서 바닥에 맞춤
+				SpawnLoc.Z += 0.5f; // Z-Fighting(깜빡임) 방지용 미세 조정
+
+				// 새롭게 계산된 회전값(LookAtRot) 적용
+				FTransform SpawnTransform(LookAtRot, SpawnLoc);
+
+				// =========================================================
+				// 4단계: 문 스폰 및 스케일 자동 계산 (빈 공간 덮기 적용!)
+				// =========================================================
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+				if (ADungeonStageDoor* StageDoor = GetWorld()->SpawnActor<ADungeonStageDoor>(StageDoorPrefab, SpawnTransform, SpawnParams))
+				{
+					UStaticMeshComponent* DoorMeshComp = StageDoor->FindComponentByClass<UStaticMeshComponent>();
+					if (DoorMeshComp && DoorMeshComp->GetStaticMesh())
+					{
+						FVector MeshSize = DoorMeshComp->GetStaticMesh()->GetBoundingBox().GetSize();
+
+						if (MeshSize.X == 0) MeshSize.X = 1.0f;
+						if (MeshSize.Y == 0) MeshSize.Y = 1.0f;
+						if (MeshSize.Z == 0) MeshSize.Z = 1.0f;
+
+						// [추가된 부분] 빈틈을 메우기 위해 크기를 더 키워줍니다!
+						// 수치를 조절해서 완벽한 핏을 맞춰보세요. (1.2f = 20% 더 크게)
+						float WidthMultiplier = 1.25f;  // 양옆 빈틈을 덮기 위해 가로를 25% 키움
+						float HeightMultiplier = 1.1f;  // 위쪽 빈틈을 덮기 위해 높이를 10% 키움
+						float ThicknessMultiplier = 1.0f; // 두께는 그대로 유지
+
+						// 비율 계산
+						FVector FinalScale;
+						FinalScale.X = (WallThickness * ThicknessMultiplier) / MeshSize.X;
+						FinalScale.Y = (WallWidth * WidthMultiplier) / MeshSize.Y;
+						FinalScale.Z = (WallHeight * HeightMultiplier) / MeshSize.Z;
+
+						DoorMeshComp->SetRelativeScale3D(FinalScale);
+					}
+				}
+
+				ChosenWall->DestroyComponent(); // 기존 큐브 파괴
+
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("Stage Door Perfectly Spawned & Scaled!"));
+				return;
+			}
+		}
 	}
 }
