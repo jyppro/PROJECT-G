@@ -158,6 +158,55 @@ void UInventoryMainWidget::UpdateEquipmentUI()
 		if (Inventory->EquippedBackpackID.IsNone()) WBP_BackpackSlot->SetItemInfo(NAME_None, 0);
 		else WBP_BackpackSlot->SetItemInfo(Inventory->EquippedBackpackID, 1);
 	}
+
+	// ==========================================
+	// --- [1] 주무기 1 (Primary Weapon) ---
+	// ==========================================
+	if (WBP_Weapon1Slot)
+	{
+		WBP_Weapon1Slot->bIsEquipSlot = true;
+		WBP_Weapon1Slot->bIsWeaponSlot = true;
+		WBP_Weapon1Slot->SetItemInfo(Inventory->EquippedWeapon1ID, 1);
+	}
+
+	// 파츠 슬롯들도 빈칸(NAME_None)으로 초기화 (나중에 부착물 데이터가 추가되면 여기에 ID를 넣습니다)
+	if (WBP_AttachmentSlot1_Scope) WBP_AttachmentSlot1_Scope->SetItemInfo(NAME_None, 0);
+	if (WBP_AttachmentSlot1_Muzzle) WBP_AttachmentSlot1_Muzzle->SetItemInfo(NAME_None, 0);
+	if (WBP_AttachmentSlot1_Magazine) WBP_AttachmentSlot1_Magazine->SetItemInfo(NAME_None, 0);
+
+	// ==========================================
+	// --- [2] 주무기 2 (Secondary Weapon) ---
+	// ==========================================
+	if (WBP_Weapon2Slot)
+	{
+		WBP_Weapon2Slot->bIsEquipSlot = true;
+		WBP_Weapon2Slot->bIsWeaponSlot = true;
+		WBP_Weapon2Slot->SetItemInfo(Inventory->EquippedWeapon2ID, 1);
+	}
+
+	if (WBP_AttachmentSlot2_Scope) WBP_AttachmentSlot2_Scope->SetItemInfo(NAME_None, 0);
+	if (WBP_AttachmentSlot2_Muzzle) WBP_AttachmentSlot2_Muzzle->SetItemInfo(NAME_None, 0);
+	if (WBP_AttachmentSlot2_Magazine) WBP_AttachmentSlot2_Magazine->SetItemInfo(NAME_None, 0);
+
+	// ==========================================
+	// --- [3] 권총 (Pistol) ---
+	// ==========================================
+	if (WBP_PistolSlot)
+	{
+		WBP_PistolSlot->bIsEquipSlot = true;
+		WBP_PistolSlot->bIsWeaponSlot = true;
+		WBP_PistolSlot->SetItemInfo(Inventory->EquippedPistolID, 1);
+	}
+
+	// ==========================================
+	// --- [4] 투척 무기 (Throwable) ---
+	// ==========================================
+	if (WBP_ThrowableSlot)
+	{
+		WBP_ThrowableSlot->bIsEquipSlot = true;
+		WBP_ThrowableSlot->bIsWeaponSlot = true;
+		WBP_ThrowableSlot->SetItemInfo(Inventory->EquippedThrowableID, 1);
+	}
 }
 
 bool UInventoryMainWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)

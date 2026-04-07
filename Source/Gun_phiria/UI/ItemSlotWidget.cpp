@@ -116,18 +116,18 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 				Player->PlayerInventory->AddItem(CurrentItemID, CurrentQuantity);
 				if (TargetItemActor) TargetItemActor->Destroy();
 			}
-			else if (bIsEquipSlot)
+			else if (bIsEquipSlot || bIsWeaponSlot || bIsAttachmentSlot)
 			{
-				// 장착 -> 가방 (장비 해제)
+				// (팁: 나중에 인벤토리 컴포넌트 쪽에 UnequipWeapon 같은 전용 함수를 만들어서
+				// if(bIsWeaponSlot) { Player->PlayerInventory->UnequipWeapon(...) } 
+				// 이렇게 세분화해주면 훨씬 깔끔합니다. 우선은 기존 함수로 연결!)
 				Player->PlayerInventory->UnequipItemByID(CurrentItemID);
 			}
 			else
 			{
-				// 가방 -> 장착 또는 사용
 				Player->PlayerInventory->UseItemByID(CurrentItemID);
 			}
 
-			// UI 새로고침
 			if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
 			{
 				MainUI->RefreshInventory();
@@ -157,7 +157,7 @@ void UItemSlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FP
 	{
 		DragOp->DraggedItemID = CurrentItemID;
 		DragOp->bIsFromGround = bIsVicinitySlot;
-		DragOp->bIsFromEquip = bIsEquipSlot;
+		DragOp->bIsFromEquip = (bIsEquipSlot || bIsWeaponSlot || bIsAttachmentSlot);
 		DragOp->DraggedActor = TargetItemActor;
 
 		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());

@@ -36,6 +36,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot")
 	bool bIsEquipSlot = false;
 
+	// 이 슬롯이 총기(주무기1, 주무기2, 권총 등)를 장착하는 슬롯인가?
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat")
+	bool bIsWeaponSlot = false;
+
+	// 이 슬롯이 총기 부착물(스코프, 탄창, 손잡이 등)을 장착하는 슬롯인가?
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat")
+	bool bIsAttachmentSlot = false;
+
+	// 만약 부착물 슬롯이라면, 어떤 무기(예: 1번 주무기, 2번 주무기)에 속하는가? 
+	// (0 = 1번무기, 1 = 2번무기, 2 = 권총 등으로 약속해서 사용)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat", meta = (EditCondition = "bIsAttachmentSlot"))
+	int32 ParentWeaponIndex = 0;
+
+	// 어떤 부착물 부위인지 식별 (예: Muzzle(총구), Grip(손잡이), Mag(탄창), Scope(스코프))
+	// 나중에 Enum으로 바꾸면 더 좋지만, 우선 FName으로 식별 가능하게 만듭니다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat", meta = (EditCondition = "bIsAttachmentSlot"))
+	FName AttachmentType = NAME_None;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 

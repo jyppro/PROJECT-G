@@ -27,7 +27,13 @@ enum class EEquipType : uint8
 	None			UMETA(DisplayName = "None"),
 	Helmet			UMETA(DisplayName = "Helmet"),
 	Vest			UMETA(DisplayName = "Vest"),
-	Backpack		UMETA(DisplayName = "Backpack")
+	Backpack		UMETA(DisplayName = "Backpack"),
+
+	// [새로 추가할 전투 슬롯들]
+	Weapon1			UMETA(DisplayName = "Primary Weapon"),
+	Weapon2			UMETA(DisplayName = "Secondary Weapon"),
+	Pistol			UMETA(DisplayName = "Pistol"),
+	Throwable		UMETA(DisplayName = "Throwable")
 };
 
 USTRUCT(BlueprintType)
@@ -183,6 +189,19 @@ public:
 
 	// 장착된 아이템을 해제하는 함수
 	void UnequipItemByID(FName ItemID);
+
+	// [새로 추가] 전투 무기 장착 상태
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Combat")
+	FName EquippedWeapon1ID;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Combat")
+	FName EquippedWeapon2ID;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Combat")
+	FName EquippedPistolID;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Combat")
+	FName EquippedThrowableID;
 
 protected:
 	virtual void BeginPlay() override;

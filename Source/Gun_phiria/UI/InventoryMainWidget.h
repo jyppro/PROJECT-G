@@ -137,6 +137,44 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	class UTextBlock* Txt_SapphireAmount;
 
+	// ==========================================
+	// --- Combat (전투) 슬롯 바인딩 ---
+	// ==========================================
+
+	// === 1번 무기 (Primary Weapon) ===
+	UPROPERTY(meta = (BindWidget))
+	class UItemSlotWidget* WBP_Weapon1Slot;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot1_Scope;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot1_Muzzle;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot1_Magazine;
+
+	// === 2번 무기 (Secondary Weapon) ===
+	UPROPERTY(meta = (BindWidget))
+	class UItemSlotWidget* WBP_Weapon2Slot;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot2_Scope;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot2_Muzzle;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UItemSlotWidget* WBP_AttachmentSlot2_Magazine;
+
+	// === 권총 (Pistol) ===
+	UPROPERTY(meta = (BindWidget))
+	class UItemSlotWidget* WBP_PistolSlot;
+
+	// === 투척 무기 (Throwable) ===
+	UPROPERTY(meta = (BindWidget))
+	class UItemSlotWidget* WBP_ThrowableSlot;
+
 private:
 	// 주기적으로 주변 아이템을 검사하는 함수
 	void CheckNearbyItems();
