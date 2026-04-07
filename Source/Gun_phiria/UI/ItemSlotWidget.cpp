@@ -104,6 +104,11 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 {
 	if (CurrentItemID.IsNone()) return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 
+	if (bIsLockedSlot)
+	{
+		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+	}
+
 	// [1] 우클릭 (빠른 이동 및 장착/사용 로직)
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
@@ -150,7 +155,7 @@ void UItemSlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FP
 {
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
 
-	if (CurrentItemID.IsNone()) return;
+	if (CurrentItemID.IsNone() || bIsLockedSlot) return;
 
 	UItemDragOperation* DragOp = NewObject<UItemDragOperation>(this);
 	if (DragOp)

@@ -195,7 +195,12 @@ void UInventoryMainWidget::UpdateEquipmentUI()
 	{
 		WBP_PistolSlot->bIsEquipSlot = true;
 		WBP_PistolSlot->bIsWeaponSlot = true;
-		WBP_PistolSlot->SetItemInfo(Inventory->EquippedPistolID, 1);
+
+		// 블루프린트에서 권총을 드래그 못하게 체크했다면 코드에서도 확인
+		WBP_PistolSlot->bIsLockedSlot = true;
+
+		// 인벤토리 변수를 읽지 않고, 데이터 테이블의 "DefaultPistol"을 강제로 고정!
+		WBP_PistolSlot->SetItemInfo(FName("DefaultPistol"), 1);
 	}
 
 	// ==========================================

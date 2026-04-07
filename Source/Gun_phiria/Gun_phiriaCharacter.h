@@ -298,6 +298,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
 	TObjectPtr<class UStaticMeshComponent> CloneBackpackMesh;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment")
+	TObjectPtr<class UStaticMeshComponent> CloneWeaponMesh;
+
 private:
 	// --- Input Handlers ---
 	void Move(const FInputActionValue& Value);

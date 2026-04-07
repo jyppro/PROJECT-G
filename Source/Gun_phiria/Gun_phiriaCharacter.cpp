@@ -112,6 +112,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	CloneBackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneBackpackMesh"));
 	CloneBackpackMesh->SetupAttachment(InventoryCloneMesh, FName("BackpackSocket"));
 	CloneBackpackMesh->bVisibleInSceneCaptureOnly = true;
+
+	CloneWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh"));
+	CloneWeaponMesh->SetupAttachment(InventoryCloneMesh, FName("WeaponSocket")); // 실제 무기가 붙는 소켓과 동일한 이름!
+	CloneWeaponMesh->bVisibleInSceneCaptureOnly = true;
+	CloneWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // UI용이므로 충돌 제거
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -145,6 +150,11 @@ void AGun_phiriaCharacter::BeginPlay()
 			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
+
+			if (CloneWeaponMesh && CurrentWeapon->GetWeaponMesh())
+			{
+				CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
+			}
 		}
 	}
 
@@ -172,6 +182,7 @@ void AGun_phiriaCharacter::BeginPlay()
 		if (CloneHelmetMesh) InventoryCamera->ShowOnlyComponent(CloneHelmetMesh);
 		if (CloneVestMesh) InventoryCamera->ShowOnlyComponent(CloneVestMesh);
 		if (CloneBackpackMesh) InventoryCamera->ShowOnlyComponent(CloneBackpackMesh);
+		if (CloneWeaponMesh) InventoryCamera->ShowOnlyComponent(CloneWeaponMesh);
 	}
 }
 

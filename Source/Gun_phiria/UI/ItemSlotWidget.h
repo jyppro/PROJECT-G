@@ -54,6 +54,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat", meta = (EditCondition = "bIsAttachmentSlot"))
 	FName AttachmentType = NAME_None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemSlot|Combat")
+	bool bIsLockedSlot = false;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
