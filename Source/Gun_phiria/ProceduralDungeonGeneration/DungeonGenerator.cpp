@@ -5,6 +5,7 @@
 #include "../NPC/ShopNPC.h"
 #include "../Item/PickupItemBase.h"
 #include "../Interactable/DungeonStageDoor.h"
+#include "../component/InventoryComponent.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -376,72 +377,109 @@ void ADungeonGenerator::SetupRoomManagers()
 
 void ADungeonGenerator::SpawnItemsInRooms()
 {
-	// 아이템 프리팹이나 전리품 목록이 비어있으면 실행 안 함
-	if (ItemPrefabs.IsEmpty()) return;
+	if (!ItemDataTable || !RoomList.IsValidIndex(PlayerSpawnRoomIndex)) return;
 
-	for (const auto& Room : RoomList)
+	// 임시로 ID와 데이터를 묶어둘 로컬 구조체
+	struct FSpawnCandidate { FName ItemID; FItemData* Data; };
+	TArray<FSpawnCandidate> SpawnCandidates;
+	float TotalSpawnWeight = 0.0f;
+
+	// =========================================================
+	// 1. 데이터 테이블의 모든 행을 순회하며 "Item"으로 시작하는 것만 긁어오기!
+	// =========================================================
+	TArray<FName> RowNames = ItemDataTable->GetRowNames();
+	for (FName RowName : RowNames)
 	{
-		if (!Room.bIsMainRoom || Room.bIsShopRoom) continue;
-
-		int32 Count = FMath::RandRange(MinItemsPerRoom, MaxItemsPerRoom);
-		for (int32 j = 0; j < Count; j++)
+		// 이름이 "Item"으로 시작하는지 검사
+		if (RowName.ToString().StartsWith(TEXT("Item")))
 		{
-			FVector SpawnLoc;
-			bool bFound = false;
+			FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(RowName, TEXT("SpawnItemList"));
 
-			for (int32 Tries = 0; Tries < 10 && !bFound; Tries++)
+			// 클래스가 존재하고 가중치가 0보다 큰 경우에만 후보로 등록
+			if (ItemInfo && ItemInfo->ItemClass && ItemInfo->SpawnWeight > 0.0f)
 			{
-				float RX = FMath::RandRange(Room.CenterLocation.X - Room.Size.X * 0.4f, Room.CenterLocation.X + Room.Size.X * 0.4f);
-				float RY = FMath::RandRange(Room.CenterLocation.Y - Room.Size.Y * 0.4f, Room.CenterLocation.Y + Room.Size.Y * 0.4f);
+				SpawnCandidates.Add({ RowName, ItemInfo });
+				TotalSpawnWeight += ItemInfo->SpawnWeight;
+			}
+		}
+	}
 
-				FHitResult Hit;
-				if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(RX, RY, 2000), FVector(RX, RY, -500), ECC_WorldStatic))
+	// 조건에 맞는 아이템이 없으면 스폰 중지
+	if (SpawnCandidates.IsEmpty() || TotalSpawnWeight <= 0.0f) return;
+
+	const FDungeonRoom& StartRoom = RoomList[PlayerSpawnRoomIndex];
+	int32 Count = FMath::RandRange(MinItemsPerRoom, MaxItemsPerRoom);
+
+	for (int32 i = 0; i < Count; i++)
+	{
+		FVector SpawnLoc;
+		bool bFound = false;
+
+		// ---------------------------------------------------------
+		// 바닥 좌표 찾기 (기존 동일)
+		// ---------------------------------------------------------
+		for (int32 Tries = 0; Tries < 10 && !bFound; Tries++)
+		{
+			float RX = FMath::RandRange(StartRoom.CenterLocation.X - StartRoom.Size.X * 0.4f, StartRoom.CenterLocation.X + StartRoom.Size.X * 0.4f);
+			float RY = FMath::RandRange(StartRoom.CenterLocation.Y - StartRoom.Size.Y * 0.4f, StartRoom.CenterLocation.Y + StartRoom.Size.Y * 0.4f);
+
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(RX, RY, 2000), FVector(RX, RY, -500), ECC_WorldStatic))
+			{
+				FVector GroundLocation = Hit.ImpactPoint;
+				float CheckRadius = 20.0f;
+				FVector CheckLocation = GroundLocation + FVector(0.0f, 0.0f, CheckRadius + 5.0f);
+				FCollisionQueryParams OverlapParams; OverlapParams.AddIgnoredActor(this);
+
+				if (!GetWorld()->OverlapAnyTestByChannel(CheckLocation, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(CheckRadius), OverlapParams))
 				{
-					FVector GroundLocation = Hit.ImpactPoint;
-					float CheckRadius = 20.0f;
+					bFound = true; SpawnLoc = GroundLocation;
+				}
+			}
+		}
 
-					// 픽스 1: 구슬이 바닥에 쓸려서 '겹침' 판정 나는 것을 막기 위해 반지름보다 5.f 더 위로 띄움!
-					FVector CheckLocation = GroundLocation + FVector(0.0f, 0.0f, CheckRadius + 5.0f);
+		if (bFound)
+		{
+			// =========================================================
+			// 2. 긁어온 데이터들을 바탕으로 가중치 랜덤 룰렛 돌리기
+			// =========================================================
+			float RandomValue = FMath::FRandRange(0.0f, TotalSpawnWeight);
+			float AccumulatedWeight = 0.0f;
+			FSpawnCandidate SelectedCandidate;
 
-					FCollisionQueryParams OverlapParams;
-					OverlapParams.AddIgnoredActor(this);
-
-					if (!GetWorld()->OverlapAnyTestByChannel(CheckLocation, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(CheckRadius), OverlapParams))
-					{
-						bFound = true;
-						SpawnLoc = GroundLocation; // 실제 스폰은 바닥에!
-					}
+			for (const FSpawnCandidate& Candidate : SpawnCandidates)
+			{
+				AccumulatedWeight += Candidate.Data->SpawnWeight;
+				if (RandomValue <= AccumulatedWeight)
+				{
+					SelectedCandidate = Candidate;
+					break;
 				}
 			}
 
-			if (bFound)
+			if (!SelectedCandidate.Data || !SelectedCandidate.Data->ItemClass) continue;
+
+			// =========================================================
+			// 3. 아이템 스폰 및 자동으로 ItemID 세팅까지 한 번에!
+			// =========================================================
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(
+				SelectedCandidate.Data->ItemClass,
+				SpawnLoc,
+				FRotator(0, FMath::RandRange(0.f, 360.f), 0),
+				SpawnParams
+			);
+
+			if (APickupItemBase* PickupItem = Cast<APickupItemBase>(SpawnedActor))
 			{
-				// 픽스 2: 엔진이 바닥과 겹친다고 착각해서 스폰을 취소하는 것을 강제로 막는 파라미터!
-				FActorSpawnParameters SpawnParams;
-				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				// 네 아이디어의 최고 장점: 데이터 테이블 이름(RowName)을 그대로 ID로 넣어줄 수 있음!
+				PickupItem->ItemID = SelectedCandidate.ItemID;
 
-				// 스폰 파라미터(SpawnParams)를 넣어서 강제 스폰
-				AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(
-					ItemPrefabs[FMath::RandRange(0, ItemPrefabs.Num() - 1)],
-					SpawnLoc,
-					FRotator(0, FMath::RandRange(0.f, 360.f), 0),
-					SpawnParams
-				);
-
-				if (APickupItemBase* PickupItem = Cast<APickupItemBase>(SpawnedActor))
-				{
-					// 블루프린트가 원래 가지고 태어난 '진짜 ID'를 그대로 사용합니다!
-					FString ItemString = PickupItem->ItemID.ToString();
-
-					if (ItemString.Contains(TEXT("Ammo")))
-					{
-						PickupItem->Quantity = FMath::RandRange(15, 30);
-					}
-					else
-					{
-						PickupItem->Quantity = 1;
-					}
-				}
+				FString ItemString = PickupItem->ItemID.ToString();
+				if (ItemString.Contains(TEXT("Ammo"))) PickupItem->Quantity = FMath::RandRange(15, 30);
+				else PickupItem->Quantity = 1;
 			}
 		}
 	}

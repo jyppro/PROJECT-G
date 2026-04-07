@@ -69,6 +69,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Economy")
 	int32 SellPrice = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemData")
+	float SpawnWeight = 10.0f;
+
 
 	// [소모품용] 발동시킬 효과 클래스
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")

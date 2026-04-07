@@ -29,6 +29,20 @@ struct FRoomPrefabData
 };
 
 USTRUCT(BlueprintType)
+struct FItemSpawnData
+{
+	GENERATED_BODY()
+
+	// 스폰할 아이템 클래스
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	TSubclassOf<AActor> ItemClass;
+
+	// 스폰 확률(가중치) (예: Lv1=50, Lv2=30, Lv3=20)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
+	float SpawnWeight = 1.0f;
+};
+
+USTRUCT(BlueprintType)
 struct FDungeonRoom
 {
 	GENERATED_BODY()
@@ -154,8 +168,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
 	int32 MaxEnemiesPerRoom = 3;
 
-	UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
-	TArray<TSubclassOf<AActor>> ItemPrefabs;
+	/*UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
+	TArray<TSubclassOf<AActor>> ItemPrefabs;*/
+
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Items")
+	TArray<FItemSpawnData> ItemSpawnList;
 
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
 	int32 MinItemsPerRoom = 1;
@@ -196,6 +213,9 @@ protected:
 
 	// 다음 스테이지 문을 스폰하는 함수
 	void SpawnStageDoor();
+
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Items")
+	UDataTable* ItemDataTable;
 
 private:
 	// --- Internal Helpers ---
