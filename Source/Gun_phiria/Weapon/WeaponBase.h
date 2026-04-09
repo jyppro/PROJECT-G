@@ -9,6 +9,24 @@ class UStaticMeshComponent;
 class UNiagaraSystem;
 class UAnimMontage;
 
+UENUM(BlueprintType)
+enum class EWeaponType : uint8
+{
+	Pistol UMETA(DisplayName = "Pistol"),
+	SMG    UMETA(DisplayName = "SMG"),
+	AR     UMETA(DisplayName = "Assault Rifle"),
+	Sniper UMETA(DisplayName = "Sniper Rifle"),
+	Shotgun UMETA(DisplayName = "Shotgun")
+};
+
+UENUM(BlueprintType)
+enum class EFireMode : uint8
+{
+	Single UMETA(DisplayName = "Single"),
+	Burst  UMETA(DisplayName = "Burst"),
+	Auto   UMETA(DisplayName = "Auto")
+};
+
 UCLASS()
 class GUN_PHIRIA_API AWeaponBase : public AActor
 {
@@ -42,6 +60,35 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
 	TArray<TObjectPtr<UAnimMontage>> ProneFireMontages;
 
+	// --- Weapon Info ---
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Info")
+	EWeaponType WeaponType = EWeaponType::AR;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Info")
+	EFireMode FireMode = EFireMode::Single;
+
+	// --- Ammo System ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Ammo")
+	int32 CurrentAmmo = 30;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Ammo")
+	int32 MagazineCapacity = 30;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Ammo")
+	bool bInfiniteAmmo = false;
+
+	// --- Fire Control ---
+	// 분당 발사 속도 (RPM) - 예: M416은 보통 700~800
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Stats")
+	float FireRate = 600.0f;
+
+	// --- Audio ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Audio")
+	TObjectPtr<class USoundBase> FireSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Audio")
+	TObjectPtr<class USoundBase> EmptyMagSound; // 총알 없을 때 '찰칵' 소리
+
 protected:
 	// --- Components ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Components")
@@ -63,5 +110,8 @@ protected:
 	// --- Combat Settings ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Combat")
 	float SpreadPerShot = 1.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Components")
+	TObjectPtr<class USceneComponent> RootComp;
 
 };

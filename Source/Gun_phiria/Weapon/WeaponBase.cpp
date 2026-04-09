@@ -11,8 +11,11 @@ AWeaponBase::AWeaponBase()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	RootComp = CreateDefaultSubobject<USceneComponent>(TEXT("RootComp"));
+	RootComponent = RootComp;
+
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
-	RootComponent = WeaponMesh;
+	WeaponMesh->SetupAttachment(RootComponent); // 이제 총기 메시는 뿌리 아래에 붙습니다.
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
@@ -20,6 +23,26 @@ void AWeaponBase::Fire(FVector TargetLocation)
 {
 	if (!WeaponMesh) return;
 
+	// ==========================================
+	// 1. 탄약 체크 (총알이 없으면 사격 불가)
+	// ==========================================
+	if (!bInfiniteAmmo)
+	{
+		if (CurrentAmmo <= 0)
+		{
+			// (찰칵 소리 재생 로직 추가)
+			if (EmptyMagSound) UGameplayStatics::PlaySoundAtLocation(this, EmptyMagSound, GetActorLocation());
+			return;
+		}
+		CurrentAmmo--;
+	}
+
+	// TargetLocation이 ZeroVector면 사격 로직을 멈춤 (총알 없을 때 소리만 나게끔 처리용)
+	if (TargetLocation.IsNearlyZero()) return;
+
+	// ==========================================
+	// 2. 기존 히트스캔 및 나이아가라 로직 (그대로 유지)
+	// ==========================================
 	const FVector MuzzleLocation = WeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
 	const FVector BaseDirection = (TargetLocation - MuzzleLocation).GetSafeNormal();
 	const FVector BulletEndLocation = MuzzleLocation + (BaseDirection * 5000.0f);

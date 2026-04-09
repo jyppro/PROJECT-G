@@ -154,6 +154,9 @@ void AGun_phiriaCharacter::BeginPlay()
 			if (CloneWeaponMesh && CurrentWeapon->GetWeaponMesh())
 			{
 				CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
+
+				// 추가: 총기 블루프린트에서 세팅한 크기(예: 0.01)를 그대로 복사
+				CloneWeaponMesh->SetRelativeScale3D(CurrentWeapon->GetWeaponMesh()->GetRelativeScale3D());
 			}
 		}
 	}
@@ -312,6 +315,7 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EIC->BindAction(AimAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::StartAiming);
 		EIC->BindAction(AimAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::StopAiming);
 		EIC->BindAction(FireAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Fire);
+		EIC->BindAction(FireAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::StopFiring);
 		EIC->BindAction(CrouchAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleCrouch);
 		EIC->BindAction(LeanAction, ETriggerEvent::Triggered, this, &AGun_phiriaCharacter::InputLean);
 		EIC->BindAction(LeanAction, ETriggerEvent::Completed, this, &AGun_phiriaCharacter::InputLeanEnd);
@@ -378,6 +382,60 @@ void AGun_phiriaCharacter::StopAiming()
 	if (FollowCamera) FollowCamera->SetActive(true);
 }
 
+//void AGun_phiriaCharacter::Fire()
+//{
+//	if (bIsInventoryOpen) return;
+//
+//	if (bIsCasting)
+//	{
+//		CancelCasting();
+//		return;
+//	}
+//
+//	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
+//
+//	bIsFiring = true;
+//	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
+//	LastFireTime = GetWorld()->GetTimeSeconds();
+//
+//	// Animation
+//	if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
+//	{
+//		const auto& Montages = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
+//		if (Montages.Num() > 0) AnimInst->Montage_Play(Montages[FMath::RandRange(0, Montages.Num() - 1)]);
+//	}
+//
+//	// Recoil & Spread
+//	float Mult = (bIsAiming ? 0.6f : 1.2f) * (GetVelocity().Size2D() > 10.f ? 1.5f : 1.f) * (GetCharacterMovement()->IsFalling() ? 2.5f : 1.f);
+//	Mult *= bIsProne ? 0.4f : (bIsCrouched ? 0.75f : 1.f);
+//
+//	AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * Mult);
+//	AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * Mult);
+//	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * Mult), 0.0f, MaxSpread);
+//
+//	// Line Trace Logic
+//	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+//	const FVector CamLoc = ActiveCam->GetComponentLocation();
+//	const FVector CamEnd = CamLoc + ActiveCam->GetForwardVector() * 10000.f;
+//
+//	FHitResult CamHit;
+//	FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
+//	const FVector EyeTarget = GetWorld()->LineTraceSingleByChannel(CamHit, CamLoc, CamEnd, ECC_Visibility, Params) ? CamHit.ImpactPoint : CamEnd;
+//
+//	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+//	const FVector RealDir = (EyeTarget - Muzzle).GetSafeNormal();
+//	FHitResult FinalHit;
+//	const FVector FinalTarget = GetWorld()->LineTraceSingleByChannel(FinalHit, Muzzle, Muzzle + RealDir * 5000.f, ECC_Visibility, Params) ? FinalHit.ImpactPoint : Muzzle + RealDir * 5000.f;
+//
+//	// Apply Spread
+//	FVector Right, Up; RealDir.FindBestAxisVectors(Right, Up);
+//	const float Radius = FMath::Tan(FMath::DegreesToRadians(CurrentSpread * CurrentWeapon->WeaponSpreadMultiplier)) * FVector::Distance(Muzzle, FinalTarget);
+//	const float RandAngle = FMath::RandRange(0.f, PI * 2.f);
+//	const FVector Offset = (Right * FMath::Cos(RandAngle) + Up * FMath::Sin(RandAngle)) * FMath::RandRange(0.f, Radius);
+//
+//	CurrentWeapon->Fire(FinalTarget + Offset);
+//}
+
 void AGun_phiriaCharacter::Fire()
 {
 	if (bIsInventoryOpen) return;
@@ -389,6 +447,47 @@ void AGun_phiriaCharacter::Fire()
 	}
 
 	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
+
+	// ==========================================
+	// 연사 모드(Auto)일 경우 타이머를 설정해 연속으로 쏩니다.
+	// ==========================================
+	if (CurrentWeapon->FireMode == EFireMode::Auto)
+	{
+		// RPM을 초 단위 딜레이로 변환 (예: 600 RPM = 0.1초)
+		float TimeBetweenShots = 60.0f / CurrentWeapon->FireRate;
+
+		// 0.0f를 넣어 즉시 첫 발을 쏘고, 이후 TimeBetweenShots 간격으로 반복합니다.
+		GetWorldTimerManager().SetTimer(AutoFireTimerHandle, this, &AGun_phiriaCharacter::PerformFire, TimeBetweenShots, true, 0.0f);
+	}
+	else // 단발(Single)이나 점사일 경우
+	{
+		PerformFire(); // 타이머 없이 딱 한 번만 쏩니다.
+	}
+}
+
+void AGun_phiriaCharacter::StopFiring()
+{
+	// 연사 타이머를 꺼서 사격을 멈춥니다.
+	GetWorldTimerManager().ClearTimer(AutoFireTimerHandle);
+}
+
+void AGun_phiriaCharacter::StopFiringPose() { bIsFiring = false; }
+
+void AGun_phiriaCharacter::PerformFire()
+{
+	if (!CurrentWeapon) return;
+
+	// ==========================================
+	// 탄약 체크: 무한 탄창이 아니고 총알이 다 떨어졌다면 연사 강제 종료!
+	// ==========================================
+	if (!CurrentWeapon->bInfiniteAmmo && CurrentWeapon->CurrentAmmo <= 0)
+	{
+		StopFiring();
+
+		// (선택) 총알이 없을 때 찰칵 소리를 내기 위해 FVector::ZeroVector를 넘깁니다.
+		CurrentWeapon->Fire(FVector::ZeroVector);
+		return;
+	}
 
 	bIsFiring = true;
 	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
@@ -431,8 +530,6 @@ void AGun_phiriaCharacter::Fire()
 
 	CurrentWeapon->Fire(FinalTarget + Offset);
 }
-
-void AGun_phiriaCharacter::StopFiringPose() { bIsFiring = false; }
 
 float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {

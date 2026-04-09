@@ -155,6 +155,12 @@ public:
 	// [추가] 다음 스테이지로 넘어갔을 때 장비 외형을 다시 입혀주는 함수
 	void RestoreEquipmentVisuals();
 
+	void PerformFire(); // 실제로 총알이 나가는 로직
+	void StopFiring();  // 마우스를 뗐을 때 연사를 멈추는 로직
+
+	// 연사 속도를 조절할 타이머
+	FTimerHandle AutoFireTimerHandle;
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
