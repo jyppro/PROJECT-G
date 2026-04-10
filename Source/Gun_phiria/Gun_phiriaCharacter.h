@@ -211,7 +211,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Weapon")
 	TSubclassOf<AWeaponBase> DefaultWeaponClass;
 
-	UPROPERTY()
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<AWeaponBase> CurrentWeapon;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|State")

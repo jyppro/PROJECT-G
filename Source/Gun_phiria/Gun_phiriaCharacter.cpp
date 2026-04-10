@@ -22,6 +22,7 @@
 #include "TimerManager.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+#include "Components/SceneComponent.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -139,24 +140,74 @@ void AGun_phiriaCharacter::BeginPlay()
 	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
 
 	// Weapon Initialization
+	//if (DefaultWeaponClass)
+	//{
+	//	FActorSpawnParameters SpawnParams;
+	//	SpawnParams.Owner = this;
+	//	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+	//	if (CurrentWeapon)
+	//	{
+	//		FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
+	//		CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
+	//		ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
+
+	//		if (CloneWeaponMesh && CurrentWeapon->GetWeaponMesh())
+	//		{
+	//			CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
+
+	//			// 추가: 총기 블루프린트에서 세팅한 크기(예: 0.01)를 그대로 복사
+	//			CloneWeaponMesh->SetRelativeScale3D(CurrentWeapon->GetWeaponMesh()->GetRelativeScale3D());
+	//		}
+	//	}
+	//}
+
 	if (DefaultWeaponClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
 		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-		if (CurrentWeapon)
+		if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 		{
-			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
-			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
+			// 1. [스케일 보호 부착 ] 위치와 회전은 손에 맞추되, Scale(크기)은 무기 본연의 크기(KeepRelative)를 유지합니다!
+			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+			CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
 
-			if (CloneWeaponMesh && CurrentWeapon->GetWeaponMesh())
+			// 2. 무기 중심에서 손잡이 소켓까지의 거리를 구합니다.
+			FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
+
+			// 3. [핵심 ] 역행렬 계산 시 크기가 100배로 튀는 것을 막기 위해 스케일을 1.0으로 강제 고정하고 역행렬을 구합니다.
+			GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+			FTransform InverseGrip = GripSocketRelative.Inverse();
+
+			// 4. 전체 트랜스폼을 덮어씌우지 않고, "위치"와 "회전"만 안전하게 적용합니다.
+			CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
+			CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
+
+			// 카메라 부착
+			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
+
+			// ==========================================
+			// UI 인벤토리 클론 무기 보정 로직
+			// ==========================================
+			if (CloneWeaponMesh)
 			{
 				CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
-
-				// 추가: 총기 블루프린트에서 세팅한 크기(예: 0.01)를 그대로 복사
 				CloneWeaponMesh->SetRelativeScale3D(CurrentWeapon->GetWeaponMesh()->GetRelativeScale3D());
+
+				// 클론 무기도 스케일을 보호하며 부착
+				CloneWeaponMesh->AttachToComponent(InventoryCloneMesh, AttachRules, FName("WeaponSocket"));
+
+				FTransform CloneGripRelative = CloneWeaponMesh->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Component);
+
+				// 동일하게 스케일 뻥튀기 방지
+				CloneGripRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+				FTransform CloneInverseGrip = CloneGripRelative.Inverse();
+
+				// 위치와 회전만 세팅
+				CloneWeaponMesh->SetRelativeLocation(CloneInverseGrip.GetLocation());
+				CloneWeaponMesh->SetRelativeRotation(CloneInverseGrip.GetRotation());
 			}
 		}
 	}
