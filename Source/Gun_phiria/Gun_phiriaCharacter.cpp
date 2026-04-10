@@ -8,8 +8,8 @@
 #include "UI/InventoryMainWidget.h"
 #include "UI/CastBarWidget.h"
 #include "Gun_phiriaGameInstance.h"
+#include "UI/InventoryStudio.h"
 
-// Engine Headers
 #include "Kismet/GameplayStatics.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -36,7 +36,6 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	// Rotation & Movement
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
@@ -66,58 +65,14 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	ADSCamera->SetAutoActivate(false);
 	ADSCamera->PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
-	// Initial States
-	bIsProne = false;
-	DefaultCapsuleHalfHeight = 96.0f;
-	DefaultMeshRelativeLocationZ = -97.0f;
-
 	PlayerInventory = CreateDefaultSubobject<UInventoryComponent>(TEXT("PlayerInventory"));
-
-	// --- 생성자 마지막 부분에 추가 ---
-	// 1. 인벤토리 카메라 생성
-	InventoryCamera = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("InventoryCamera"));
-	// 2. 캐릭터 루트(보통 캡슐)에 붙임
-	InventoryCamera->SetupAttachment(RootComponent);
-
-	InventoryCamera->SetRelativeLocation(FVector(150.0f, 0.0f, 0.0f));
-	InventoryCamera->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
-	InventoryCamera->FOVAngle = 80.0f;
-
-	// 1. UI용 가짜 몸통 생성 및 부착
-	InventoryCloneMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("InventoryCloneMesh"));
-	InventoryCloneMesh->SetupAttachment(RootComponent);
-
-	InventoryCloneMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -90.0f));
-	InventoryCloneMesh->SetRelativeRotation(FRotator(0.0f, 255.0f, 0.0f));
-
-	InventoryCloneMesh->bVisibleInSceneCaptureOnly = true;
-	InventoryCloneMesh->SetCastShadow(false);
 
 	HelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HelmetMesh"));
 	HelmetMesh->SetupAttachment(GetMesh(), FName("HelmetSocket"));
-
 	VestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VestMesh"));
 	VestMesh->SetupAttachment(GetMesh(), FName("VestSocket"));
-
 	BackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BackpackMesh"));
-	BackpackMesh->SetupAttachment(GetMesh(), FName("BackpackSocket")); // 방금 만든 소켓 이름
-
-	CloneHelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneHelmetMesh"));
-	CloneHelmetMesh->SetupAttachment(InventoryCloneMesh, FName("HelmetSocket"));
-	CloneHelmetMesh->bVisibleInSceneCaptureOnly = true;
-
-	CloneVestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneVestMesh"));
-	CloneVestMesh->SetupAttachment(InventoryCloneMesh, FName("VestSocket"));
-	CloneVestMesh->bVisibleInSceneCaptureOnly = true;
-
-	CloneBackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneBackpackMesh"));
-	CloneBackpackMesh->SetupAttachment(InventoryCloneMesh, FName("BackpackSocket"));
-	CloneBackpackMesh->bVisibleInSceneCaptureOnly = true;
-
-	CloneWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh"));
-	CloneWeaponMesh->SetupAttachment(InventoryCloneMesh, FName("WeaponSocket")); // 실제 무기가 붙는 소켓과 동일한 이름!
-	CloneWeaponMesh->bVisibleInSceneCaptureOnly = true;
-	CloneWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // UI용이므로 충돌 제거
+	BackpackMesh->SetupAttachment(GetMesh(), FName("BackpackSocket"));
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -126,130 +81,56 @@ void AGun_phiriaCharacter::BeginPlay()
 
 	CurrentHealth = MaxHealth;
 
-	// [데이터 불러오기!]
+	// 1. Data Load
 	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
 	{
-		// 1. 인벤토리 데이터(ID 등) 복구
 		GameInst->LoadPlayerData(this);
-
-		// 2. [추가된 부분] 복구된 ID를 바탕으로 3D 외형을 다시 입습니다!
 		RestoreEquipmentVisuals();
 	}
 
-	// Interaction Timer
+	// 2. Timers & Logic Init
 	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
+	if (ADSCamera) ADSCamera->AddTickPrerequisiteComponent(GetMesh());
 
-	// Weapon Initialization
-	//if (DefaultWeaponClass)
-	//{
-	//	FActorSpawnParameters SpawnParams;
-	//	SpawnParams.Owner = this;
-	//	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	// 3. Components Init (Refactored)
+	InitializeWeapon();
+	InitializeInventoryUI();
 
-	//	if (CurrentWeapon)
-	//	{
-	//		FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-	//		CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
-	//		ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachmentRules, FName("SightSocket"));
-
-	//		if (CloneWeaponMesh && CurrentWeapon->GetWeaponMesh())
-	//		{
-	//			CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
-
-	//			// 추가: 총기 블루프린트에서 세팅한 크기(예: 0.01)를 그대로 복사
-	//			CloneWeaponMesh->SetRelativeScale3D(CurrentWeapon->GetWeaponMesh()->GetRelativeScale3D());
-	//		}
-	//	}
-	//}
-
-	if (DefaultWeaponClass)
+	if (StudioClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
-		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-
-		if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
-		{
-			// 1. [스케일 보호 부착 ] 위치와 회전은 손에 맞추되, Scale(크기)은 무기 본연의 크기(KeepRelative)를 유지합니다!
-			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-			CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
-
-			// 2. 무기 중심에서 손잡이 소켓까지의 거리를 구합니다.
-			FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
-
-			// 3. [핵심 ] 역행렬 계산 시 크기가 100배로 튀는 것을 막기 위해 스케일을 1.0으로 강제 고정하고 역행렬을 구합니다.
-			GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
-			FTransform InverseGrip = GripSocketRelative.Inverse();
-
-			// 4. 전체 트랜스폼을 덮어씌우지 않고, "위치"와 "회전"만 안전하게 적용합니다.
-			CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
-			CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
-
-			// 카메라 부착
-			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
-
-			// ==========================================
-			// UI 인벤토리 클론 무기 보정 로직
-			// ==========================================
-			if (CloneWeaponMesh)
-			{
-				CloneWeaponMesh->SetStaticMesh(CurrentWeapon->GetWeaponMesh()->GetStaticMesh());
-				CloneWeaponMesh->SetRelativeScale3D(CurrentWeapon->GetWeaponMesh()->GetRelativeScale3D());
-
-				// 클론 무기도 스케일을 보호하며 부착
-				CloneWeaponMesh->AttachToComponent(InventoryCloneMesh, AttachRules, FName("WeaponSocket"));
-
-				FTransform CloneGripRelative = CloneWeaponMesh->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Component);
-
-				// 동일하게 스케일 뻥튀기 방지
-				CloneGripRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
-				FTransform CloneInverseGrip = CloneGripRelative.Inverse();
-
-				// 위치와 회전만 세팅
-				CloneWeaponMesh->SetRelativeLocation(CloneInverseGrip.GetLocation());
-				CloneWeaponMesh->SetRelativeRotation(CloneInverseGrip.GetRotation());
-			}
-		}
-	}
-
-	if (ADSCamera) ADSCamera->AddTickPrerequisiteComponent(GetMesh());
-
-	// --- 인벤토리 UI 생성 및 숨김 처리 ---
-	if (InventoryWidgetClass)
-	{
-		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
-		{
-			InventoryWidgetInstance = CreateWidget<UUserWidget>(PC, InventoryWidgetClass);
-			if (InventoryWidgetInstance)
-			{
-				InventoryWidgetInstance->AddToViewport();
-				InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
-			}
-		}
-	}
-
-	if (InventoryCamera)
-	{
-		// [핵심] 카메라가 "내가 지정한 컴포넌트만 찍겠다(ShowOnlyList)"고 선언하는 필수 설정입니다.
-		InventoryCamera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-		InventoryCamera->ShowOnlyComponent(InventoryCloneMesh);
-		if (CloneHelmetMesh) InventoryCamera->ShowOnlyComponent(CloneHelmetMesh);
-		if (CloneVestMesh) InventoryCamera->ShowOnlyComponent(CloneVestMesh);
-		if (CloneBackpackMesh) InventoryCamera->ShowOnlyComponent(CloneBackpackMesh);
-		if (CloneWeaponMesh) InventoryCamera->ShowOnlyComponent(CloneWeaponMesh);
+		// 안 보이는 맵 저 아래에 스폰합니다.
+		FVector StudioLocation = FVector(0.f, 0.f, -10000.f);
+		SpawnedStudio = GetWorld()->SpawnActor<AInventoryStudio>(StudioClass, StudioLocation, FRotator::ZeroRotator, SpawnParams);
 	}
 }
 
+// ==========================================
+// Tick & Tick Helpers (Refactored)
+// ==========================================
 void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 1. Camera FOV Interpolation
+	UpdateCameraFOV(DeltaTime);
+	UpdateWeaponSpread(DeltaTime);
+	UpdateADSOffset(DeltaTime);
+	UpdateLocomotionVariables(DeltaTime);
+	CheckHeadshotTarget();
+	UpdateLeanAndCameraOffset(DeltaTime);
+	PreventWeaponClipping();
+}
+
+void AGun_phiriaCharacter::UpdateCameraFOV(float DeltaTime)
+{
 	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
 	float TargetFOV = bIsAiming ? AimFOV : DefaultFOV;
 	ActiveCam->SetFieldOfView(FMath::FInterpTo(ActiveCam->FieldOfView, TargetFOV, DeltaTime, ZoomInterpSpeed));
+}
 
-	// 2. Dynamic Spread Calculation
+void AGun_phiriaCharacter::UpdateWeaponSpread(float DeltaTime)
+{
 	float TargetMinSpread = 1.0f;
 	const float Speed = GetVelocity().Size2D();
 	const bool bFalling = GetCharacterMovement()->IsFalling();
@@ -272,8 +153,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	{
 		CurrentSpread = FMath::FInterpTo(CurrentSpread, TargetMinSpread, DeltaTime, SpreadRecoveryRate);
 	}
+}
 
-	// 3. Procedural ADS Offset
+void AGun_phiriaCharacter::UpdateADSOffset(float DeltaTime)
+{
 	ADSAlpha = FMath::FInterpTo(ADSAlpha, bIsAiming ? 1.0f : 0.0f, DeltaTime, 15.0f);
 	if (ADSAlpha > 0.01f && FollowCamera && CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
@@ -289,8 +172,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		DynamicAimOffset = FMath::Lerp(FVector::ZeroVector, GetMesh()->GetComponentTransform().InverseTransformPosition(TargetHandLoc), ADSAlpha);
 	}
 	else DynamicAimOffset = FVector::ZeroVector;
+}
 
-	// 4. Locomotion Variables
+void AGun_phiriaCharacter::UpdateLocomotionVariables(float DeltaTime)
+{
 	const FVector Velocity = GetVelocity();
 	MovementDirectionAngle = (Velocity.Size2D() > 1.0f) ? GetActorTransform().InverseTransformVectorNoScale(Velocity).Rotation().Yaw : 0.0f;
 
@@ -298,8 +183,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	float YawDelta = FRotator::NormalizeAxis(CurrentYaw - PreviousActorYaw);
 	YawRotationSpeed = YawDelta / DeltaTime;
 	PreviousActorYaw = CurrentYaw;
+}
 
-	// 5. Headshot Detection
+void AGun_phiriaCharacter::CheckHeadshotTarget()
+{
 	bIsAimingAtHead = false;
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -315,8 +202,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 			if (Cast<ACharacter>(Hit.GetActor()) && Hit.BoneName == FName("head")) bIsAimingAtHead = true;
 		}
 	}
+}
 
-	// 6. Lean & Camera Offset
+void AGun_phiriaCharacter::UpdateLeanAndCameraOffset(float DeltaTime)
+{
 	CurrentLean = FMath::FInterpTo(CurrentLean, TargetLean, DeltaTime, 10.0f);
 	LeanAxisCS = GetMesh()->GetComponentTransform().InverseTransformVectorNoScale(GetBaseAimRotation().Vector());
 
@@ -325,8 +214,10 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 		float H = bIsProne ? 60.f : (bIsCrouched ? 90.f : 120.f);
 		CameraBoom->SocketOffset = FMath::VInterpTo(CameraBoom->SocketOffset, FVector(0.f, CurrentLean * 100.f, H), DeltaTime, 10.0f);
 	}
+}
 
-	// 7. Weapon Collision Prevention
+void AGun_phiriaCharacter::PreventWeaponClipping()
+{
 	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
 	{
 		const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
@@ -347,6 +238,52 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 	}
 }
 
+// ==========================================
+// Setup & Initialization Helpers (Refactored)
+// ==========================================
+void AGun_phiriaCharacter::InitializeWeapon()
+{
+	if (!DefaultWeaponClass) return;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
+	{
+		FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+		CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
+
+		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
+		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+		FTransform InverseGrip = GripSocketRelative.Inverse();
+
+		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
+		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
+
+		ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
+	}
+}
+
+void AGun_phiriaCharacter::InitializeInventoryUI()
+{
+	if (InventoryWidgetClass)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			InventoryWidgetInstance = CreateWidget<UUserWidget>(PC, InventoryWidgetClass);
+			if (InventoryWidgetInstance)
+			{
+				InventoryWidgetInstance->AddToViewport();
+				InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
+	}
+}
+
+// ==========================================
+// Input Bindings & Movement
+// ==========================================
 void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -404,344 +341,30 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
 {
 	if (bIsInventoryOpen) return;
-
 	const FVector2D Vec = Value.Get<FVector2D>();
 	AddControllerYawInput(Vec.X);
 	AddControllerPitchInput(Vec.Y);
 }
 
-void AGun_phiriaCharacter::StartAiming()
+void AGun_phiriaCharacter::CustomJump()
 {
-	if (bIsInventoryOpen) return;
+	if (bIsCasting) { CancelCasting(); return; }
+	if (bIsChangingStance) return;
 
-	// 아이템 시전 중 조준을 시도하면 시전 취소
-	if (bIsCasting)
-	{
-		CancelCasting();
-		return;
-	}
-
-	bIsAiming = true;
-	if (FollowCamera) FollowCamera->SetActive(false);
-	if (ADSCamera) ADSCamera->SetActive(true);
-}
-
-void AGun_phiriaCharacter::StopAiming()
-{
-	bIsAiming = false;
-	if (ADSCamera) ADSCamera->SetActive(false);
-	if (FollowCamera) FollowCamera->SetActive(true);
-}
-
-//void AGun_phiriaCharacter::Fire()
-//{
-//	if (bIsInventoryOpen) return;
-//
-//	if (bIsCasting)
-//	{
-//		CancelCasting();
-//		return;
-//	}
-//
-//	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
-//
-//	bIsFiring = true;
-//	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
-//	LastFireTime = GetWorld()->GetTimeSeconds();
-//
-//	// Animation
-//	if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
-//	{
-//		const auto& Montages = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
-//		if (Montages.Num() > 0) AnimInst->Montage_Play(Montages[FMath::RandRange(0, Montages.Num() - 1)]);
-//	}
-//
-//	// Recoil & Spread
-//	float Mult = (bIsAiming ? 0.6f : 1.2f) * (GetVelocity().Size2D() > 10.f ? 1.5f : 1.f) * (GetCharacterMovement()->IsFalling() ? 2.5f : 1.f);
-//	Mult *= bIsProne ? 0.4f : (bIsCrouched ? 0.75f : 1.f);
-//
-//	AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * Mult);
-//	AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * Mult);
-//	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * Mult), 0.0f, MaxSpread);
-//
-//	// Line Trace Logic
-//	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
-//	const FVector CamLoc = ActiveCam->GetComponentLocation();
-//	const FVector CamEnd = CamLoc + ActiveCam->GetForwardVector() * 10000.f;
-//
-//	FHitResult CamHit;
-//	FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
-//	const FVector EyeTarget = GetWorld()->LineTraceSingleByChannel(CamHit, CamLoc, CamEnd, ECC_Visibility, Params) ? CamHit.ImpactPoint : CamEnd;
-//
-//	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-//	const FVector RealDir = (EyeTarget - Muzzle).GetSafeNormal();
-//	FHitResult FinalHit;
-//	const FVector FinalTarget = GetWorld()->LineTraceSingleByChannel(FinalHit, Muzzle, Muzzle + RealDir * 5000.f, ECC_Visibility, Params) ? FinalHit.ImpactPoint : Muzzle + RealDir * 5000.f;
-//
-//	// Apply Spread
-//	FVector Right, Up; RealDir.FindBestAxisVectors(Right, Up);
-//	const float Radius = FMath::Tan(FMath::DegreesToRadians(CurrentSpread * CurrentWeapon->WeaponSpreadMultiplier)) * FVector::Distance(Muzzle, FinalTarget);
-//	const float RandAngle = FMath::RandRange(0.f, PI * 2.f);
-//	const FVector Offset = (Right * FMath::Cos(RandAngle) + Up * FMath::Sin(RandAngle)) * FMath::RandRange(0.f, Radius);
-//
-//	CurrentWeapon->Fire(FinalTarget + Offset);
-//}
-
-void AGun_phiriaCharacter::Fire()
-{
-	if (bIsInventoryOpen) return;
-
-	if (bIsCasting)
-	{
-		CancelCasting();
-		return;
-	}
-
-	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
-
-	// ==========================================
-	// 연사 모드(Auto)일 경우 타이머를 설정해 연속으로 쏩니다.
-	// ==========================================
-	if (CurrentWeapon->FireMode == EFireMode::Auto)
-	{
-		// RPM을 초 단위 딜레이로 변환 (예: 600 RPM = 0.1초)
-		float TimeBetweenShots = 60.0f / CurrentWeapon->FireRate;
-
-		// 0.0f를 넣어 즉시 첫 발을 쏘고, 이후 TimeBetweenShots 간격으로 반복합니다.
-		GetWorldTimerManager().SetTimer(AutoFireTimerHandle, this, &AGun_phiriaCharacter::PerformFire, TimeBetweenShots, true, 0.0f);
-	}
-	else // 단발(Single)이나 점사일 경우
-	{
-		PerformFire(); // 타이머 없이 딱 한 번만 쏩니다.
-	}
-}
-
-void AGun_phiriaCharacter::StopFiring()
-{
-	// 연사 타이머를 꺼서 사격을 멈춥니다.
-	GetWorldTimerManager().ClearTimer(AutoFireTimerHandle);
-}
-
-void AGun_phiriaCharacter::StopFiringPose() { bIsFiring = false; }
-
-void AGun_phiriaCharacter::PerformFire()
-{
-	if (!CurrentWeapon) return;
-
-	// ==========================================
-	// 탄약 체크: 무한 탄창이 아니고 총알이 다 떨어졌다면 연사 강제 종료!
-	// ==========================================
-	if (!CurrentWeapon->bInfiniteAmmo && CurrentWeapon->CurrentAmmo <= 0)
-	{
-		StopFiring();
-
-		// (선택) 총알이 없을 때 찰칵 소리를 내기 위해 FVector::ZeroVector를 넘깁니다.
-		CurrentWeapon->Fire(FVector::ZeroVector);
-		return;
-	}
-
-	bIsFiring = true;
-	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
-	LastFireTime = GetWorld()->GetTimeSeconds();
-
-	// Animation
-	if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
-	{
-		const auto& Montages = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
-		if (Montages.Num() > 0) AnimInst->Montage_Play(Montages[FMath::RandRange(0, Montages.Num() - 1)]);
-	}
-
-	// Recoil & Spread
-	float Mult = (bIsAiming ? 0.6f : 1.2f) * (GetVelocity().Size2D() > 10.f ? 1.5f : 1.f) * (GetCharacterMovement()->IsFalling() ? 2.5f : 1.f);
-	Mult *= bIsProne ? 0.4f : (bIsCrouched ? 0.75f : 1.f);
-
-	AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * Mult);
-	AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * Mult);
-	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * Mult), 0.0f, MaxSpread);
-
-	// Line Trace Logic
-	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
-	const FVector CamLoc = ActiveCam->GetComponentLocation();
-	const FVector CamEnd = CamLoc + ActiveCam->GetForwardVector() * 10000.f;
-
-	FHitResult CamHit;
-	FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
-	const FVector EyeTarget = GetWorld()->LineTraceSingleByChannel(CamHit, CamLoc, CamEnd, ECC_Visibility, Params) ? CamHit.ImpactPoint : CamEnd;
-
-	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-	const FVector RealDir = (EyeTarget - Muzzle).GetSafeNormal();
-	FHitResult FinalHit;
-	const FVector FinalTarget = GetWorld()->LineTraceSingleByChannel(FinalHit, Muzzle, Muzzle + RealDir * 5000.f, ECC_Visibility, Params) ? FinalHit.ImpactPoint : Muzzle + RealDir * 5000.f;
-
-	// Apply Spread
-	FVector Right, Up; RealDir.FindBestAxisVectors(Right, Up);
-	const float Radius = FMath::Tan(FMath::DegreesToRadians(CurrentSpread * CurrentWeapon->WeaponSpreadMultiplier)) * FVector::Distance(Muzzle, FinalTarget);
-	const float RandAngle = FMath::RandRange(0.f, PI * 2.f);
-	const FVector Offset = (Right * FMath::Cos(RandAngle) + Up * FMath::Sin(RandAngle)) * FMath::RandRange(0.f, Radius);
-
-	CurrentWeapon->Fire(FinalTarget + Offset);
-}
-
-float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
-{
-	if (bIsDead) return 0.0f;
-
-	float ActualDamage = DamageAmount;
-	bool bIsHeadshot = false;
-	FName HitBoneName = NAME_None;
-
-	// 1. 맞은 부위(뼈 이름) 확인 및 헤드샷 판별
-	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
-	{
-		HitBoneName = static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName;
-
-		// 화면에 맞은 부위 출력 (흰색)
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::White, FString::Printf(TEXT("Hit Part: %s / Damage: %.1f"), *HitBoneName.ToString(), ActualDamage));
-
-		if (HitBoneName == FName("head"))
-		{
-			ActualDamage *= 2.5f;
-			bIsHeadshot = true;
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("!!! HeadShot !!! Powerful Damage: %.1f"), ActualDamage));
-		}
-	}
-
-	// ==========================================
-	// 2. 장비(조끼/헬멧) 방어력 및 내구도 적용 로직 (배틀그라운드 방식)
-	// ==========================================
-
-	// 방어구에 의해 깎이기 전의 '원본 데미지'를 기억해둡니다.
-	float OriginalDamage = ActualDamage;
-
-	if (PlayerInventory)
-	{
-		if (bIsHeadshot && !PlayerInventory->EquippedHelmetID.IsNone())
-		{
-			if (FItemData* HelmetData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedHelmetID, TEXT("HelmetDefense")))
-			{
-				// 방어율(DefensePower)만큼 데미지 감소
-				float BlockedDamage = OriginalDamage * HelmetData->DefensePower;
-				ActualDamage -= BlockedDamage;
-
-				// 내구도는 적의 원본 데미지(OriginalDamage)만큼 통째로 깎임
-				PlayerInventory->CurrentHelmetDurability -= OriginalDamage;
-
-				if (GEngine)
-				{
-					FString DebugMsg = FString::Printf(TEXT("[Helmet Defense] %.1f Damage Blocked! / Remaining Durability: %.1f"), BlockedDamage, PlayerInventory->CurrentHelmetDurability);
-					GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, DebugMsg);
-				}
-
-				// 헬멧 파괴 처리
-				if (PlayerInventory->CurrentHelmetDurability <= 0.0f)
-				{
-					PlayerInventory->MaxWeight -= HelmetData->StatBonus;
-					PlayerInventory->EquippedHelmetID = NAME_None;
-					PlayerInventory->CurrentHelmetDurability = 0.0f;
-					UpdateEquipmentVisuals(EEquipType::Helmet, nullptr);
-
-					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Helmet Destroyed !!!"));
-
-					// 인벤토리가 열려있을 때 파괴되면 UI 즉시 갱신
-					if (bIsInventoryOpen && InventoryWidgetInstance)
-					{
-						if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
-						{
-							MainWidget->UpdateEquipmentUI();
-						}
-					}
-				}
-			}
-		}
-		// 기존 조끼 로직 (헤드샷이 아닐 때)
-		else if (!bIsHeadshot && !PlayerInventory->EquippedVestID.IsNone())
-		{
-			if (FItemData* VestData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedVestID, TEXT("VestDefense")))
-			{
-				// [배그 매커니즘 1] 내구도가 1이라도 남아있다면, 정해진 방어율(예: 55%)만큼 무조건 데미지를 깎아줍니다.
-				float BlockedDamage = OriginalDamage * VestData->DefensePower;
-				ActualDamage -= BlockedDamage;
-
-				// [배그 매커니즘 2] 조끼의 내구도는 '막아낸 수치'가 아니라, '적의 원본 데미지(OriginalDamage)'만큼 통째로 깎입니다.
-				PlayerInventory->CurrentVestDurability -= OriginalDamage;
-
-				// 디버그 출력 (청록색)
-				if (GEngine)
-				{
-					FString DebugMsg = FString::Printf(TEXT("[Vest Defense] % .1f Damage Blocked!/ Remaining Durability : % .1f"), BlockedDamage, PlayerInventory->CurrentVestDurability);
-					GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, DebugMsg);
-				}
-
-				if (PlayerInventory->CurrentVestDurability <= 0.0f)
-				{
-					PlayerInventory->MaxWeight -= VestData->StatBonus;
-					PlayerInventory->EquippedVestID = NAME_None;
-					PlayerInventory->CurrentVestDurability = 0.0f;
-					UpdateEquipmentVisuals(EEquipType::Vest, nullptr);
-
-					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Vest Destroyed !!!"));
-
-					// ==========================================
-					// [여기에 추가] 인벤토리가 열려있을 때 파괴되면 UI 즉시 갱신
-					// ==========================================
-					if (bIsInventoryOpen && InventoryWidgetInstance)
-					{
-						if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
-						{
-							MainWidget->UpdateEquipmentUI(); // 조끼가 파괴되었으니 아이콘을 즉시 지움!
-						}
-					}
-				}
-			}
-		}
-	}
-	// ==========================================
-
-	// 3. 최종 데미지 적용
-	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
-	if (HitMontages.Num() > 0) PlayAnimMontage(HitMontages[FMath::RandRange(0, HitMontages.Num() - 1)]);
-
-	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
-
-	// 화면에 최종 결과 출력 (빨간색)
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, FString::Printf(TEXT("-> Player Final Attack Damage: %.1f / Remain Health: %.1f"), ActualDamage, CurrentHealth));
-
-	if (CurrentHealth <= 0.0f) Die();
-
-	return ActualDamage;
-}
-
-void AGun_phiriaCharacter::Die()
-{
-	if (bIsDead) return;
-	bIsDead = true;
-	DisableInput(Cast<APlayerController>(GetController()));
-	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-	GetMesh()->SetSimulatePhysics(true);
+	if (bIsProne) ToggleProne();
+	else if (bIsCrouched) UnCrouch();
+	else Jump();
 }
 
 void AGun_phiriaCharacter::ToggleCrouch()
 {
-	// 시전 중 앉기/일어서기 시도 시 취소
-	if (bIsCasting)
-	{
-		CancelCasting();
-		return;
-	}
+	if (bIsCasting) { CancelCasting(); return; }
 	if (!bIsProne) bIsCrouched ? UnCrouch() : Crouch();
 }
 
-void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value) { TargetLean = Value.Get<float>(); }
-void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { TargetLean = 0.0f; }
-
 void AGun_phiriaCharacter::ToggleProne()
 {
-	if (bIsCasting)
-	{
-		CancelCasting();
-		return;
-	}
-
+	if (bIsCasting) { CancelCasting(); return; }
 	if (GetCharacterMovement()->IsFalling()) return;
 
 	if (bIsProne)
@@ -761,21 +384,211 @@ void AGun_phiriaCharacter::ToggleProne()
 	}
 }
 
-void AGun_phiriaCharacter::CustomJump()
+void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value) { TargetLean = Value.Get<float>(); }
+void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { TargetLean = 0.0f; }
+
+// ==========================================
+// Combat
+// ==========================================
+void AGun_phiriaCharacter::StartAiming()
 {
-	// 아이템 시전 중 점프를 시도하면 시전 취소
-	if (bIsCasting)
+	if (bIsInventoryOpen) return;
+	if (bIsCasting) { CancelCasting(); return; }
+
+	bIsAiming = true;
+	if (FollowCamera) FollowCamera->SetActive(false);
+	if (ADSCamera) ADSCamera->SetActive(true);
+}
+
+void AGun_phiriaCharacter::StopAiming()
+{
+	bIsAiming = false;
+	if (ADSCamera) ADSCamera->SetActive(false);
+	if (FollowCamera) FollowCamera->SetActive(true);
+}
+
+void AGun_phiriaCharacter::Fire()
+{
+	if (bIsInventoryOpen || bIsCasting) { CancelCasting(); return; }
+	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
+
+	if (CurrentWeapon->FireMode == EFireMode::Auto)
 	{
-		CancelCasting();
+		float TimeBetweenShots = 60.0f / CurrentWeapon->FireRate;
+		GetWorldTimerManager().SetTimer(AutoFireTimerHandle, this, &AGun_phiriaCharacter::PerformFire, TimeBetweenShots, true, 0.0f);
+	}
+	else
+	{
+		PerformFire();
+	}
+}
+
+void AGun_phiriaCharacter::StopFiring()
+{
+	GetWorldTimerManager().ClearTimer(AutoFireTimerHandle);
+}
+
+void AGun_phiriaCharacter::StopFiringPose() { bIsFiring = false; }
+
+void AGun_phiriaCharacter::PerformFire()
+{
+	if (!CurrentWeapon) return;
+
+	if (!CurrentWeapon->bInfiniteAmmo && CurrentWeapon->CurrentAmmo <= 0)
+	{
+		StopFiring();
+		CurrentWeapon->Fire(FVector::ZeroVector);
 		return;
 	}
 
-	if (bIsChangingStance) return;
-	if (bIsProne) ToggleProne();
-	else if (bIsCrouched) UnCrouch();
-	else Jump();
+	bIsFiring = true;
+	GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AGun_phiriaCharacter::StopFiringPose, 1.0f, false);
+	LastFireTime = GetWorld()->GetTimeSeconds();
+
+	if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
+	{
+		const auto& Montages = bIsProne ? CurrentWeapon->ProneFireMontages : CurrentWeapon->StandCrouchFireMontages;
+		if (Montages.Num() > 0) AnimInst->Montage_Play(Montages[FMath::RandRange(0, Montages.Num() - 1)]);
+	}
+
+	float Mult = (bIsAiming ? 0.6f : 1.2f) * (GetVelocity().Size2D() > 10.f ? 1.5f : 1.f) * (GetCharacterMovement()->IsFalling() ? 2.5f : 1.f);
+	Mult *= bIsProne ? 0.4f : (bIsCrouched ? 0.75f : 1.f);
+
+	AddControllerPitchInput(FMath::RandRange(-0.5f, -1.0f) * Mult);
+	AddControllerYawInput(FMath::RandRange(-0.5f, 0.5f) * Mult);
+	CurrentSpread = FMath::Clamp(CurrentSpread + (SpreadPerShot * Mult), 0.0f, MaxSpread);
+
+	TObjectPtr<UCameraComponent> ActiveCam = bIsAiming ? ADSCamera : FollowCamera;
+	const FVector CamLoc = ActiveCam->GetComponentLocation();
+	const FVector CamEnd = CamLoc + ActiveCam->GetForwardVector() * 10000.f;
+
+	FHitResult CamHit;
+	FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
+	const FVector EyeTarget = GetWorld()->LineTraceSingleByChannel(CamHit, CamLoc, CamEnd, ECC_Visibility, Params) ? CamHit.ImpactPoint : CamEnd;
+
+	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+	const FVector RealDir = (EyeTarget - Muzzle).GetSafeNormal();
+	FHitResult FinalHit;
+	const FVector FinalTarget = GetWorld()->LineTraceSingleByChannel(FinalHit, Muzzle, Muzzle + RealDir * 5000.f, ECC_Visibility, Params) ? FinalHit.ImpactPoint : Muzzle + RealDir * 5000.f;
+
+	FVector Right, Up; RealDir.FindBestAxisVectors(Right, Up);
+	const float Radius = FMath::Tan(FMath::DegreesToRadians(CurrentSpread * CurrentWeapon->WeaponSpreadMultiplier)) * FVector::Distance(Muzzle, FinalTarget);
+	const float RandAngle = FMath::RandRange(0.f, PI * 2.f);
+	const FVector Offset = (Right * FMath::Cos(RandAngle) + Up * FMath::Sin(RandAngle)) * FMath::RandRange(0.f, Radius);
+
+	CurrentWeapon->Fire(FinalTarget + Offset);
 }
 
+// ==========================================
+// Health & Damage (Refactored)
+// ==========================================
+float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	if (bIsDead) return 0.0f;
+
+	float ActualDamage = DamageAmount;
+	bool bIsHeadshot = false;
+
+	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	{
+		FName HitBoneName = static_cast<const FPointDamageEvent*>(&DamageEvent)->HitInfo.BoneName;
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::White, FString::Printf(TEXT("Hit Part: %s / Damage: %.1f"), *HitBoneName.ToString(), ActualDamage));
+
+		if (HitBoneName == FName("head"))
+		{
+			ActualDamage *= 2.5f;
+			bIsHeadshot = true;
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("!!! HeadShot !!! Powerful Damage: %.1f"), ActualDamage));
+		}
+	}
+
+	// 방어구 데미지 계산 분리
+	ActualDamage = ProcessArmorDurability(ActualDamage, bIsHeadshot);
+
+	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
+	if (HitMontages.Num() > 0) PlayAnimMontage(HitMontages[FMath::RandRange(0, HitMontages.Num() - 1)]);
+
+	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, FString::Printf(TEXT("-> Player Final Attack Damage: %.1f / Remain Health: %.1f"), ActualDamage, CurrentHealth));
+
+	if (CurrentHealth <= 0.0f) Die();
+
+	return ActualDamage;
+}
+
+float AGun_phiriaCharacter::ProcessArmorDurability(float Damage, bool bIsHeadshot)
+{
+	if (!PlayerInventory) return Damage;
+
+	float OriginalDamage = Damage;
+	float ResultDamage = Damage;
+
+	if (bIsHeadshot && !PlayerInventory->EquippedHelmetID.IsNone())
+	{
+		if (FItemData* HelmetData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedHelmetID, TEXT("HelmetDefense")))
+		{
+			float BlockedDamage = OriginalDamage * HelmetData->DefensePower;
+			ResultDamage -= BlockedDamage;
+			PlayerInventory->CurrentHelmetDurability -= OriginalDamage;
+
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, FString::Printf(TEXT("[Helmet Defense] %.1f Damage Blocked! / Remaining Durability: %.1f"), BlockedDamage, PlayerInventory->CurrentHelmetDurability));
+
+			if (PlayerInventory->CurrentHelmetDurability <= 0.0f)
+			{
+				PlayerInventory->MaxWeight -= HelmetData->StatBonus;
+				PlayerInventory->EquippedHelmetID = NAME_None;
+				PlayerInventory->CurrentHelmetDurability = 0.0f;
+				UpdateEquipmentVisuals(EEquipType::Helmet, nullptr);
+
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Helmet Destroyed !!!"));
+				if (bIsInventoryOpen && InventoryWidgetInstance)
+				{
+					if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance)) MainWidget->UpdateEquipmentUI();
+				}
+			}
+		}
+	}
+	else if (!bIsHeadshot && !PlayerInventory->EquippedVestID.IsNone())
+	{
+		if (FItemData* VestData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedVestID, TEXT("VestDefense")))
+		{
+			float BlockedDamage = OriginalDamage * VestData->DefensePower;
+			ResultDamage -= BlockedDamage;
+			PlayerInventory->CurrentVestDurability -= OriginalDamage;
+
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Cyan, FString::Printf(TEXT("[Vest Defense] %.1f Damage Blocked! / Remaining Durability: %.1f"), BlockedDamage, PlayerInventory->CurrentVestDurability));
+
+			if (PlayerInventory->CurrentVestDurability <= 0.0f)
+			{
+				PlayerInventory->MaxWeight -= VestData->StatBonus;
+				PlayerInventory->EquippedVestID = NAME_None;
+				PlayerInventory->CurrentVestDurability = 0.0f;
+				UpdateEquipmentVisuals(EEquipType::Vest, nullptr);
+
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 4.f, FColor::Red, TEXT("!!! Vest Destroyed !!!"));
+				if (bIsInventoryOpen && InventoryWidgetInstance)
+				{
+					if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance)) MainWidget->UpdateEquipmentUI();
+				}
+			}
+		}
+	}
+
+	return ResultDamage;
+}
+
+void AGun_phiriaCharacter::Die()
+{
+	if (bIsDead) return;
+	bIsDead = true;
+	DisableInput(Cast<APlayerController>(GetController()));
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	GetMesh()->SetSimulatePhysics(true);
+}
+
+// ==========================================
+// Interaction & Inventory
+// ==========================================
 void AGun_phiriaCharacter::CheckForInteractables()
 {
 	TArray<FOverlapResult> Overlaps;
@@ -794,11 +607,7 @@ void AGun_phiriaCharacter::CheckForInteractables()
 			}
 		}
 	}
-	// --- 수정된 부분: 타겟이 이전과 달라졌을 때만 상태를 업데이트하고 이벤트를 호출합니다. ---
-	if (TargetInteractable != BestTarget)
-	{
-		TargetInteractable = BestTarget;
-	}
+	if (TargetInteractable != BestTarget) TargetInteractable = BestTarget;
 }
 
 void AGun_phiriaCharacter::Interact()
@@ -807,98 +616,10 @@ void AGun_phiriaCharacter::Interact()
 	{
 		IInteractInterface::Execute_Interact(TargetInteractable.Get(), this);
 
-		// 아이템을 주운 직후, 인벤토리가 열려있다면 UI를 새로고침합니다.
 		if (bIsInventoryOpen && InventoryWidgetInstance)
 		{
-			// 블루프린트의 RefreshInventory(우리가 이름을 바꾼 RefreshBackpack) 함수 호출
 			UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
-			if (RefreshFunc)
-			{
-				InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
-			}
-		}
-	}
-}
-
-// ==========================================
-// --- Currency System Implementation ---
-// ==========================================
-
-void AGun_phiriaCharacter::AddGold(int32 Amount)
-{
-	// 음수 값이 들어오는 것을 방지합니다.
-	if (Amount > 0)
-	{
-		CurrentGold += Amount;
-		// 디버그용 출력 (나중에 지워도 됩니다)
-		//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, FString::Printf(TEXT("골드 획득! 현재 골드: %d"), CurrentGold));
-	}
-}
-
-bool AGun_phiriaCharacter::SpendGold(int32 Amount)
-{
-	// 현재 골드가 요구량보다 많거나 같을 때만 소비 성공
-	if (Amount > 0 && CurrentGold >= Amount)
-	{
-		CurrentGold -= Amount;
-		return true; // 구매 성공
-	}
-	return false; // 구매 실패 (돈 부족)
-}
-
-void AGun_phiriaCharacter::ResetGold()
-{
-	CurrentGold = 0;
-	//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, TEXT("마을 귀환: 골드가 초기화되었습니다."));
-}
-
-void AGun_phiriaCharacter::AddSapphire(int32 Amount)
-{
-	if (Amount > 0)
-	{
-		CurrentSapphire += Amount;
-		//GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, FString::Printf(TEXT("사파이어 획득! 현재 사파이어: %d"), CurrentSapphire));
-	}
-}
-
-bool AGun_phiriaCharacter::SpendSapphire(int32 Amount)
-{
-	if (Amount > 0 && CurrentSapphire >= Amount)
-	{
-		CurrentSapphire -= Amount;
-		return true;
-	}
-	return false;
-}
-
-// 치트 명령어 실행 함수
-void AGun_phiriaCharacter::CheatCurrency(int32 GoldAmount, int32 SapphireAmount)
-{
-	AddGold(GoldAmount);
-	AddSapphire(SapphireAmount);
-	//GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("[치트 발동] 골드 +%d, 사파이어 +%d"), GoldAmount, SapphireAmount));
-}
-
-void AGun_phiriaCharacter::ForceBlackScreen()
-{
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (PC->PlayerCameraManager)
-		{
-			// (시작 투명도 1=검은색, 끝 투명도 1, 시간 0=즉시, 색상, 오디오 유지, 페이드 유지)
-			PC->PlayerCameraManager->StartCameraFade(1.0f, 1.0f, 0.0f, FLinearColor::Black, false, true);
-		}
-	}
-}
-
-void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
-{
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (PC->PlayerCameraManager)
-		{
-			// (시작 투명도 1=검은색, 끝 투명도 0=투명, 지정한 시간동안 서서히 밝아짐)
-			PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInDuration, FLinearColor::Black, false, false);
+			if (RefreshFunc) InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
 		}
 	}
 }
@@ -906,7 +627,6 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 void AGun_phiriaCharacter::ToggleInventory()
 {
 	if (!InventoryWidgetInstance) return;
-
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
@@ -914,19 +634,25 @@ void AGun_phiriaCharacter::ToggleInventory()
 
 	if (bIsInventoryOpen)
 	{
+		if (SpawnedStudio)
+		{
+			SpawnedStudio->CaptureProfile();
+		}
+
 		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Visible);
+
+		if (SpawnedStudio)
+		{
+			SpawnedStudio->SetCameraLive(true);
+		}
 
 		UFunction* RefreshFunc = InventoryWidgetInstance->FindFunction(FName("RefreshInventory"));
 		if (RefreshFunc) InventoryWidgetInstance->ProcessEvent(RefreshFunc, nullptr);
 
 		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
 		{
-			// 키보드로 직접 열었을 때는 항상 '일반 파밍 모드'로 열리도록 보장
 			MainWidget->CurrentMode = EInventoryMode::IM_Normal;
-
-			// [수정됨] 위젯의 공개 함수를 호출하여 타이머 시작!
 			MainWidget->StartNearbyTimer();
-
 			MainWidget->ForceNearbyRefresh();
 		}
 
@@ -939,11 +665,12 @@ void AGun_phiriaCharacter::ToggleInventory()
 	{
 		InventoryWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
 
-		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance))
+		if (SpawnedStudio)
 		{
-			// [수정됨] 위젯의 공개 함수를 호출하여 타이머 정지!
-			MainWidget->StopNearbyTimer();
+			SpawnedStudio->SetCameraLive(false);
 		}
+
+		if (UInventoryMainWidget* MainWidget = Cast<UInventoryMainWidget>(InventoryWidgetInstance)) MainWidget->StopNearbyTimer();
 
 		PC->SetShowMouseCursor(false);
 		FInputModeGameOnly InputMode;
@@ -955,89 +682,75 @@ TArray<APickupItemBase*> AGun_phiriaCharacter::GetNearbyItems()
 {
 	TArray<APickupItemBase*> NearbyItems;
 	TArray<FOverlapResult> Overlaps;
-	FCollisionQueryParams Params;
-	Params.AddIgnoredActor(this);
+	FCollisionQueryParams Params; Params.AddIgnoredActor(this);
 
-	// 내 캐릭터 반경 200 유닛 안의 아이템 스캔
 	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
 	{
 		for (const auto& Res : Overlaps)
 		{
-			// 겹친 게 PickupItemBase인지 캐스팅
-			if (APickupItemBase* FoundItem = Cast<APickupItemBase>(Res.GetActor()))
-			{
-				//NearbyItems.Add(FoundItem);
-				NearbyItems.AddUnique(FoundItem);
-			}
+			if (APickupItemBase* FoundItem = Cast<APickupItemBase>(Res.GetActor())) NearbyItems.AddUnique(FoundItem);
 		}
 	}
 	return NearbyItems;
 }
 
-// --- StartCasting 함수 ---
+void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
+{
+	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
+
+	bool bRemoved = PlayerInventory->RemoveItem(ItemID, 1);
+	if (!bRemoved) return;
+
+	FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropItem"));
+	if (ItemData && ItemData->ItemClass)
+	{
+		FVector SpawnLoc = GetActorLocation() + (GetActorForwardVector() * 100.0f);
+		SpawnLoc.Z -= 80.0f;
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		APickupItemBase* DroppedItem = GetWorld()->SpawnActor<APickupItemBase>(ItemData->ItemClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+
+		if (DroppedItem)
+		{
+			DroppedItem->ItemID = ItemID;
+			DroppedItem->Quantity = 1;
+		}
+	}
+}
+
+// ==========================================
+// Casting & Buffs
+// ==========================================
 void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess)
 {
 	if (bIsCasting) CancelCasting();
 
 	bIsCasting = true;
 	OnCastSuccessCallback = OnSuccess;
-
 	OriginalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
 	GetCharacterMovement()->MaxWalkSpeed = CastingWalkSpeed;
 
-	// ==========================================
-	// 1. 데이터 테이블에서 아이템 아이콘 텍스처 가져오기
-	// ==========================================
 	UTexture2D* IconTexture = nullptr;
 	if (PlayerInventory && PlayerInventory->ItemDataTable)
 	{
-		// [주의] FItemData 구조체 안에 UTexture2D* ItemIcon 변수가 있다고 가정한 코드입니다. 변수명이 다르면 맞춰주세요!
-		FItemData* ItemInfo = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("GetIcon"));
-		if (ItemInfo)
-		{
-			IconTexture = ItemInfo->ItemIcon;
-		}
+		if (FItemData* ItemInfo = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("GetIcon"))) IconTexture = ItemInfo->ItemIcon;
 	}
 
-	// ==========================================
-	// 2. C++ 위젯 생성 및 화면에 띄우기 (안전한 PlayerController 방식)
-	// ==========================================
 	if (CastBarWidgetClass)
 	{
 		if (!CastBarInstance)
 		{
-			// GetWorld() 대신 플레이어 컨트롤러를 명확하게 넘겨줍니다!
-			if (APlayerController* PC = Cast<APlayerController>(GetController()))
-			{
-				CastBarInstance = CreateWidget<UCastBarWidget>(PC, CastBarWidgetClass);
-			}
+			if (APlayerController* PC = Cast<APlayerController>(GetController())) CastBarInstance = CreateWidget<UCastBarWidget>(PC, CastBarWidgetClass);
 		}
-
-		if (CastBarInstance && !CastBarInstance->IsInViewport())
-		{
-			CastBarInstance->AddToViewport();
-		}
-
-		if (CastBarInstance)
-		{
-			// C++ 위젯의 함수 직접 호출 (타이머 시작, 아이콘 적용)
-			CastBarInstance->StartCast(Duration, IconTexture);
-		}
+		if (CastBarInstance && !CastBarInstance->IsInViewport()) CastBarInstance->AddToViewport();
+		if (CastBarInstance) CastBarInstance->StartCast(Duration, IconTexture);
 	}
 
-	// ==========================================
-	// 3. 타이머 로직
-	// ==========================================
 	GetWorldTimerManager().SetTimer(CastTimerHandle, [this]() {
 		bIsCasting = false;
 		GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
-
-		// 캐스팅 완료 시 화면에서 UI 제거
-		if (CastBarInstance && CastBarInstance->IsInViewport())
-		{
-			CastBarInstance->RemoveFromParent();
-		}
-
+		if (CastBarInstance && CastBarInstance->IsInViewport()) CastBarInstance->RemoveFromParent();
 		if (OnCastSuccessCallback) OnCastSuccessCallback();
 		}, Duration, false);
 }
@@ -1049,12 +762,7 @@ void AGun_phiriaCharacter::CancelCasting()
 	bIsCasting = false;
 	GetWorldTimerManager().ClearTimer(CastTimerHandle);
 	GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
-
-	// 취소 시 화면에서 UI 제거
-	if (CastBarInstance && CastBarInstance->IsInViewport())
-	{
-		CastBarInstance->RemoveFromParent();
-	}
+	if (CastBarInstance && CastBarInstance->IsInViewport()) CastBarInstance->RemoveFromParent();
 }
 
 void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
@@ -1062,7 +770,6 @@ void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	if (!MoveComp) return;
 
-	// 1. 이미 버프가 걸려있다면? 기존 버프 수치를 빼고 타이머를 정지시킵니다.
 	if (bHasSpeedBuff)
 	{
 		GetWorldTimerManager().ClearTimer(SpeedBuffTimerHandle);
@@ -1070,14 +777,12 @@ void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
 		else MoveComp->MaxWalkSpeed -= CurrentSpeedBoost;
 	}
 
-	// 2. 새로운 버프 적용 및 상태 갱신
 	bHasSpeedBuff = true;
 	CurrentSpeedBoost = BoostAmount;
 
 	if (bIsCasting) OriginalWalkSpeed += CurrentSpeedBoost;
 	else MoveComp->MaxWalkSpeed += CurrentSpeedBoost;
 
-	// 3. 타이머 새로 시작 (Duration 초 뒤에 원래 속도로 복구)
 	TWeakObjectPtr<AGun_phiriaCharacter> WeakThis(this);
 	GetWorldTimerManager().SetTimer(SpeedBuffTimerHandle, [WeakThis]()
 		{
@@ -1086,7 +791,6 @@ void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
 				WeakThis->bHasSpeedBuff = false;
 				if (WeakThis->bIsCasting) WeakThis->OriginalWalkSpeed -= WeakThis->CurrentSpeedBoost;
 				else WeakThis->GetCharacterMovement()->MaxWalkSpeed -= WeakThis->CurrentSpeedBoost;
-
 				WeakThis->CurrentSpeedBoost = 0.0f;
 			}
 		}, Duration, false);
@@ -1094,113 +798,84 @@ void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
 
 void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
 {
-	// 1. 기존에 돌고 있던 회복 타이머가 있다면 즉시 정지 (초기화)
 	GetWorldTimerManager().ClearTimer(HOTTimerHandle);
 
-	// 2. 새로운 틱 계산
 	MaxHOTTicks = FMath::FloorToInt(Duration);
 	CurrentHOTTicks = 0;
 	HOTAmountPerTick = TotalHeal / Duration;
 
-	// 3. 1초마다 반복되는 타이머 새로 시작
 	TWeakObjectPtr<AGun_phiriaCharacter> WeakThis(this);
 	GetWorldTimerManager().SetTimer(HOTTimerHandle, [WeakThis]()
 		{
 			if (WeakThis.IsValid())
 			{
-				// 체력 회복
 				WeakThis->CurrentHealth = FMath::Clamp(WeakThis->CurrentHealth + WeakThis->HOTAmountPerTick, 0.0f, WeakThis->MaxHealth);
 				WeakThis->CurrentHOTTicks++;
-
-				// 목표 횟수에 도달하면 타이머 종료
-				if (WeakThis->CurrentHOTTicks >= WeakThis->MaxHOTTicks)
-				{
-					WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->HOTTimerHandle);
-				}
+				if (WeakThis->CurrentHOTTicks >= WeakThis->MaxHOTTicks) WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->HOTTimerHandle);
 			}
 		}, 1.0f, true);
 }
 
+// ==========================================
+// Currency
+// ==========================================
+void AGun_phiriaCharacter::AddGold(int32 Amount) { if (Amount > 0) CurrentGold += Amount; }
+bool AGun_phiriaCharacter::SpendGold(int32 Amount) { if (Amount > 0 && CurrentGold >= Amount) { CurrentGold -= Amount; return true; } return false; }
+void AGun_phiriaCharacter::ResetGold() { CurrentGold = 0; }
+void AGun_phiriaCharacter::AddSapphire(int32 Amount) { if (Amount > 0) CurrentSapphire += Amount; }
+bool AGun_phiriaCharacter::SpendSapphire(int32 Amount) { if (Amount > 0 && CurrentSapphire >= Amount) { CurrentSapphire -= Amount; return true; } return false; }
+void AGun_phiriaCharacter::CheatCurrency(int32 GoldAmount, int32 SapphireAmount) { AddGold(GoldAmount); AddSapphire(SapphireAmount); }
+
+// ==========================================
+// Equipment & Level Transition
+// ==========================================
 void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticMesh* NewMesh)
 {
 	switch (EquipType)
 	{
-	case EEquipType::Helmet:
-		if (HelmetMesh) HelmetMesh->SetStaticMesh(NewMesh);
-		if (CloneHelmetMesh) CloneHelmetMesh->SetStaticMesh(NewMesh);
-		break;
-
-	case EEquipType::Vest:
-		if (VestMesh) VestMesh->SetStaticMesh(NewMesh);
-		if (CloneVestMesh) CloneVestMesh->SetStaticMesh(NewMesh);
-		break;
-
-	case EEquipType::Backpack:
-		if (BackpackMesh) BackpackMesh->SetStaticMesh(NewMesh);
-		if (CloneBackpackMesh) CloneBackpackMesh->SetStaticMesh(NewMesh);
-		break;
-
-	default:
-		break;
+	case EEquipType::Helmet: if (HelmetMesh) HelmetMesh->SetStaticMesh(NewMesh); break;
+	case EEquipType::Vest: if (VestMesh) VestMesh->SetStaticMesh(NewMesh); break;
+	case EEquipType::Backpack: if (BackpackMesh) BackpackMesh->SetStaticMesh(NewMesh); break;
+	default: break;
 	}
-}
 
-void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
-{
-	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
-
-	// 1. 인벤토리에서 해당 아이템 1개 제거 (무게 감소까지 완벽하게 처리됨!)
-	bool bRemoved = PlayerInventory->RemoveItem(ItemID, 1);
-	if (!bRemoved) return;
-
-	// 2. 데이터 테이블에서 스폰할 3D 아이템 클래스 가져오기
-	FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropItem"));
-
-	// [중요] FItemData 구조체 안에 TSubclassOf<APickupItemBase> ItemClass 변수가 존재해야 합니다!
-	if (ItemData && ItemData->ItemClass)
+	// 스튜디오 액터에게도 동기화 명령!
+	if (SpawnedStudio)
 	{
-		// 3. 내 캐릭터 앞쪽 바닥 위치 계산
-		FVector SpawnLoc = GetActorLocation() + (GetActorForwardVector() * 100.0f);
-		SpawnLoc.Z -= 80.0f; // 캡슐 바닥 쪽으로 내림
-
-		// 4. 월드에 아이템 액터 스폰
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-		APickupItemBase* DroppedItem = GetWorld()->SpawnActor<APickupItemBase>(ItemData->ItemClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
-
-		if (DroppedItem)
-		{
-			DroppedItem->ItemID = ItemID;
-			DroppedItem->Quantity = 1;
-		}
+		SpawnedStudio->UpdateStudioEquipment(
+			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
+			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
+			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
+			CurrentWeapon && CurrentWeapon->GetWeaponMesh() ? CurrentWeapon->GetWeaponMesh()->GetStaticMesh() : nullptr
+		);
 	}
 }
 
 void AGun_phiriaCharacter::RestoreEquipmentVisuals()
 {
-	// 인벤토리와 데이터 테이블이 유효한지 확인
 	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
 
-	// 중복 코드를 줄이기 위한 람다(Lambda) 함수
 	auto ApplyEquipMesh = [&](FName ItemID, EEquipType EquipType, const TCHAR* Context)
 		{
 			if (!ItemID.IsNone())
 			{
-				// 데이터 테이블에서 아이템 정보를 찾습니다.
-				if (FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, Context))
-				{
-					// =========================================================
-					// [주의] ItemData->ItemMesh 부분은 네가 만든 구조체(FItemData) 안에 있는 
-					// 실제 '스태틱 메시 변수명'으로 꼭 바꿔 적어줘야 해!! (예: EquipMesh 등)
-					// =========================================================
-					UpdateEquipmentVisuals(EquipType, ItemData->EquipmentMesh);
-				}
+				if (FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, Context)) UpdateEquipmentVisuals(EquipType, ItemData->EquipmentMesh);
 			}
 		};
 
-	// 헬멧, 조끼, 가방 순서대로 복구 실행
 	ApplyEquipMesh(PlayerInventory->EquippedHelmetID, EEquipType::Helmet, TEXT("RestoreHelmet"));
 	ApplyEquipMesh(PlayerInventory->EquippedVestID, EEquipType::Vest, TEXT("RestoreVest"));
 	ApplyEquipMesh(PlayerInventory->EquippedBackpackID, EEquipType::Backpack, TEXT("RestoreBackpack"));
+}
+
+void AGun_phiriaCharacter::ForceBlackScreen()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		if (PC->PlayerCameraManager) PC->PlayerCameraManager->StartCameraFade(1.0f, 1.0f, 0.0f, FLinearColor::Black, false, true);
+}
+
+void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		if (PC->PlayerCameraManager) PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInDuration, FLinearColor::Black, false, false);
 }
