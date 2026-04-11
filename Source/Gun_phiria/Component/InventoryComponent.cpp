@@ -436,17 +436,21 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 			// 혹시 지금 손에 들고 있는 총을 벗은 거라면, 기본 권총(0번)을 들게 만듭니다.
 			if (Player->GetCurrentWeapon() == Player->WeaponSlots[1])
 			{
-				// [주의] 만약 에러가 난다면 Player 캐릭터 클래스의 
-				// void EquipWeaponSlot(int32 SlotIndex); 함수를 public으로 옮겨주세요!
-				Player->EquipWeaponSlot(0);
+				// [버그 해결 핵심] 인벤토리가 열려있으면 EquipWeaponSlot이 강제 종료되므로,
+				// 잠시 인벤토리 상태를 닫힘(false)으로 속이고 무기를 바꾼 뒤 다시 복구합니다!
+				bool bWasOpen = Player->bIsInventoryOpen;
+				Player->bIsInventoryOpen = false;
+
+				Player->EquipWeaponSlot(0); // 이제 무사히 0번(권총)으로 교체되고 스튜디오도 갱신됨!
+
+				Player->bIsInventoryOpen = bWasOpen;
 			}
+			// 권총으로 무사히 교체된 후, 등에 메고 있던 소총을 완전히 파괴합니다.
 			Player->WeaponSlots[1]->Destroy();
 			Player->WeaponSlots[1] = nullptr;
 		}
 	}
-	// ========================================================
-	// [새로 추가됨] 무기 2번 해제
-	// ========================================================
+	// 무기 2번 해제
 	else if (EquippedWeapon2ID == ItemID)
 	{
 		EquippedWeapon2ID = NAME_None;
@@ -454,7 +458,13 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 		{
 			if (Player->GetCurrentWeapon() == Player->WeaponSlots[2])
 			{
+				// 1번 슬롯과 똑같이 안전하게 우회하여 권총 장착!
+				bool bWasOpen = Player->bIsInventoryOpen;
+				Player->bIsInventoryOpen = false;
+
 				Player->EquipWeaponSlot(0);
+
+				Player->bIsInventoryOpen = bWasOpen;
 			}
 			Player->WeaponSlots[2]->Destroy();
 			Player->WeaponSlots[2] = nullptr;
