@@ -169,6 +169,20 @@ void UInventoryMainWidget::UpdateEquipmentUI()
 		WBP_Weapon1Slot->SetItemInfo(Inventory->EquippedWeapon1ID, 1);
 	}
 
+	if (Container_Weapon1_Parts)
+	{
+		if (Inventory->EquippedWeapon1ID.IsNone())
+		{
+			// 무기가 없으면 파츠 상자를 완전히 접어서 숨김
+			Container_Weapon1_Parts->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			// 무기가 있으면 파츠 상자를 화면에 표시 (클릭은 내용물만 되도록 SelfHitTestInvisible 권장)
+			Container_Weapon1_Parts->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
+	}
+
 	// 파츠 슬롯들도 빈칸(NAME_None)으로 초기화 (나중에 부착물 데이터가 추가되면 여기에 ID를 넣습니다)
 	if (WBP_AttachmentSlot1_Scope) WBP_AttachmentSlot1_Scope->SetItemInfo(NAME_None, 0);
 	if (WBP_AttachmentSlot1_Muzzle) WBP_AttachmentSlot1_Muzzle->SetItemInfo(NAME_None, 0);
@@ -182,6 +196,18 @@ void UInventoryMainWidget::UpdateEquipmentUI()
 		WBP_Weapon2Slot->bIsEquipSlot = true;
 		WBP_Weapon2Slot->bIsWeaponSlot = true;
 		WBP_Weapon2Slot->SetItemInfo(Inventory->EquippedWeapon2ID, 1);
+	}
+
+	if (Container_Weapon2_Parts)
+	{
+		if (Inventory->EquippedWeapon2ID.IsNone())
+		{
+			Container_Weapon2_Parts->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			Container_Weapon2_Parts->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		}
 	}
 
 	if (WBP_AttachmentSlot2_Scope) WBP_AttachmentSlot2_Scope->SetItemInfo(NAME_None, 0);

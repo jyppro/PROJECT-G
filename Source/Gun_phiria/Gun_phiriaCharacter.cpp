@@ -81,6 +81,14 @@ void AGun_phiriaCharacter::BeginPlay()
 
 	CurrentHealth = MaxHealth;
 
+	if (StudioClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		FVector StudioLocation = FVector(0.f, 0.f, -10000.f);
+		SpawnedStudio = GetWorld()->SpawnActor<AInventoryStudio>(StudioClass, StudioLocation, FRotator::ZeroRotator, SpawnParams);
+	}
+
 	// 1. Data Load
 	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
 	{
@@ -96,12 +104,22 @@ void AGun_phiriaCharacter::BeginPlay()
 	InitializeWeapon();
 	InitializeInventoryUI();
 
-	if (StudioClass)
+	EStudioAnimType AnimState = EStudioAnimType::Idle;
+
+	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		FVector StudioLocation = FVector(0.f, 0.f, -10000.f);
-		SpawnedStudio = GetWorld()->SpawnActor<AInventoryStudio>(StudioClass, StudioLocation, FRotator::ZeroRotator, SpawnParams);
+		AnimState = EStudioAnimType::Rifle;
+	}
+
+	if (SpawnedStudio)
+	{
+		SpawnedStudio->UpdateStudioEquipment(
+			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
+			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
+			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
+			CurrentWeapon,
+			AnimState
+		);
 	}
 }
 
@@ -391,14 +409,21 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 		}
 	}
 
-	// 3. 인벤토리 스튜디오에 갱신 알림
+	EStudioAnimType AnimState = EStudioAnimType::Idle;
+
+	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
+	{
+		AnimState = EStudioAnimType::Rifle;
+	}
+
 	if (SpawnedStudio && CurrentWeapon->GetWeaponMesh())
 	{
 		SpawnedStudio->UpdateStudioEquipment(
 			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
 			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
 			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
-			CurrentWeapon->GetWeaponMesh()->GetStaticMesh()
+			CurrentWeapon,
+			AnimState
 		);
 	}
 }
@@ -892,13 +917,21 @@ void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticM
 	default: break;
 	}
 
+	EStudioAnimType AnimState = EStudioAnimType::Idle;
+
+	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
+	{
+		AnimState = EStudioAnimType::Rifle;
+	}
+
 	if (SpawnedStudio)
 	{
 		SpawnedStudio->UpdateStudioEquipment(
 			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
 			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
 			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
-			CurrentWeapon && CurrentWeapon->GetWeaponMesh() ? CurrentWeapon->GetWeaponMesh()->GetStaticMesh() : nullptr
+			CurrentWeapon,
+			AnimState
 		);
 	}
 }

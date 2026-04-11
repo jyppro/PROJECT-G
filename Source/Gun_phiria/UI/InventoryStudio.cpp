@@ -2,6 +2,8 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "../Weapon/WeaponBase.h"
+#include "Animation/AnimationAsset.h"
 
 AInventoryStudio::AInventoryStudio()
 {
@@ -64,13 +66,54 @@ void AInventoryStudio::BeginPlay()
 	}
 }
 
-// 플레이어가 본인 장비를 바꿀 때마다 이 함수를 호출해줄 겁니다.
-void AInventoryStudio::UpdateStudioEquipment(UStaticMesh* NewHelmet, UStaticMesh* NewVest, UStaticMesh* NewBackpack, UStaticMesh* NewWeapon)
+void AInventoryStudio::UpdateStudioEquipment(UStaticMesh* NewHelmet, UStaticMesh* NewVest, UStaticMesh* NewBackpack, AWeaponBase* EquippedWeapon, EStudioAnimType AnimType)
 {
 	if (CloneHelmetMesh) CloneHelmetMesh->SetStaticMesh(NewHelmet);
 	if (CloneVestMesh) CloneVestMesh->SetStaticMesh(NewVest);
 	if (CloneBackpackMesh) CloneBackpackMesh->SetStaticMesh(NewBackpack);
-	if (CloneWeaponMesh) CloneWeaponMesh->SetStaticMesh(NewWeapon);
+
+	if (CloneWeaponMesh)
+	{
+		if (EquippedWeapon && EquippedWeapon->GetWeaponMesh())
+		{
+			// 1. 메쉬 외형 복사
+			CloneWeaponMesh->SetStaticMesh(EquippedWeapon->GetWeaponMesh()->GetStaticMesh());
+
+			// 원본 무기의 "WeaponMesh"가 가진 트랜스폼을 통째로 가져오기
+			FTransform OriginalMeshTransform = EquippedWeapon->GetWeaponMesh()->GetRelativeTransform();
+
+			// 스튜디오 마네킹 손에 부착 (상대 좌표를 유지한 채로)
+			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+			CloneWeaponMesh->AttachToComponent(CloneBodyMesh, AttachRules, FName("WeaponSocket"));
+
+			// 가져온 트랜스폼(위젯에서 맞춘 0.1 스케일, -90도 회전 등)을 그대로 덮어씌움
+			CloneWeaponMesh->SetRelativeTransform(OriginalMeshTransform);
+		}
+		else
+		{
+			CloneWeaponMesh->SetStaticMesh(nullptr);
+		}
+	}
+
+	// =========================================================================
+	// [애니메이션 재생 부분 유지]
+	// =========================================================================
+	if (CloneBodyMesh)
+	{
+		UAnimationAsset* TargetAnim = DefaultIdleAnim; // 기본은 권총/맨손 대기 모션
+
+		// 만약 소총 애니메이션 상태로 넘어왔다면 소총 모션으로 변경
+		if (AnimType == EStudioAnimType::Rifle && RifleIdleAnim)
+		{
+			TargetAnim = RifleIdleAnim;
+		}
+
+		// 해당 애니메이션을 무한 반복(true)으로 재생합니다.
+		if (TargetAnim)
+		{
+			CloneBodyMesh->PlayAnimation(TargetAnim, true);
+		}
+	}
 
 	// 옷을 갈아입었으니 사진을 한 방 찍어줍니다.
 	CaptureProfile();

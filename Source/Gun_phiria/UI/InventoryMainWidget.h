@@ -154,6 +154,9 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	class UItemSlotWidget* WBP_AttachmentSlot1_Magazine;
 
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadWrite, Category = "UI|Weapon")
+	class UPanelWidget* Container_Weapon1_Parts;
+
 	// === 2¹ø ¹«±â (Secondary Weapon) ===
 	UPROPERTY(meta = (BindWidget))
 	class UItemSlotWidget* WBP_Weapon2Slot;
@@ -166,6 +169,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	class UItemSlotWidget* WBP_AttachmentSlot2_Magazine;
+
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadWrite, Category = "UI|Weapon")
+	class UPanelWidget* Container_Weapon2_Parts;
 
 	// === ±ÇÃÑ (Pistol) ===
 	UPROPERTY(meta = (BindWidget))

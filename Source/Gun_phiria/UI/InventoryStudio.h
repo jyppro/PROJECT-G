@@ -4,6 +4,13 @@
 #include "GameFramework/Actor.h"
 #include "InventoryStudio.generated.h"
 
+UENUM(BlueprintType)
+enum class EStudioAnimType : uint8
+{
+	Idle		UMETA(DisplayName = "Default Idle"),
+	Rifle		UMETA(DisplayName = "Rifle Idle")
+};
+
 UCLASS()
 class GUN_PHIRIA_API AInventoryStudio : public AActor
 {
@@ -13,7 +20,7 @@ public:
 	AInventoryStudio();
 
 	// 외부(플레이어)에서 장비를 업데이트하라고 명령할 때 부르는 함수
-	void UpdateStudioEquipment(class UStaticMesh* NewHelmet, class UStaticMesh* NewVest, class UStaticMesh* NewBackpack, class UStaticMesh* NewWeapon);
+	void UpdateStudioEquipment(class UStaticMesh* NewHelmet, class UStaticMesh* NewVest, class UStaticMesh* NewBackpack, class AWeaponBase* EquippedWeapon, EStudioAnimType AnimType = EStudioAnimType::Idle);
 
 	// 인벤토리를 열 때 수동으로 캡처(찰칵!)하게 만드는 함수
 	void CaptureProfile();
@@ -42,4 +49,11 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<class UStaticMeshComponent> CloneWeaponMesh;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	TObjectPtr<class UAnimationAsset> DefaultIdleAnim;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	TObjectPtr<class UAnimationAsset> RifleIdleAnim;
 };
