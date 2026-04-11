@@ -228,13 +228,13 @@ bool UInventoryMainWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 	{
 		TargetZone = EDropZoneType::Backpack;
 	}
-	// =========================================================================
-	// [수정된 부분] 헬멧과 가방 슬롯 영역까지 모두 검사하도록 조건 추가!
-	// =========================================================================
 	else if ((WBP_VestSlot && WBP_VestSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
 		(WBP_HelmetSlot && WBP_HelmetSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
 		(WBP_BackpackSlot && WBP_BackpackSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(IMG_CharacterPreview && IMG_CharacterPreview->GetCachedGeometry().IsUnderLocation(DropPosition)))
+		(IMG_CharacterPreview && IMG_CharacterPreview->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
+		(WBP_Weapon1Slot && WBP_Weapon1Slot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
+		(WBP_Weapon2Slot && WBP_Weapon2Slot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
+		(WBP_ThrowableSlot && WBP_ThrowableSlot->GetCachedGeometry().IsUnderLocation(DropPosition)))
 	{
 		TargetZone = EDropZoneType::Equipment;
 	}
@@ -292,9 +292,11 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 	{
 		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropTypeCheck"));
 
-		if (!ItemData || ItemData->ItemType != EItemType::Equipment)
+		if (!ItemData || (ItemData->ItemType != EItemType::Equipment &&
+			ItemData->ItemType != EItemType::Weapon &&
+			ItemData->ItemType != EItemType::Throwable))
 		{
-			return;
+			return; // 방어구, 무기, 투척물이 아니면 (예: 소비 아이템 등) 장착 불가
 		}
 	}
 

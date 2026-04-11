@@ -92,7 +92,7 @@ void AGun_phiriaCharacter::BeginPlay()
 	GetWorldTimerManager().SetTimer(InteractionTimerHandle, this, &AGun_phiriaCharacter::CheckForInteractables, 0.1f, true);
 	if (ADSCamera) ADSCamera->AddTickPrerequisiteComponent(GetMesh());
 
-	// 3. Components Init (Refactored)
+	// 3. Components Init
 	InitializeWeapon();
 	InitializeInventoryUI();
 
@@ -100,15 +100,12 @@ void AGun_phiriaCharacter::BeginPlay()
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
-		// 안 보이는 맵 저 아래에 스폰합니다.
 		FVector StudioLocation = FVector(0.f, 0.f, -10000.f);
 		SpawnedStudio = GetWorld()->SpawnActor<AInventoryStudio>(StudioClass, StudioLocation, FRotator::ZeroRotator, SpawnParams);
 	}
 }
 
-// ==========================================
-// Tick & Tick Helpers (Refactored)
-// ==========================================
+// Tick & Tick Helpers
 void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -238,11 +235,11 @@ void AGun_phiriaCharacter::PreventWeaponClipping()
 	}
 }
 
-// ==========================================
-// Setup & Initialization Helpers (Refactored)
-// ==========================================
+// Setup & Initialization Helpers
 void AGun_phiriaCharacter::InitializeWeapon()
 {
+	WeaponSlots.Init(nullptr, 4);
+
 	if (!DefaultWeaponClass) return;
 
 	FActorSpawnParameters SpawnParams;
@@ -262,6 +259,8 @@ void AGun_phiriaCharacter::InitializeWeapon()
 		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
 
 		ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
+
+		WeaponSlots[0] = CurrentWeapon;
 	}
 }
 
@@ -281,9 +280,7 @@ void AGun_phiriaCharacter::InitializeInventoryUI()
 	}
 }
 
-// ==========================================
 // Input Bindings & Movement
-// ==========================================
 void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -310,6 +307,11 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EIC->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Interact);
 		EIC->BindAction(InventoryAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleInventory);
+
+		if (EquipWeapon1Action) EIC->BindAction(EquipWeapon1Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon1);
+		if (EquipWeapon2Action) EIC->BindAction(EquipWeapon2Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon2);
+		if (EquipWeapon3Action) EIC->BindAction(EquipWeapon3Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon3);
+		if (EquipWeapon4Action) EIC->BindAction(EquipWeapon4Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon4);
 	}
 }
 
@@ -336,6 +338,69 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 
 	AddMovementInput(Fwd, FwdInput);
 	AddMovementInput(Rit, Vec.X);
+}
+
+void AGun_phiriaCharacter::EquipWeapon1() { EquipWeaponSlot(0); } // 권총
+void AGun_phiriaCharacter::EquipWeapon2() { EquipWeaponSlot(1); } // 주무기 1
+void AGun_phiriaCharacter::EquipWeapon3() { EquipWeaponSlot(2); } // 주무기 2
+void AGun_phiriaCharacter::EquipWeapon4() { EquipWeaponSlot(3); } // 투척물
+
+void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
+{
+	// 시전 중, 사망, 인벤토리 오픈 상태이거나 잘못된 인덱스일 경우 무시
+	if (bIsCasting || bIsDead || bIsInventoryOpen || SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
+
+	AWeaponBase* TargetWeapon = WeaponSlots[SlotIndex];
+
+	// 슬롯이 비어있거나 이미 들고 있는 무기라면 스왑 안함
+	if (!TargetWeapon || TargetWeapon == CurrentWeapon) return;
+
+	// 1. 기존 무기 숨기기 및 사격 해제
+	if (CurrentWeapon)
+	{
+		StopFiring();
+		if (bIsAiming) StopAiming();
+
+		CurrentWeapon->SetActorHiddenInGame(true);
+		CurrentWeapon->SetActorEnableCollision(false);
+	}
+
+	// 2. 새 무기 장착 및 표시
+	CurrentWeapon = TargetWeapon;
+	CurrentWeapon->SetActorHiddenInGame(false);
+	CurrentWeapon->SetActorEnableCollision(true);
+
+	// 스케일 변화 없이 깔끔하게 다시 소켓에 부착
+	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+	CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
+
+	if (CurrentWeapon->GetWeaponMesh())
+	{
+		// A. 오른손 그립 소켓을 기준으로 총기의 위치/회전 역산 보정 (손 위치 맞추기)
+		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
+		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+		FTransform InverseGrip = GripSocketRelative.Inverse();
+
+		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
+		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
+
+		// B. ADS(정조준) 카메라를 지금 든 "새로운 무기"의 SightSocket으로 옮겨 달아주기
+		if (ADSCamera)
+		{
+			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
+		}
+	}
+
+	// 3. 인벤토리 스튜디오에 갱신 알림
+	if (SpawnedStudio && CurrentWeapon->GetWeaponMesh())
+	{
+		SpawnedStudio->UpdateStudioEquipment(
+			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
+			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
+			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
+			CurrentWeapon->GetWeaponMesh()->GetStaticMesh()
+		);
+	}
 }
 
 void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
@@ -387,9 +452,7 @@ void AGun_phiriaCharacter::ToggleProne()
 void AGun_phiriaCharacter::InputLean(const FInputActionValue& Value) { TargetLean = Value.Get<float>(); }
 void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { TargetLean = 0.0f; }
 
-// ==========================================
 // Combat
-// ==========================================
 void AGun_phiriaCharacter::StartAiming()
 {
 	if (bIsInventoryOpen) return;
@@ -479,9 +542,7 @@ void AGun_phiriaCharacter::PerformFire()
 	CurrentWeapon->Fire(FinalTarget + Offset);
 }
 
-// ==========================================
-// Health & Damage (Refactored)
-// ==========================================
+// Health & Damage
 float AGun_phiriaCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	if (bIsDead) return 0.0f;
@@ -586,9 +647,7 @@ void AGun_phiriaCharacter::Die()
 	GetMesh()->SetSimulatePhysics(true);
 }
 
-// ==========================================
 // Interaction & Inventory
-// ==========================================
 void AGun_phiriaCharacter::CheckForInteractables()
 {
 	TArray<FOverlapResult> Overlaps;
@@ -719,9 +778,7 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 	}
 }
 
-// ==========================================
 // Casting & Buffs
-// ==========================================
 void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess)
 {
 	if (bIsCasting) CancelCasting();
@@ -816,9 +873,7 @@ void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
 		}, 1.0f, true);
 }
 
-// ==========================================
 // Currency
-// ==========================================
 void AGun_phiriaCharacter::AddGold(int32 Amount) { if (Amount > 0) CurrentGold += Amount; }
 bool AGun_phiriaCharacter::SpendGold(int32 Amount) { if (Amount > 0 && CurrentGold >= Amount) { CurrentGold -= Amount; return true; } return false; }
 void AGun_phiriaCharacter::ResetGold() { CurrentGold = 0; }
@@ -826,9 +881,7 @@ void AGun_phiriaCharacter::AddSapphire(int32 Amount) { if (Amount > 0) CurrentSa
 bool AGun_phiriaCharacter::SpendSapphire(int32 Amount) { if (Amount > 0 && CurrentSapphire >= Amount) { CurrentSapphire -= Amount; return true; } return false; }
 void AGun_phiriaCharacter::CheatCurrency(int32 GoldAmount, int32 SapphireAmount) { AddGold(GoldAmount); AddSapphire(SapphireAmount); }
 
-// ==========================================
 // Equipment & Level Transition
-// ==========================================
 void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticMesh* NewMesh)
 {
 	switch (EquipType)
@@ -839,7 +892,6 @@ void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticM
 	default: break;
 	}
 
-	// 스튜디오 액터에게도 동기화 명령!
 	if (SpawnedStudio)
 	{
 		SpawnedStudio->UpdateStudioEquipment(

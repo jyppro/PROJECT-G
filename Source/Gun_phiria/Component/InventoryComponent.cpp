@@ -4,6 +4,7 @@
 #include "../Gun_phiriaCharacter.h"
 #include "Blueprint/UserWidget.h" // ADD THIS LINE
 #include "../UI/InventoryMainWidget.h"
+#include "../Weapon/WeaponBase.h"
 
 UInventoryComponent::UInventoryComponent()
 {
@@ -282,15 +283,95 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 	}
 
 	case EItemType::Weapon:
+	{
+		int32 TargetIndex = -1;
+		for (int32 i = 0; i < InventorySlots.Num(); i++)
+		{
+			if (InventorySlots[i].ItemID == UseItemID && InventorySlots[i].Quantity > 0)
+			{
+				TargetIndex = i;
+				break;
+			}
+		}
+
+		if (TargetIndex != -1)
+		{
+			FName OldEquipID = NAME_None;
+			int32 TargetWeaponSlotIndex = 1; // 1: 무기1, 2: 무기2
+
+			// [스마트 장착 로직] 1번 비어있으면 1번, 아니면 2번, 둘다 차있으면 1번을 교체!
+			if (EquippedWeapon1ID.IsNone())
+			{
+				TargetWeaponSlotIndex = 1;
+				EquippedWeapon1ID = UseItemID;
+			}
+			else if (EquippedWeapon2ID.IsNone())
+			{
+				TargetWeaponSlotIndex = 2;
+				EquippedWeapon2ID = UseItemID;
+			}
+			else
+			{
+				TargetWeaponSlotIndex = 1; // 꽉 찼을 땐 1번 무기를 교체
+				OldEquipID = EquippedWeapon1ID;
+				EquippedWeapon1ID = UseItemID;
+			}
+
+			// 인벤토리에서 무기 제거 및 교체(스왑) 처리
+			if (OldEquipID.IsNone())
+			{
+				InventorySlots[TargetIndex].Quantity--;
+				if (InventorySlots[TargetIndex].Quantity <= 0) InventorySlots[TargetIndex].ItemID = NAME_None;
+				CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
+			}
+			else
+			{
+				InventorySlots[TargetIndex].ItemID = OldEquipID;
+				InventorySlots[TargetIndex].Quantity = 1;
+				if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeight")))
+				{
+					CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight + OldItemInfo->ItemWeight);
+				}
+			}
+
+			// [핵심] 진짜 무기 액터 스폰 후 WeaponSlots 배열에 등록
+			if (ItemInfo->WeaponClass)
+			{
+				// 기존에 들고 있던 총기 액터 파괴
+				if (Player->WeaponSlots.IsValidIndex(TargetWeaponSlotIndex) && Player->WeaponSlots[TargetWeaponSlotIndex])
+				{
+					Player->WeaponSlots[TargetWeaponSlotIndex]->Destroy();
+					Player->WeaponSlots[TargetWeaponSlotIndex] = nullptr;
+				}
+
+				// 새 무기 스폰
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.Owner = Player;
+				AWeaponBase* NewWeapon = GetWorld()->SpawnActor<AWeaponBase>(ItemInfo->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+				if (NewWeapon)
+				{
+					NewWeapon->SetActorHiddenInGame(true); // 우선 안 보이게 둠
+					NewWeapon->SetActorEnableCollision(false);
+					Player->WeaponSlots[TargetWeaponSlotIndex] = NewWeapon; // 슬롯에 장전!
+				}
+			}
+			bUseSuccess = true;
+		}
 		break;
+	}
 
 	default:
 		break;
 	}
 
+	// ========================================================
+	// [중요 수정] 아이템 삭제 처리 방어 코드
+	// 무기(Weapon)도 내부에서 수량을 조절했기 때문에 여기서 또 삭제되면 안 됩니다.
+	// ========================================================
 	if (bUseSuccess)
 	{
-		if (ItemInfo->ItemType != EItemType::Equipment)
+		if (ItemInfo->ItemType != EItemType::Equipment && ItemInfo->ItemType != EItemType::Weapon)
 		{
 			RemoveItem(UseItemID, 1);
 		}
@@ -347,11 +428,43 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 		MaxWeight -= ItemData->StatBonus; // 늘어났던 가방 용량을 다시 뺌
 		Player->UpdateEquipmentVisuals(EEquipType::Backpack, nullptr); // 캐릭터 가방 메쉬 숨기기
 	}
+	else if (EquippedWeapon1ID == ItemID)
+	{
+		EquippedWeapon1ID = NAME_None;
+		if (Player->WeaponSlots.IsValidIndex(1) && Player->WeaponSlots[1])
+		{
+			// 혹시 지금 손에 들고 있는 총을 벗은 거라면, 기본 권총(0번)을 들게 만듭니다.
+			if (Player->GetCurrentWeapon() == Player->WeaponSlots[1])
+			{
+				// [주의] 만약 에러가 난다면 Player 캐릭터 클래스의 
+				// void EquipWeaponSlot(int32 SlotIndex); 함수를 public으로 옮겨주세요!
+				Player->EquipWeaponSlot(0);
+			}
+			Player->WeaponSlots[1]->Destroy();
+			Player->WeaponSlots[1] = nullptr;
+		}
+	}
+	// ========================================================
+	// [새로 추가됨] 무기 2번 해제
+	// ========================================================
+	else if (EquippedWeapon2ID == ItemID)
+	{
+		EquippedWeapon2ID = NAME_None;
+		if (Player->WeaponSlots.IsValidIndex(2) && Player->WeaponSlots[2])
+		{
+			if (Player->GetCurrentWeapon() == Player->WeaponSlots[2])
+			{
+				Player->EquipWeaponSlot(0);
+			}
+			Player->WeaponSlots[2]->Destroy();
+			Player->WeaponSlots[2] = nullptr;
+		}
+	}
 	else
 	{
 		return;
 	}
 
-	// 벗은 아이템을 가방에 추가 
+	// 벗은 아이템을 가방에 추가
 	AddItem(ItemID, 1);
 }

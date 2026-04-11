@@ -136,6 +136,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Transition") void ForceBlackScreen();
 	UFUNCTION(BlueprintCallable, Category = "Level Transition") void StartFadeIn(float FadeInDuration = 2.0f);
 
+	void EquipWeaponSlot(int32 SlotIndex);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon") TArray<TObjectPtr<AWeaponBase>> WeaponSlots;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -166,6 +169,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> LeanAction;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> InteractAction;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input") class UInputAction* InventoryAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon1Action;
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon2Action;
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon3Action;
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon4Action;
 
 	// ==========================================
 	// Combat & Animation Settings
@@ -210,6 +218,11 @@ private:
 	void InputLean(const FInputActionValue& Value);
 	void InputLeanEnd(const FInputActionValue& Value);
 	void Interact();
+
+	void EquipWeapon1();
+	void EquipWeapon2();
+	void EquipWeapon3();
+	void EquipWeapon4();
 
 	// --- Core Logic Refactored Helpers ---
 	void InitializeWeapon();
