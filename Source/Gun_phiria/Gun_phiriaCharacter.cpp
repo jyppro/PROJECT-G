@@ -679,7 +679,7 @@ void AGun_phiriaCharacter::CheckForInteractables()
 	FCollisionQueryParams Params; Params.AddIgnoredActor(this);
 	TObjectPtr<AActor> BestTarget = nullptr;
 
-	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(100.f), Params))
 	{
 		float MinDist = MAX_FLT;
 		for (const auto& Res : Overlaps)
@@ -768,7 +768,7 @@ TArray<APickupItemBase*> AGun_phiriaCharacter::GetNearbyItems()
 	TArray<FOverlapResult> Overlaps;
 	FCollisionQueryParams Params; Params.AddIgnoredActor(this);
 
-	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(200.f), Params))
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(100.f), Params))
 	{
 		for (const auto& Res : Overlaps)
 		{
@@ -788,12 +788,37 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 	FItemData* ItemData = PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropItem"));
 	if (ItemData && ItemData->ItemClass)
 	{
-		FVector SpawnLoc = GetActorLocation() + (GetActorForwardVector() * 100.0f);
-		SpawnLoc.Z -= 80.0f;
+		// 1. 캐릭터 앞쪽으로 스폰할 기준 위치 잡기 (살짝 위에서 시작)
+		FVector StartLoc = GetActorLocation() + (GetActorForwardVector() * 80.0f);
+
+		// 2. 레이저가 도착할 목표 지점 (기준 위치에서 아래로 500만큼 쏩니다)
+		FVector EndLoc = StartLoc - FVector(0.0f, 0.0f, 500.0f);
+
+		FHitResult HitResult;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this); // 플레이어 몸에는 레이저가 맞지 않게 무시!
+
+		// 최종 스폰될 위치 변수
+		FVector FinalSpawnLoc = StartLoc;
+
+		// 3. 바닥을 향해 레이저(LineTrace) 발사!
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, Params))
+		{
+			// 레이저가 바닥에 맞았다면? -> 닿은 지점(ImpactPoint)을 최종 위치로 결정
+			// (팁: 아이템이 바닥에 너무 파묻히면 ImpactPoint.Z + 5.0f 처럼 살짝 올려주세요)
+			FinalSpawnLoc = HitResult.ImpactPoint;
+		}
+		else
+		{
+			// 혹시라도 낭떠러지 등이라 바닥을 못 찾았다면 기존처럼 대충 아래로 내림
+			FinalSpawnLoc.Z -= 80.0f;
+		}
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		APickupItemBase* DroppedItem = GetWorld()->SpawnActor<APickupItemBase>(ItemData->ItemClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+
+		// 4. 찾아낸 정확한 바닥 위치(FinalSpawnLoc)에 아이템 생성!
+		APickupItemBase* DroppedItem = GetWorld()->SpawnActor<APickupItemBase>(ItemData->ItemClass, FinalSpawnLoc, FRotator::ZeroRotator, SpawnParams);
 
 		if (DroppedItem)
 		{
