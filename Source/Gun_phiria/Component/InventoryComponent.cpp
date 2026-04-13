@@ -478,3 +478,16 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 	// 벗은 아이템을 가방에 추가
 	AddItem(ItemID, 1);
 }
+
+int32 UInventoryComponent::GetTotalItemCount(FName ItemID) const
+{
+	int32 TotalCount = 0;
+	for (const FInventorySlot& Slot : InventorySlots)
+	{
+		if (Slot.ItemID == ItemID)
+		{
+			TotalCount += Slot.Quantity;
+		}
+	}
+	return TotalCount;
+}

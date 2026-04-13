@@ -89,6 +89,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Audio")
 	TObjectPtr<class USoundBase> EmptyMagSound; // 총알 없을 때 '찰칵' 소리
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Ammo")
+	FName AmmoItemID;
+
+	// 재장전할 때 재생할 애니메이션 몽타주
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
+	TObjectPtr<class UAnimMontage> ReloadMontage;
+
 protected:
 	// --- Components ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Components")

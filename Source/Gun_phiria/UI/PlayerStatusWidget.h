@@ -17,7 +17,7 @@ public:
 	void UpdateBackpackCapacity(float Percent);
 	void UpdateHelmetDurability(float Percent);
 	void UpdateVestDurability(float Percent);
-	void UpdateAmmo(int32 CurrentAmmo);
+	void UpdateAmmo(int32 CurrentAmmo, int32 ReserveAmmo);
 
 	// 부스트 효과 업데이트 (지속시간 기반)
 	void UpdateSpeedBoost(float Percent);

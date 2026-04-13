@@ -87,6 +87,7 @@ public:
 
 	void DropItemToGround(FName ItemID);
 	void ToggleInventory();
+	void Reload();
 
 	// ==========================================
 	// Casting & Buffs

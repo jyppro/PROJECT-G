@@ -206,6 +206,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Equipment|Combat")
 	FName EquippedThrowableID;
 
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetTotalItemCount(FName ItemID) const;
+
 protected:
 	virtual void BeginPlay() override;
 

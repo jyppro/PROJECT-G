@@ -28,11 +28,13 @@ void UPlayerStatusWidget::UpdateVestDurability(float Percent)
 	}
 }
 
-void UPlayerStatusWidget::UpdateAmmo(int32 CurrentAmmo)
+void UPlayerStatusWidget::UpdateAmmo(int32 CurrentAmmo, int32 ReserveAmmo)
 {
 	if (TXT_Ammo)
 	{
-		TXT_Ammo->SetText(FText::AsNumber(CurrentAmmo));
+		// 30 / 120 같은 형태로 문자열을 만듭니다.
+		FString AmmoText = FString::Printf(TEXT("%d / %d"), CurrentAmmo, ReserveAmmo);
+		TXT_Ammo->SetText(FText::FromString(AmmoText));
 	}
 }
 

@@ -989,3 +989,54 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 		if (PC->PlayerCameraManager) PC->PlayerCameraManager->StartCameraFade(1.0f, 0.0f, FadeInDuration, FLinearColor::Black, false, false);
 }
+
+void AGun_phiriaCharacter::Reload()
+{
+	// 1. 예외 처리: 무기가 없거나, 인벤토리가 없거나, 이미 꽉 찼으면 무시
+	if (!CurrentWeapon || !PlayerInventory) return;
+	if (CurrentWeapon->CurrentAmmo >= CurrentWeapon->MagazineCapacity) return;
+
+	// 2. 이 총이 쓰는 총알의 ID와, 가방에 그 총알이 몇 개 있는지 확인
+	FName NeededAmmoID = CurrentWeapon->AmmoItemID;
+	int32 TotalReserveAmmo = PlayerInventory->GetTotalItemCount(NeededAmmoID);
+
+	// 가방에 총알이 한 발도 없으면 장전 불가 (찰칵 소리만 내기)
+	if (TotalReserveAmmo <= 0)
+	{
+		// if (EmptyMagSound) 재생;
+		return;
+	}
+
+	// 3. 재장전 애니메이션 재생
+	if (CurrentWeapon->ReloadMontage)
+	{
+		if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
+		{
+			AnimInst->Montage_Play(CurrentWeapon->ReloadMontage);
+		}
+	}
+
+	// -------------------------------------------------------------
+	// 주의: 아래의 '실제 총알 계산'은 애니메이션이 끝날 때, 
+	// 혹은 애니메이션 노티파이(AnimNotify)가 호출될 때 실행되어야 자연스럽습니다.
+	// 우선은 로직 흐름을 위해 바로 계산하도록 작성해 드립니다!
+	// -------------------------------------------------------------
+
+	// 4. 탄창을 꽉 채우기 위해 '필요한 총알 수' 계산
+	int32 BulletsNeeded = CurrentWeapon->MagazineCapacity - CurrentWeapon->CurrentAmmo;
+
+	// 5. '실제로 장전할 총알 수' (가방에 있는 총알이 부족할 수 있으므로 Min 함수 사용)
+	int32 BulletsToReload = FMath::Min(BulletsNeeded, TotalReserveAmmo);
+
+	// 6. 가방에서 총알 빼기 & 탄창에 넣기
+	PlayerInventory->RemoveItem(NeededAmmoID, BulletsToReload);
+	CurrentWeapon->CurrentAmmo += BulletsToReload;
+
+	// 7. UI 업데이트 (위젯이 띄워져 있다면)
+	/*
+	if (StatusWidgetInstance) {
+		int32 NewReserve = PlayerInventory->GetTotalItemCount(NeededAmmoID);
+		StatusWidgetInstance->UpdateAmmo(CurrentWeapon->CurrentAmmo, NewReserve);
+	}
+	*/
+}
