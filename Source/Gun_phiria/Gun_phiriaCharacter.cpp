@@ -233,53 +233,139 @@ void AGun_phiriaCharacter::UpdateLeanAndCameraOffset(float DeltaTime)
 
 void AGun_phiriaCharacter::PreventWeaponClipping()
 {
-	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
+	if (!CurrentWeapon || !CurrentWeapon->GetWeaponMesh()) return;
+
+	// 1. 총구(Muzzle) 소켓 위치와 캐릭터 위치를 가져옵니다.
+	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+	FVector Start = GetActorLocation();
+	FVector FwdDir = GetActorForwardVector();
+
+	// 2. 캐릭터 가슴 높이(Pelvis)를 총구 높이로 맞추어 레이저를 수평으로 만듭니다.
+	// (image_14.png context: 샷건이 아래를 향해 있어 MuzzleZ가 상당히 낮을 수 있습니다.)
+	Start.Z = Muzzle.Z;
+
+	// 3. 총구 소켓에서 앞으로 15cm 더 나간 지점까지 레이저 발사
+	FVector End = Muzzle + (FwdDir * 15.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+	Params.AddIgnoredActor(CurrentWeapon);
+
+	float TargetAlpha = 0.0f; // 목표 애니메이션 블렌드 값
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 	{
-		const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-		FVector Start = GetActorLocation(); Start.Z = Muzzle.Z;
-		FVector End = Muzzle + (Muzzle - Start).GetSafeNormal() * 15.f;
-
-		FHitResult Hit;
-		FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
-
-		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		// 4. 부딪힌 표면이 수직에 가까운지 확인 (벽 또는 계단의 수직 모서리)
+		if (FMath::Abs(Hit.ImpactNormal.Z) < 0.3f)
 		{
-			if (FMath::Abs(Hit.ImpactNormal.Z) < 0.3f)
+			// =====================================================================
+			// [버그 해결 핵심] 저번의 'Stairs Ignore' bad logic을 긴 총에 맞게 수정합니다!
+			// =====================================================================
+
+			// [기존 Flawed logic]: 부딪힌 곳 바로 너머에 바닥이 있으면 무조건 0.0 반환.
+			// -> 계단의 경우 Step 1 바로 뒤에 Tread 1 바닥이 있으니 0.0을 반환해서 막힌 채 걷게 됨.
+
+			// [수정된 Fixed logic]:
+			// 부딪힌 곳 너머의 바닥을 검사하되, 그 바닥이 내 총구 높이보다 **현저히 낮을 때만** 무시하라!
+
+			// 충돌 지점에서 앞으로 20cm 간 뒤, 위로 30cm 올려서 아래로 바닥 검사 레이저 준비
+			FVector FloorCheckStart = Hit.ImpactPoint + (FwdDir * 20.f) + FVector(0.f, 0.f, 30.f);
+			FVector FloorCheckEnd = FloorCheckStart - FVector(0.f, 0.f, 100.f);
+
+			FHitResult FloorHit;
+			if (GetWorld()->LineTraceSingleByChannel(FloorHit, FloorCheckStart, FloorCheckEnd, ECC_Visibility, Params))
 			{
-				FVector Push = Hit.ImpactNormal; Push.Z = 0.f;
-				AddActorWorldOffset(Push.GetSafeNormal() * FVector::Distance(Hit.ImpactPoint, End), true);
+				// 찾은 바닥의 평평함 검사
+				if (FloorHit.ImpactNormal.Z > 0.7f && !FloorHit.bStartPenetrating)
+				{
+					// [핵심 비교] 내 총구 높이(Z=20)와 벽 너머 바닥 높이(Step1 Tread=Z=20) 비교!
+					// (image_14.png context: 계단이라면 두 Z 높이가 거의 같습니다.)
+
+					// 찾은 바닥의 고도
+					float ElevationBeyondHit = FloorHit.ImpactPoint.Z;
+
+					// [수정된 조건]: 벽 너머 바닥이 내 총구보다 25cm 이상 낮다면?
+					// -> 이것은 계단이 아니라 "내 발아래에 있는 knee-high 장애물이나 절벽"입니다!
+					// -> 총구 barrel이 수평으로 통과할 수 있습니다.
+					if (ElevationBeyondHit < Muzzle.Z - 25.0f) // Threshold, gun can pass low platforms
+					{
+						// 이 장애물은 무시하고 0.0을 유지합니다.
+						TargetAlpha = 0.0f;
+						WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), 15.0f);
+						return; // 함수 종료
+					}
+				}
 			}
+
+			// =====================================================================
+			// 5. 이 아래는 계단 모서리(Z가 총구와 같음)를 찔렀거나 진짜 벽인 경우입니다.
+			// alpha를 1.0으로 올려 총을 치켜듭니다. (image_14.png context: 드디어 계단에서 1.0이 됩니다!)
+			// =====================================================================
+			TargetAlpha = 1.0f;
 		}
 	}
+
+	// 6. 0.0 과 1.0 사이를 부드럽게 연결
+	WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), 15.0f);
 }
 
-// Setup & Initialization Helpers
 void AGun_phiriaCharacter::InitializeWeapon()
 {
 	WeaponSlots.Init(nullptr, 4);
-
-	if (!DefaultWeaponClass) return;
+	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
-	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh())
-	{
-		FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-		CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
+	// 1. [0번 슬롯: 권총]
+	FName PistolID = PlayerInventory->EquippedPistolID.IsNone() ? FName("DefaultPistol") : PlayerInventory->EquippedPistolID;
+	if (FItemData* PistolData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PistolID, TEXT("SpawnPistol"))) {
+		if (PistolData->WeaponClass) {
+			WeaponSlots[0] = GetWorld()->SpawnActor<AWeaponBase>(PistolData->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
-		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
-		FTransform InverseGrip = GripSocketRelative.Inverse();
-
-		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
-		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
-
-		ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
-
-		WeaponSlots[0] = CurrentWeapon;
+			// [버그 해결!] 데이터 테이블의 회전값을 방금 태어난 무기에게 전달!
+			if (WeaponSlots[0]) WeaponSlots[0]->HolsterRotationOffset = PistolData->HolsterRotationOffset;
+		}
 	}
+	if (!WeaponSlots[0] && DefaultWeaponClass) {
+		WeaponSlots[0] = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	}
+
+	AttachToHolster(0);
+
+	// 2. [1번 슬롯: 주무기 1]
+	if (!PlayerInventory->EquippedWeapon1ID.IsNone()) {
+		if (FItemData* W1Data = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedWeapon1ID, TEXT("SpawnW1"))) {
+			if (W1Data->WeaponClass) {
+				WeaponSlots[1] = GetWorld()->SpawnActor<AWeaponBase>(W1Data->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+				// [버그 해결!] 
+				if (WeaponSlots[1]) WeaponSlots[1]->HolsterRotationOffset = W1Data->HolsterRotationOffset;
+			}
+		}
+	}
+
+	AttachToHolster(1);
+
+	// 3. [2번 슬롯: 주무기 2]
+	if (!PlayerInventory->EquippedWeapon2ID.IsNone()) {
+		if (FItemData* W2Data = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedWeapon2ID, TEXT("SpawnW2"))) {
+			if (W2Data->WeaponClass) {
+				WeaponSlots[2] = GetWorld()->SpawnActor<AWeaponBase>(W2Data->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+				// [버그 해결!] 
+				if (WeaponSlots[2]) WeaponSlots[2]->HolsterRotationOffset = W2Data->HolsterRotationOffset;
+			}
+		}
+	}
+
+	AttachToHolster(2);
+
+	// 4. 활성 슬롯 무기 꺼내기
+	if (ActiveWeaponSlot < 0 || ActiveWeaponSlot >= 4 || WeaponSlots[ActiveWeaponSlot] == nullptr) ActiveWeaponSlot = 0;
+	CurrentWeapon = nullptr;
+	EquipWeaponSlot(ActiveWeaponSlot);
 }
 
 void AGun_phiriaCharacter::InitializeInventoryUI()
@@ -365,57 +451,62 @@ void AGun_phiriaCharacter::EquipWeapon4() { EquipWeaponSlot(3); } // 투척물
 
 void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 {
-	// 시전 중, 사망, 인벤토리 오픈 상태이거나 잘못된 인덱스일 경우 무시
 	if (bIsCasting || bIsDead || bIsInventoryOpen || SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
 
 	AWeaponBase* TargetWeapon = WeaponSlots[SlotIndex];
-
-	// 슬롯이 비어있거나 이미 들고 있는 무기라면 스왑 안함
 	if (!TargetWeapon || TargetWeapon == CurrentWeapon) return;
 
-	// 1. 기존 무기 숨기기 및 사격 해제
+	// ====================================================================
+	// 1. 기존 무기를 등에 있는 '보관 소켓'으로 다시 집어넣기
+	// ====================================================================
 	if (CurrentWeapon)
 	{
 		StopFiring();
 		if (bIsAiming) StopAiming();
 
-		CurrentWeapon->SetActorHiddenInGame(true);
-		CurrentWeapon->SetActorEnableCollision(false);
+		// 기존의 길었던 부착 코드를 지우고, 함수 한 줄로 끝냅니다!
+		AttachToHolster(ActiveWeaponSlot);
 	}
 
-	// 2. 새 무기 장착 및 표시
+	// ====================================================================
+	// 2. 새 무기를 손으로 가져와서 쥐기
+	// ====================================================================
+	ActiveWeaponSlot = SlotIndex;
 	CurrentWeapon = TargetWeapon;
+
 	CurrentWeapon->SetActorHiddenInGame(false);
 	CurrentWeapon->SetActorEnableCollision(true);
 
-	// 스케일 변화 없이 깔끔하게 다시 소켓에 부착
+	// 손에 쥘 때도 스케일 유지 규칙 적용
 	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
 	CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
 
+	// [크기 버그 해결 핵심] 손에 쥘 때도 스케일을 무조건 1.0으로 고정!
+	CurrentWeapon->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+
 	if (CurrentWeapon->GetWeaponMesh())
 	{
-		// A. 오른손 그립 소켓을 기준으로 총기의 위치/회전 역산 보정 (손 위치 맞추기)
+		// 역행렬 그립 보정 로직 (유저님이 설정한 크기와 회전을 완벽히 유지해 줌)
 		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
-		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f)); // 여기서도 내부 스케일 보호
 		FTransform InverseGrip = GripSocketRelative.Inverse();
 
 		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
 		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
 
-		// B. ADS(정조준) 카메라를 지금 든 "새로운 무기"의 SightSocket으로 옮겨 달아주기
 		if (ADSCamera)
 		{
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
 		}
 	}
 
+	// ====================================================================
+	// 3. 스튜디오 (프리뷰) 업데이트
+	// ====================================================================
 	EStudioAnimType AnimState = EStudioAnimType::Idle;
+	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0]) AnimState = EStudioAnimType::Rifle;
 
-	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
-	{
-		AnimState = EStudioAnimType::Rifle;
-	}
-
+	// 스튜디오가 생성되어 있다면, 현재 장착된 무기(CurrentWeapon)를 스튜디오에 전달하여 렌더링 갱신
 	if (SpawnedStudio && CurrentWeapon->GetWeaponMesh())
 	{
 		SpawnedStudio->UpdateStudioEquipment(
@@ -1039,4 +1130,28 @@ void AGun_phiriaCharacter::Reload()
 		StatusWidgetInstance->UpdateAmmo(CurrentWeapon->CurrentAmmo, NewReserve);
 	}
 	*/
+}
+
+void AGun_phiriaCharacter::AttachToHolster(int32 SlotIndex)
+{
+	// 예외 처리
+	if (!WeaponSlots.IsValidIndex(SlotIndex) || !WeaponSlots[SlotIndex]) return;
+	AWeaponBase* WeaponToHolster = WeaponSlots[SlotIndex];
+
+	// 슬롯 번호에 맞는 정확한 보관 소켓 이름 지정
+	FName HolsterSocketName;
+	if (SlotIndex == 0) HolsterSocketName = FName("PistolHolsterSocket");
+	else if (SlotIndex == 1) HolsterSocketName = FName("BackpackWeapon1Socket");
+	else if (SlotIndex == 2) HolsterSocketName = FName("BackpackWeapon2Socket");
+	else return; // 투척물 등은 제외
+
+	// 부착 룰 (스케일 유지)
+	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+
+	// 무기 액터를 해당 소켓에 부착
+	WeaponToHolster->AttachToComponent(GetMesh(), AttachRules, HolsterSocketName);
+
+	// [핵심] 데이터 테이블의 회전값 적용 및 스케일 1.0 강제 고정
+	WeaponToHolster->SetActorRelativeRotation(WeaponToHolster->HolsterRotationOffset);
+	WeaponToHolster->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
 }

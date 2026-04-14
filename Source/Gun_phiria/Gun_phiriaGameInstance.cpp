@@ -5,23 +5,23 @@ void UGun_phiriaGameInstance::SavePlayerData(AGun_phiriaCharacter* Player, bool 
 {
 	if (!Player || !Player->PlayerInventory) return;
 
-	// 사파이어는 언제나 영구 보존!
 	SavedSapphire = Player->CurrentSapphire;
 
 	if (bKeepOnlySapphire)
 	{
-		// [마을 귀환] 사파이어 빼고 다 날립니다.
+		// [마을 귀환] 사파이어 외 초기화
 		SavedGold = 0;
 		SavedInventory.Empty();
-		SavedHelmetID = NAME_None;
-		SavedVestID = NAME_None;
-		SavedBackpackID = NAME_None;
-		SavedHealth = -1.0f; // 초기화
-		bHasSavedData = false; // 복구할 일반 데이터가 없음을 의미
+		SavedHelmetID = SavedVestID = SavedBackpackID = NAME_None;
+		// 무기 정보도 초기화
+		SavedWeapon1ID = SavedWeapon2ID = SavedPistolID = SavedThrowableID = NAME_None;
+		SavedActiveSlotIndex = 0;
+		SavedHealth = -1.0f;
+		bHasSavedData = false;
 	}
 	else
 	{
-		// [다음 층 이동] 모든 정보를 안전하게 백업합니다.
+		// [다음 층 이동] 모든 정보 백업
 		SavedGold = Player->CurrentGold;
 		SavedHealth = Player->CurrentHealth;
 
@@ -29,6 +29,15 @@ void UGun_phiriaGameInstance::SavePlayerData(AGun_phiriaCharacter* Player, bool 
 		SavedHelmetID = Player->PlayerInventory->EquippedHelmetID;
 		SavedVestID = Player->PlayerInventory->EquippedVestID;
 		SavedBackpackID = Player->PlayerInventory->EquippedBackpackID;
+
+		// [추가] 전투 슬롯 정보 저장
+		SavedWeapon1ID = Player->PlayerInventory->EquippedWeapon1ID;
+		SavedWeapon2ID = Player->PlayerInventory->EquippedWeapon2ID;
+		SavedPistolID = Player->PlayerInventory->EquippedPistolID;
+		SavedThrowableID = Player->PlayerInventory->EquippedThrowableID;
+
+		SavedActiveSlotIndex = Player->ActiveWeaponSlot;
+
 		SavedCurrentWeight = Player->PlayerInventory->CurrentWeight;
 		SavedMaxWeight = Player->PlayerInventory->MaxWeight;
 
@@ -40,10 +49,8 @@ void UGun_phiriaGameInstance::LoadPlayerData(AGun_phiriaCharacter* Player)
 {
 	if (!Player || !Player->PlayerInventory) return;
 
-	// 사파이어는 마을이든 던전이든 항상 적용!
 	Player->CurrentSapphire = SavedSapphire;
 
-	// 복구할 데이터가 있다면 (다음 층으로 넘어온 경우)
 	if (bHasSavedData)
 	{
 		Player->CurrentGold = SavedGold;
@@ -53,14 +60,20 @@ void UGun_phiriaGameInstance::LoadPlayerData(AGun_phiriaCharacter* Player)
 			Player->CurrentHealth = SavedHealth;
 		}
 
-		// 인벤토리 복구
 		Player->PlayerInventory->InventorySlots = SavedInventory;
 		Player->PlayerInventory->EquippedHelmetID = SavedHelmetID;
 		Player->PlayerInventory->EquippedVestID = SavedVestID;
 		Player->PlayerInventory->EquippedBackpackID = SavedBackpackID;
+
+		// [추가] 전투 슬롯 정보 복구
+		Player->PlayerInventory->EquippedWeapon1ID = SavedWeapon1ID;
+		Player->PlayerInventory->EquippedWeapon2ID = SavedWeapon2ID;
+		Player->PlayerInventory->EquippedPistolID = SavedPistolID;
+		Player->PlayerInventory->EquippedThrowableID = SavedThrowableID;
+
+		Player->ActiveWeaponSlot = SavedActiveSlotIndex;
+
 		Player->PlayerInventory->CurrentWeight = SavedCurrentWeight;
 		Player->PlayerInventory->MaxWeight = SavedMaxWeight;
-
-		// (선택) 장착된 아이템의 3D 메쉬를 다시 띄워주려면 데이터 테이블을 읽어서 UpdateEquipmentVisuals 등을 호출해야 할 수 있음.
 	}
 }

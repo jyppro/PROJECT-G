@@ -40,6 +40,9 @@ public:
 	// --- Getters ---
 	FORCEINLINE TObjectPtr<UStaticMeshComponent> GetWeaponMesh() const { return WeaponMesh; }
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Holster")
+	FRotator HolsterRotationOffset = FRotator::ZeroRotator;
+
 	// --- Weapon Stats ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Stats")
 	float WeaponSpreadMultiplier = 3.0f;

@@ -351,9 +351,13 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 				if (NewWeapon)
 				{
-					NewWeapon->SetActorHiddenInGame(true); // 우선 안 보이게 둠
-					NewWeapon->SetActorEnableCollision(false);
-					Player->WeaponSlots[TargetWeaponSlotIndex] = NewWeapon; // 슬롯에 장전!
+					NewWeapon->SetActorHiddenInGame(false);
+					NewWeapon->SetActorEnableCollision(false); // 플레이어 이동을 방해하지 않게 충돌은 꺼둠
+					NewWeapon->HolsterRotationOffset = ItemInfo->HolsterRotationOffset;
+
+					// 슬롯에 장전!
+					Player->WeaponSlots[TargetWeaponSlotIndex] = NewWeapon;
+					Player->AttachToHolster(TargetWeaponSlotIndex);
 				}
 			}
 			bUseSuccess = true;

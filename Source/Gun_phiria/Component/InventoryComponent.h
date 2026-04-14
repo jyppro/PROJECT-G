@@ -81,6 +81,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
 	TSubclassOf<class AWeaponBase> WeaponClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
+	FRotator HolsterRotationOffset = FRotator::ZeroRotator;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Drop")
 	TSubclassOf<class APickupItemBase> ItemClass;
 

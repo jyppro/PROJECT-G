@@ -139,6 +139,10 @@ public:
 
 	void EquipWeaponSlot(int32 SlotIndex);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon") TArray<TObjectPtr<AWeaponBase>> WeaponSlots;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon") int32 ActiveWeaponSlot = 0;
+
+	UFUNCTION(BlueprintCallable, Category = "Attachment")
+	void AttachToHolster(int32 SlotIndex);
 
 protected:
 	virtual void BeginPlay() override;
@@ -202,6 +206,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Animation|Interaction") TObjectPtr<UAnimMontage> InteractMontage;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI") TObjectPtr<class UAnimationAsset> UI_IdleAnimation;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI") TSubclassOf<class UUserWidget> InventoryWidgetClass;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Obstruction") float WeaponObstructionAlpha = 0.0f;
 
 private:
 	// --- Input Handlers ---
