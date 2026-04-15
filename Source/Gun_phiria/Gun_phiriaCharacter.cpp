@@ -377,6 +377,8 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		if (EquipWeapon2Action) EIC->BindAction(EquipWeapon2Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon2);
 		if (EquipWeapon3Action) EIC->BindAction(EquipWeapon3Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon3);
 		if (EquipWeapon4Action) EIC->BindAction(EquipWeapon4Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon4);
+
+		if (ReloadAction) EIC->BindAction(ReloadAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Reload);
 	}
 }
 
@@ -400,7 +402,7 @@ void AGun_phiriaCharacter::EquipWeapon4() { EquipWeaponSlot(3); } // 투척물
 
 void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 {
-	if (bIsCasting || bIsDead || bIsInventoryOpen || SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
+	if (bIsCasting || bIsDead || bIsInventoryOpen || bIsReloading || SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
 
 	AWeaponBase* TargetWeapon = WeaponSlots[SlotIndex];
 	if (!TargetWeapon || TargetWeapon == CurrentWeapon) return;
@@ -462,6 +464,7 @@ void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
 
 void AGun_phiriaCharacter::CustomJump()
 {
+	if (bIsCasting || bIsChangingStance || bIsReloading) return;
 	if (bIsCasting) { CancelCasting(); return; }
 	if (bIsChangingStance) return;
 
@@ -472,12 +475,14 @@ void AGun_phiriaCharacter::CustomJump()
 
 void AGun_phiriaCharacter::ToggleCrouch()
 {
+	if (bIsCasting || bIsReloading) return;
 	if (bIsCasting) { CancelCasting(); return; }
 	if (!bIsProne) bIsCrouched ? UnCrouch() : Crouch();
 }
 
 void AGun_phiriaCharacter::ToggleProne()
 {
+	if (bIsCasting || GetCharacterMovement()->IsFalling() || bIsReloading) return;
 	if (bIsCasting) { CancelCasting(); return; }
 	if (GetCharacterMovement()->IsFalling()) return;
 
@@ -504,6 +509,7 @@ void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { Target
 // Combat
 void AGun_phiriaCharacter::StartAiming()
 {
+	if (bIsInventoryOpen || bIsCasting || bIsReloading) return;
 	if (bIsInventoryOpen) return;
 	if (bIsCasting) { CancelCasting(); return; }
 
@@ -521,6 +527,7 @@ void AGun_phiriaCharacter::StopAiming()
 
 void AGun_phiriaCharacter::Fire()
 {
+	if (bIsInventoryOpen || bIsCasting || bIsReloading) return;
 	if (bIsInventoryOpen || bIsCasting) { CancelCasting(); return; }
 	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
 
@@ -720,6 +727,8 @@ void AGun_phiriaCharacter::CheckForInteractables()
 
 void AGun_phiriaCharacter::Interact()
 {
+	if (bIsReloading) return;
+
 	if (TargetInteractable && TargetInteractable->Implements<UInteractInterface>())
 	{
 		IInteractInterface::Execute_Interact(TargetInteractable.Get(), this);
@@ -857,6 +866,7 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 // Casting & Buffs
 void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess)
 {
+	if (bIsReloading) return;
 	if (bIsCasting) CancelCasting();
 
 	bIsCasting = true;
@@ -1002,22 +1012,26 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 
 void AGun_phiriaCharacter::Reload()
 {
-	// 1. 예외 처리: 무기가 없거나, 인벤토리가 없거나, 이미 꽉 찼으면 무시
+	// 1. 예외 처리
+	if (bIsReloading || bIsCasting || bIsDead || bIsInventoryOpen) return;
 	if (!CurrentWeapon || !PlayerInventory) return;
 	if (CurrentWeapon->CurrentAmmo >= CurrentWeapon->MagazineCapacity) return;
 
-	// 2. 이 총이 쓰는 총알의 ID와, 가방에 그 총알이 몇 개 있는지 확인
 	FName NeededAmmoID = CurrentWeapon->AmmoItemID;
 	int32 TotalReserveAmmo = PlayerInventory->GetTotalItemCount(NeededAmmoID);
+	if (TotalReserveAmmo <= 0) return; // 총알 없으면 무시
 
-	// 가방에 총알이 한 발도 없으면 장전 불가 (찰칵 소리만 내기)
-	if (TotalReserveAmmo <= 0)
-	{
-		// if (EmptyMagSound) 재생;
-		return;
-	}
+	// =================================================================
+	// [추가] 장전 시작: 조준 중이었다면 조준을 풀고, 이동 속도를 캐스팅 속도로 줄입니다.
+	// =================================================================
+	if (bIsAiming) StopAiming(); // 줌 풀기
 
-	// 3. 재장전 애니메이션 재생
+	OriginalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed; // 현재 속도 기억
+	GetCharacterMovement()->MaxWalkSpeed = CastingWalkSpeed;  // 느린 속도로 변경
+
+	// 장전 상태 돌입
+	bIsReloading = true;
+
 	if (CurrentWeapon->ReloadMontage)
 	{
 		if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
@@ -1025,30 +1039,39 @@ void AGun_phiriaCharacter::Reload()
 			AnimInst->Montage_Play(CurrentWeapon->ReloadMontage);
 		}
 	}
+	else FinishReload();
+}
 
-	// -------------------------------------------------------------
-	// 주의: 아래의 '실제 총알 계산'은 애니메이션이 끝날 때, 
-	// 혹은 애니메이션 노티파이(AnimNotify)가 호출될 때 실행되어야 자연스럽습니다.
-	// 우선은 로직 흐름을 위해 바로 계산하도록 작성해 드립니다!
-	// -------------------------------------------------------------
+void AGun_phiriaCharacter::FinishReload()
+{
+	// =================================================================
+	// [추가] 장전 완료: 이동 속도를 원래대로 복구합니다.
+	// =================================================================
+	if (bIsReloading) // 장전 중일 때만 복구 (버그 방지)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
+	}
 
-	// 4. 탄창을 꽉 채우기 위해 '필요한 총알 수' 계산
+	if (!CurrentWeapon || !PlayerInventory)
+	{
+		bIsReloading = false;
+		return;
+	}
+
+	FName NeededAmmoID = CurrentWeapon->AmmoItemID;
+	int32 TotalReserveAmmo = PlayerInventory->GetTotalItemCount(NeededAmmoID);
+
 	int32 BulletsNeeded = CurrentWeapon->MagazineCapacity - CurrentWeapon->CurrentAmmo;
-
-	// 5. '실제로 장전할 총알 수' (가방에 있는 총알이 부족할 수 있으므로 Min 함수 사용)
 	int32 BulletsToReload = FMath::Min(BulletsNeeded, TotalReserveAmmo);
 
-	// 6. 가방에서 총알 빼기 & 탄창에 넣기
-	PlayerInventory->RemoveItem(NeededAmmoID, BulletsToReload);
-	CurrentWeapon->CurrentAmmo += BulletsToReload;
-
-	// 7. UI 업데이트 (위젯이 띄워져 있다면)
-	/*
-	if (StatusWidgetInstance) {
-		int32 NewReserve = PlayerInventory->GetTotalItemCount(NeededAmmoID);
-		StatusWidgetInstance->UpdateAmmo(CurrentWeapon->CurrentAmmo, NewReserve);
+	if (BulletsToReload > 0)
+	{
+		PlayerInventory->RemoveItem(NeededAmmoID, BulletsToReload);
+		CurrentWeapon->CurrentAmmo += BulletsToReload;
 	}
-	*/
+
+	// 장전 상태 해제
+	bIsReloading = false;
 }
 
 void AGun_phiriaCharacter::AttachToHolster(int32 SlotIndex)

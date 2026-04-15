@@ -12,10 +12,10 @@ class UAnimMontage;
 UENUM(BlueprintType)
 enum class EWeaponType : uint8
 {
-	Pistol UMETA(DisplayName = "Pistol"),
-	SMG    UMETA(DisplayName = "SMG"),
-	AR     UMETA(DisplayName = "Assault Rifle"),
-	Sniper UMETA(DisplayName = "Sniper Rifle"),
+	Pistol  UMETA(DisplayName = "Pistol"),
+	SMG     UMETA(DisplayName = "SMG"),
+	AR      UMETA(DisplayName = "AR"),
+	SR	    UMETA(DisplayName = "SR"),
 	Shotgun UMETA(DisplayName = "Shotgun")
 };
 
@@ -72,7 +72,7 @@ public:
 
 	// --- Ammo System ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Ammo")
-	int32 CurrentAmmo = 30;
+	int32 CurrentAmmo = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Ammo")
 	int32 MagazineCapacity = 30;

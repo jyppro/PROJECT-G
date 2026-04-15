@@ -87,7 +87,16 @@ public:
 
 	void DropItemToGround(FName ItemID);
 	void ToggleInventory();
+
 	void Reload();
+
+	// 애니메이션 노티파이(Anim Notify)에서 호출될 실제 탄약 보충 함수
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void FinishReload();
+
+	// 장전 중인지 체크하는 플래그
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	bool bIsReloading = false;
 
 	// ==========================================
 	// Casting & Buffs
@@ -181,6 +190,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon2Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon3Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon4Action;
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> ReloadAction;
 
 	// ==========================================
 	// Combat & Animation Settings
