@@ -6,6 +6,7 @@
 #include "../component/InventoryComponent.h"
 #include "../UI/InventoryMainWidget.h"
 #include "Components/SceneComponent.h"
+#include "../Gun_phiriaGameInstance.h"
 
 APickupItemBase::APickupItemBase()
 {
@@ -28,7 +29,34 @@ APickupItemBase::APickupItemBase()
 	OverlapSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	OverlapSphere->SetCollisionResponseToChannel(ECC_Visibility, ECR_Overlap);
 
-	Quantity = 1;
+	Quantity = 0;
+}
+
+void APickupItemBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 1. 만약 이 아이템이 플레이어가 '가방에서 버린' 아이템이라면 
+	// 이미 Quantity가 정해져 있을 테니 무시하고,
+	// 맵에 '처음부터 배치되어 있던' 아이템이거나 스포너가 막 생성한 상태(Quantity == 0)일 때만 기본값을 채워줍니다.
+	if (Quantity <= 0)
+	{
+		// 2. 게임 인스턴스나 특정 관리자로부터 아이템 데이터 테이블을 가져옵니다.
+		// (프로젝트 설정에 따라 DataTable을 가져오는 방식은 맞춰서 수정해 주세요)
+		if (UDataTable* ItemTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_ItemData.DT_ItemData")))
+		{
+			FItemData* ItemInfo = ItemTable->FindRow<FItemData>(ItemID, TEXT("PickupItemInit"));
+			if (ItemInfo)
+			{
+				// 3. 데이터 테이블에 적어둔 '기본 스폰 갯수'를 이 필드 아이템의 갯수로 설정!
+				Quantity = ItemInfo->DefaultSpawnQuantity;
+			}
+			else
+			{
+				Quantity = 1; // 데이터를 못 찾으면 최소한 1개로 설정
+			}
+		}
+	}
 }
 
 void APickupItemBase::Interact_Implementation(AActor* Interactor)

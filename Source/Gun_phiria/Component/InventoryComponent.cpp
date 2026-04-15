@@ -23,27 +23,12 @@ int32 UInventoryComponent::AddItem(FName ItemID, int32 Quantity)
 {
 	if (Quantity <= 0 || ItemID.IsNone() || !ItemDataTable) return Quantity;
 
-	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(ItemID, TEXT("AddItem_WeightCheck"));
+	FItemData* ItemInfo = ItemDataTable->FindRow<FItemData>(ItemID, TEXT("AddItem"));
 	if (!ItemInfo) return Quantity;
 
-	int32 AddableQuantity = Quantity;
-	if (ItemInfo->ItemWeight > 0.0f)
-	{
-		float AvailableWeight = MaxWeight - CurrentWeight;
-		if (AvailableWeight < ItemInfo->ItemWeight) return Quantity;
+	int32 RemainingToAdd = Quantity;
 
-		int32 MaxAffordable = FMath::FloorToInt(AvailableWeight / ItemInfo->ItemWeight);
-		AddableQuantity = FMath::Min(Quantity, MaxAffordable);
-	}
-
-	if (AddableQuantity <= 0) return Quantity;
-
-	int32 RemainingToAdd = AddableQuantity;
-
-	// =========================================================
-	// 1. 가방에 똑같은 아이템이 이미 있는지 확인 (겹치기 시도)
-	// 장비처럼 MaxStackSize가 1인 아이템은 이 과정을 건너뜁니다.
-	// =========================================================
+	// 1. 기존 슬롯에 겹치기
 	if (ItemInfo->MaxStackSize > 1)
 	{
 		for (int32 i = 0; i < InventorySlots.Num(); i++)
@@ -53,43 +38,48 @@ int32 UInventoryComponent::AddItem(FName ItemID, int32 Quantity)
 				int32 SpaceLeft = ItemInfo->MaxStackSize - InventorySlots[i].Quantity;
 				if (SpaceLeft > 0)
 				{
-					int32 AmountToAdd = FMath::Min(RemainingToAdd, SpaceLeft);
-					InventorySlots[i].Quantity += AmountToAdd;
-					CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
-					RemainingToAdd -= AmountToAdd;
+					// 현재 남은 무게로 몇 개나 더 넣을 수 있는지 실시간 체크
+					float AvailableWeight = MaxWeight - CurrentWeight;
+					int32 WeightPossible = (ItemInfo->ItemWeight > 0.f) ? FMath::FloorToInt(AvailableWeight / ItemInfo->ItemWeight) : RemainingToAdd;
 
-					if (RemainingToAdd <= 0) return Quantity - AddableQuantity;
+					int32 AmountToAdd = FMath::Min(FMath::Min(RemainingToAdd, SpaceLeft), WeightPossible);
+
+					if (AmountToAdd > 0)
+					{
+						InventorySlots[i].Quantity += AmountToAdd;
+						CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
+						RemainingToAdd -= AmountToAdd;
+					}
+					if (RemainingToAdd <= 0 || WeightPossible <= 0) return RemainingToAdd;
 				}
 			}
 		}
 	}
 
-	// =========================================================
-	// 2. 그래도 남은 수량이 있다면 빈 슬롯을 찾아서 새로 넣기
-	// (장비 아이템은 항상 여기로 와서 빈 슬롯을 차지합니다)
-	// =========================================================
+	// 2. 새 슬롯에 넣기
 	for (int32 i = 0; i < InventorySlots.Num(); i++)
 	{
 		if (InventorySlots[i].IsEmpty())
 		{
-			InventorySlots[i].ItemID = ItemID;
+			float AvailableWeight = MaxWeight - CurrentWeight;
+			int32 WeightPossible = (ItemInfo->ItemWeight > 0.f) ? FMath::FloorToInt(AvailableWeight / ItemInfo->ItemWeight) : RemainingToAdd;
 
-			// 이 슬롯에 넣을 개수 (최대 스택을 넘지 않도록)
-			int32 AmountToAdd = FMath::Min(RemainingToAdd, ItemInfo->MaxStackSize);
-			InventorySlots[i].Quantity = AmountToAdd;
+			int32 AmountToAdd = FMath::Min(FMath::Min(RemainingToAdd, ItemInfo->MaxStackSize), WeightPossible);
 
-			// 획득 시 최대 내구도로 초기화
-			InventorySlots[i].CurrentDurability = ItemInfo->MaxDurability;
+			if (AmountToAdd > 0)
+			{
+				InventorySlots[i].ItemID = ItemID;
+				InventorySlots[i].Quantity = AmountToAdd;
+				InventorySlots[i].CurrentDurability = ItemInfo->MaxDurability;
 
-			CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
-			RemainingToAdd -= AmountToAdd;
-
-			if (RemainingToAdd <= 0) return Quantity - AddableQuantity;
+				CurrentWeight += (ItemInfo->ItemWeight * AmountToAdd);
+				RemainingToAdd -= AmountToAdd;
+			}
+			if (RemainingToAdd <= 0 || WeightPossible <= 0) return RemainingToAdd;
 		}
 	}
 
-	// 가방 칸이 부족해서 남은 수량 반환
-	return (Quantity - AddableQuantity) + RemainingToAdd;
+	return RemainingToAdd;
 }
 
 bool UInventoryComponent::RemoveItem(FName ItemID, int32 Quantity)
@@ -479,8 +469,15 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 		return;
 	}
 
-	// 벗은 아이템을 가방에 추가
-	AddItem(ItemID, 1);
+	int32 Leftover = AddItem(ItemID, 1);
+
+	if (Leftover > 0)
+	{
+		// 가방이 꽉 차서 못 들어갔다면 바닥에 떨어뜨립니다!
+		//if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, TEXT("가방이 꽉 차서 장비를 바닥에 떨어뜨립니다."));
+
+		Player->DropItemToGround(ItemID);
+	}
 }
 
 int32 UInventoryComponent::GetTotalItemCount(FName ItemID) const

@@ -21,6 +21,8 @@ public:
 	int32 Quantity;
 
 protected:
+	virtual void BeginPlay() override;
+
 	// ´«¿¡ º¸ÀÌ´Â ¸ðµ¨¸µ
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	class UStaticMeshComponent* ItemMesh;

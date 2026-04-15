@@ -77,6 +77,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
 	TSubclassOf<class UItemEffectBase> ItemEffectClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	int32 DefaultSpawnQuantity = 1;
+
 	// [무기용] 무기를 장착할 때 스폰할 실제 무기 액터 클래스
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
 	TSubclassOf<class AWeaponBase> WeaponClass;

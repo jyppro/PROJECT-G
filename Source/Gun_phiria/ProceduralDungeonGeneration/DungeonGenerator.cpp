@@ -474,12 +474,8 @@ void ADungeonGenerator::SpawnItemsInRooms()
 
 			if (APickupItemBase* PickupItem = Cast<APickupItemBase>(SpawnedActor))
 			{
-				// 네 아이디어의 최고 장점: 데이터 테이블 이름(RowName)을 그대로 ID로 넣어줄 수 있음!
 				PickupItem->ItemID = SelectedCandidate.ItemID;
-
-				FString ItemString = PickupItem->ItemID.ToString();
-				if (ItemString.Contains(TEXT("Ammo"))) PickupItem->Quantity = FMath::RandRange(15, 30);
-				else PickupItem->Quantity = 1;
+				PickupItem->Quantity = SelectedCandidate.Data->DefaultSpawnQuantity;
 			}
 		}
 	}
