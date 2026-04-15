@@ -69,10 +69,15 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 
 	HelmetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HelmetMesh"));
 	HelmetMesh->SetupAttachment(GetMesh(), FName("HelmetSocket"));
+	HelmetMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	VestMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VestMesh"));
 	VestMesh->SetupAttachment(GetMesh(), FName("VestSocket"));
+	VestMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	BackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BackpackMesh"));
 	BackpackMesh->SetupAttachment(GetMesh(), FName("BackpackSocket"));
+	BackpackMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -233,81 +238,54 @@ void AGun_phiriaCharacter::UpdateLeanAndCameraOffset(float DeltaTime)
 
 void AGun_phiriaCharacter::PreventWeaponClipping()
 {
-	if (!CurrentWeapon || !CurrentWeapon->GetWeaponMesh()) return;
+	// 1. 유효성 검사
+	if (!CurrentWeapon) return;
 
-	// 1. 총구(Muzzle) 소켓 위치와 캐릭터 위치를 가져옵니다.
-	const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
+	// 2. 캐릭터 상태에 따른 트레이스 시작 높이와 거리 설정
+	// bIsProne 변수를 프로젝트에 구현된 변수명으로 변경해줘!
+	const bool bIsProneStatus = bIsProne;
 	FVector Start = GetActorLocation();
+
+	// 캐릭터 가슴/명치 높이 (기울이기 기능과 함께 쓰면 좋습니다)
+	Start.Z += bIsProneStatus ? 20.0f : 60.0f;
+
 	FVector FwdDir = GetActorForwardVector();
 
-	// 2. 캐릭터 가슴 높이(Pelvis)를 총구 높이로 맞추어 레이저를 수평으로 만듭니다.
-	// (image_14.png context: 샷건이 아래를 향해 있어 MuzzleZ가 상당히 낮을 수 있습니다.)
-	Start.Z = Muzzle.Z;
-
-	// 3. 총구 소켓에서 앞으로 15cm 더 나간 지점까지 레이저 발사
-	FVector End = Muzzle + (FwdDir * 15.f);
+	// 3. 트레이스 거리 (긴 총의 길이에 맞춰 조절하세요)
+	// 누운 상태에서는 엎드려서 기어가기 때문에 좀 더 짧은 거리로 설정합니다.
+	float TraceDistance = bIsProneStatus ? 55.0f : 65.0f; // 막히는 범위를 더 작게 만들어 줍니다.
+	FVector End = Start + (FwdDir * TraceDistance);
 
 	FHitResult Hit;
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(CurrentWeapon);
 
-	float TargetAlpha = 0.0f; // 목표 애니메이션 블렌드 값
+	// 4. 장애물 감지용 구체 (두께 10cm)
+	// 엎드린 상태에서는 좀 더 정밀하게 감지하기 위해 구체 반지름을 줄여봅니다.
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(bIsProneStatus ? 7.0f : 12.0f);
 
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	float TargetAlpha = 0.0f;
+
+	// 5. 전방에 부딪히는 모든 시각적 장애물(벽, 계단 등) 감지
+	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, Sphere, Params))
 	{
-		// 4. 부딪힌 표면이 수직에 가까운지 확인 (벽 또는 계단의 수직 모서리)
-		if (FMath::Abs(Hit.ImpactNormal.Z) < 0.3f)
+		// [핵심 로직] 누운 상태일 때만 바닥을 무시하는 예외 처리
+		// 엎드려서 기어가다가 레이저가 수평 바닥에 닿았다면 무시합니다.
+		if (bIsProneStatus && FMath::Abs(Hit.ImpactNormal.Z) > 0.7f)
 		{
-			// =====================================================================
-			// [버그 해결 핵심] 저번의 'Stairs Ignore' bad logic을 긴 총에 맞게 수정합니다!
-			// =====================================================================
-
-			// [기존 Flawed logic]: 부딪힌 곳 바로 너머에 바닥이 있으면 무조건 0.0 반환.
-			// -> 계단의 경우 Step 1 바로 뒤에 Tread 1 바닥이 있으니 0.0을 반환해서 막힌 채 걷게 됨.
-
-			// [수정된 Fixed logic]:
-			// 부딪힌 곳 너머의 바닥을 검사하되, 그 바닥이 내 총구 높이보다 **현저히 낮을 때만** 무시하라!
-
-			// 충돌 지점에서 앞으로 20cm 간 뒤, 위로 30cm 올려서 아래로 바닥 검사 레이저 준비
-			FVector FloorCheckStart = Hit.ImpactPoint + (FwdDir * 20.f) + FVector(0.f, 0.f, 30.f);
-			FVector FloorCheckEnd = FloorCheckStart - FVector(0.f, 0.f, 100.f);
-
-			FHitResult FloorHit;
-			if (GetWorld()->LineTraceSingleByChannel(FloorHit, FloorCheckStart, FloorCheckEnd, ECC_Visibility, Params))
-			{
-				// 찾은 바닥의 평평함 검사
-				if (FloorHit.ImpactNormal.Z > 0.7f && !FloorHit.bStartPenetrating)
-				{
-					// [핵심 비교] 내 총구 높이(Z=20)와 벽 너머 바닥 높이(Step1 Tread=Z=20) 비교!
-					// (image_14.png context: 계단이라면 두 Z 높이가 거의 같습니다.)
-
-					// 찾은 바닥의 고도
-					float ElevationBeyondHit = FloorHit.ImpactPoint.Z;
-
-					// [수정된 조건]: 벽 너머 바닥이 내 총구보다 25cm 이상 낮다면?
-					// -> 이것은 계단이 아니라 "내 발아래에 있는 knee-high 장애물이나 절벽"입니다!
-					// -> 총구 barrel이 수평으로 통과할 수 있습니다.
-					if (ElevationBeyondHit < Muzzle.Z - 25.0f) // Threshold, gun can pass low platforms
-					{
-						// 이 장애물은 무시하고 0.0을 유지합니다.
-						TargetAlpha = 0.0f;
-						WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), 15.0f);
-						return; // 함수 종료
-					}
-				}
-			}
-
-			// =====================================================================
-			// 5. 이 아래는 계단 모서리(Z가 총구와 같음)를 찔렀거나 진짜 벽인 경우입니다.
-			// alpha를 1.0으로 올려 총을 치켜듭니다. (image_14.png context: 드디어 계단에서 1.0이 됩니다!)
-			// =====================================================================
-			TargetAlpha = 1.0f;
+			TargetAlpha = 0.0f; // 이것은 장애물이 아니라 바닥이므로 총을 들지 않습니다.
+		}
+		else
+		{
+			TargetAlpha = 1.0f; // 벽이나 계단 앞 모서리 같은 수직 장애물이므로 총을 듭니다.
 		}
 	}
 
-	// 6. 0.0 과 1.0 사이를 부드럽게 연결
-	WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), 15.0f);
+	// 6. 벽 뚫림 방지: 올릴 때는 빠르게(20.0f), 내릴 때는 자연스럽게(10.0f)
+	float InterpSpeed = (TargetAlpha > WeaponObstructionAlpha) ? 20.0f : 10.0f;
+
+	WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), InterpSpeed);
 }
 
 void AGun_phiriaCharacter::InitializeWeapon()
@@ -428,19 +406,7 @@ void AGun_phiriaCharacter::Move(const FInputActionValue& Value)
 	const FVector Fwd = FRotationMatrix(Rot).GetUnitAxis(EAxis::X);
 	const FVector Rit = FRotationMatrix(Rot).GetUnitAxis(EAxis::Y);
 
-	float FwdInput = Vec.Y;
-	if (CurrentWeapon && CurrentWeapon->GetWeaponMesh() && FwdInput > 0.0f)
-	{
-		const FVector Muzzle = CurrentWeapon->GetWeaponMesh()->GetSocketLocation(FName("MuzzleSocket"));
-		FHitResult Hit;
-		FCollisionQueryParams Params; Params.AddIgnoredActor(this); Params.AddIgnoredActor(CurrentWeapon);
-		if (GetWorld()->SweepSingleByChannel(Hit, Muzzle - Fwd * 20.f, Muzzle + Fwd * 15.f, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(10.f), Params))
-		{
-			FwdInput = 0.0f;
-		}
-	}
-
-	AddMovementInput(Fwd, FwdInput);
+	AddMovementInput(Fwd, Vec.Y);
 	AddMovementInput(Rit, Vec.X);
 }
 
