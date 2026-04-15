@@ -5,6 +5,7 @@
 #include "../Weapon/WeaponBase.h"
 #include "Animation/AnimationAsset.h"
 #include "GameFramework/Character.h"
+#include "../Gun_phiriaCharacter.h"
 
 AInventoryStudio::AInventoryStudio()
 {
@@ -32,9 +33,21 @@ AInventoryStudio::AInventoryStudio()
 	CloneBackpackMesh->SetupAttachment(CloneBodyMesh, FName("BackpackSocket"));
 	CloneBackpackMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	CloneWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh"));
-	CloneWeaponMesh->SetupAttachment(CloneBodyMesh, FName("WeaponSocket"));
-	CloneWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CloneWeaponMesh_Hand = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh"));
+	CloneWeaponMesh_Hand->SetupAttachment(CloneBodyMesh, FName("WeaponSocket"));
+	CloneWeaponMesh_Hand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CloneWeaponMesh0 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh0"));
+	CloneWeaponMesh0->SetupAttachment(CloneBodyMesh);
+	CloneWeaponMesh0->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CloneWeaponMesh1 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh1"));
+	CloneWeaponMesh1->SetupAttachment(CloneBodyMesh);
+	CloneWeaponMesh1->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	CloneWeaponMesh2 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CloneWeaponMesh2"));
+	CloneWeaponMesh2->SetupAttachment(CloneBodyMesh);
+	CloneWeaponMesh2->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// 3. 캡처 카메라 세팅
 	StudioCamera = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("StudioCamera"));
@@ -63,109 +76,97 @@ void AInventoryStudio::BeginPlay()
 		StudioCamera->ShowOnlyComponent(CloneHelmetMesh);
 		StudioCamera->ShowOnlyComponent(CloneVestMesh);
 		StudioCamera->ShowOnlyComponent(CloneBackpackMesh);
-		StudioCamera->ShowOnlyComponent(CloneWeaponMesh);
+
+		StudioCamera->ShowOnlyComponent(CloneWeaponMesh_Hand);
+		StudioCamera->ShowOnlyComponent(CloneWeaponMesh0);
+		StudioCamera->ShowOnlyComponent(CloneWeaponMesh1);
+		StudioCamera->ShowOnlyComponent(CloneWeaponMesh2);
 	}
 }
 
 void AInventoryStudio::UpdateStudioEquipment(UStaticMesh* NewHelmet, UStaticMesh* NewVest, UStaticMesh* NewBackpack, AWeaponBase* EquippedWeapon, EStudioAnimType AnimType)
 {
+	// 1. 방어구 업데이트
 	if (CloneHelmetMesh) CloneHelmetMesh->SetStaticMesh(NewHelmet);
 	if (CloneVestMesh) CloneVestMesh->SetStaticMesh(NewVest);
 	if (CloneBackpackMesh) CloneBackpackMesh->SetStaticMesh(NewBackpack);
 
-	//if (CloneWeaponMesh)
-	//{
-	//	if (EquippedWeapon && EquippedWeapon->GetWeaponMesh())
-	//	{
-	//		// 1. 메쉬 외형 복사
-	//		CloneWeaponMesh->SetStaticMesh(EquippedWeapon->GetWeaponMesh()->GetStaticMesh());
+	AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(GetOwner());
+	if (!PlayerChar) return;
 
-	//		// 원본 무기의 "WeaponMesh"가 가진 트랜스폼을 통째로 가져오기
-	//		FTransform OriginalMeshTransform = EquippedWeapon->GetWeaponMesh()->GetRelativeTransform();
-
-	//		// 스튜디오 마네킹 손에 부착 (상대 좌표를 유지한 채로)
-	//		FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-	//		CloneWeaponMesh->AttachToComponent(CloneBodyMesh, AttachRules, FName("WeaponSocket"));
-
-	//		// 가져온 트랜스폼(위젯에서 맞춘 0.1 스케일, -90도 회전 등)을 그대로 덮어씌움
-	//		CloneWeaponMesh->SetRelativeTransform(OriginalMeshTransform);
-	//	}
-	//	else
-	//	{
-	//		CloneWeaponMesh->SetStaticMesh(nullptr);
-	//	}
-	//}
-
-	if (CloneWeaponMesh)
+	// =========================================================================
+	// 2. [손에 들고 있는 무기] 처리 (CloneWeaponMesh_Hand)
+	// =========================================================================
+	if (CloneWeaponMesh_Hand)
 	{
 		if (EquippedWeapon && EquippedWeapon->GetWeaponMesh())
 		{
-			// 1. 메쉬 외형 복사
-			CloneWeaponMesh->SetStaticMesh(EquippedWeapon->GetWeaponMesh()->GetStaticMesh());
+			CloneWeaponMesh_Hand->SetStaticMesh(EquippedWeapon->GetWeaponMesh()->GetStaticMesh());
 
-			// =========================================================================
-			// [가장 완벽한 해결책] 
-			// 진짜 플레이어가 진짜 총을 어떻게 쥐고 있는지 계산해서 마네킹에게 복사합니다!
-			// =========================================================================
-
-			// 스튜디오를 생성할 때 Owner를 Player로 설정했으므로, 스튜디오의 주인을 가져옵니다.
-			ACharacter* PlayerChar = Cast<ACharacter>(GetOwner());
-
-			if (PlayerChar && PlayerChar->GetMesh())
+			if (PlayerChar->GetMesh())
 			{
-				// 진짜 총기 메쉬의 월드 좌표 (절대 위치)
 				FTransform RealMeshWorld = EquippedWeapon->GetWeaponMesh()->GetComponentTransform();
-
-				// 진짜 캐릭터 손바닥 소켓의 월드 좌표 (절대 위치)
 				FTransform RealSocketWorld = PlayerChar->GetMesh()->GetSocketTransform(FName("WeaponSocket"));
-
-				// 두 좌표를 빼서(GetRelativeTransform) 손바닥 기준으로 총이 정확히 어떻게 쥐어져 있는지 구합니다!
-				// (여기에 스케일, 회전, 소켓 그립 오프셋이 전부 다 포함되어 있습니다)
 				FTransform RelativeToHand = RealMeshWorld.GetRelativeTransform(RealSocketWorld);
 
-				// 스튜디오 마네킹의 손바닥 소켓에 가짜 무기를 부착!
 				FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-				CloneWeaponMesh->AttachToComponent(CloneBodyMesh, AttachRules, FName("WeaponSocket"));
-
-				// 방금 구한 "완벽한 그립 트랜스폼"을 가짜 메쉬에 덮어씌웁니다!
-				CloneWeaponMesh->SetRelativeTransform(RelativeToHand);
-			}
-			else
-			{
-				// (혹시라도 플레이어를 못 찾았을 때를 대비한 안전 장치)
-				FTransform OriginalMeshTransform = EquippedWeapon->GetWeaponMesh()->GetRelativeTransform();
-				FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-				CloneWeaponMesh->AttachToComponent(CloneBodyMesh, AttachRules, FName("WeaponSocket"));
-				CloneWeaponMesh->SetRelativeTransform(OriginalMeshTransform);
+				CloneWeaponMesh_Hand->AttachToComponent(CloneBodyMesh, AttachRules, FName("WeaponSocket"));
+				CloneWeaponMesh_Hand->SetRelativeTransform(RelativeToHand);
 			}
 		}
 		else
 		{
-			CloneWeaponMesh->SetStaticMesh(nullptr);
+			CloneWeaponMesh_Hand->SetStaticMesh(nullptr);
 		}
 	}
 
 	// =========================================================================
-	// [애니메이션 재생 부분 유지]
+	// 3. [등/홀스터에 보관된 무기] 처리 (크기 버그 완벽 해결!)
+	// =========================================================================
+	UStaticMeshComponent* HolsterCloneMeshes[3] = { CloneWeaponMesh0, CloneWeaponMesh1, CloneWeaponMesh2 };
+	FName HolsterSockets[3] = { FName("PistolHolsterSocket"), FName("BackpackWeapon1Socket"), FName("BackpackWeapon2Socket") };
+
+	for (int32 i = 0; i < 3; i++)
+	{
+		UStaticMeshComponent* TargetClone = HolsterCloneMeshes[i];
+		if (!TargetClone) continue;
+
+		if (PlayerChar->WeaponSlots.IsValidIndex(i) &&
+			PlayerChar->WeaponSlots[i] &&
+			PlayerChar->ActiveWeaponSlot != i &&
+			PlayerChar->WeaponSlots[i]->GetWeaponMesh())
+		{
+			AWeaponBase* HolsteredWeapon = PlayerChar->WeaponSlots[i];
+
+			TargetClone->SetStaticMesh(HolsteredWeapon->GetWeaponMesh()->GetStaticMesh());
+
+			// [핵심 해결책] 손에 쥔 무기처럼 절대 좌표를 빼서 완벽한 트랜스폼을 계산합니다!
+			FTransform RealMeshWorld = HolsteredWeapon->GetWeaponMesh()->GetComponentTransform();
+			FTransform RealSocketWorld = PlayerChar->GetMesh()->GetSocketTransform(HolsterSockets[i]);
+			FTransform RelativeToHolster = RealMeshWorld.GetRelativeTransform(RealSocketWorld);
+
+			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+			TargetClone->AttachToComponent(CloneBodyMesh, AttachRules, HolsterSockets[i]);
+
+			// 억지로 1.0 스케일이나 회전값을 넣지 않고, 실제 무기의 크기와 각도를 그대로 덮어씌움!
+			TargetClone->SetRelativeTransform(RelativeToHolster);
+		}
+		else
+		{
+			TargetClone->SetStaticMesh(nullptr);
+		}
+	}
+
+	// =========================================================================
+	// 4. 애니메이션 및 캡처
 	// =========================================================================
 	if (CloneBodyMesh)
 	{
-		UAnimationAsset* TargetAnim = DefaultIdleAnim; // 기본은 권총/맨손 대기 모션
-
-		// 만약 소총 애니메이션 상태로 넘어왔다면 소총 모션으로 변경
-		if (AnimType == EStudioAnimType::Rifle && RifleIdleAnim)
-		{
-			TargetAnim = RifleIdleAnim;
-		}
-
-		// 해당 애니메이션을 무한 반복(true)으로 재생합니다.
-		if (TargetAnim)
-		{
-			CloneBodyMesh->PlayAnimation(TargetAnim, true);
-		}
+		UAnimationAsset* TargetAnim = DefaultIdleAnim;
+		if (AnimType == EStudioAnimType::Rifle && RifleIdleAnim) TargetAnim = RifleIdleAnim;
+		if (TargetAnim) CloneBodyMesh->PlayAnimation(TargetAnim, true);
 	}
 
-	// 옷을 갈아입었으니 사진을 한 방 찍어줍니다.
 	CaptureProfile();
 }
 
@@ -174,7 +175,10 @@ void AInventoryStudio::CaptureProfile()
 {
 	if (StudioCamera)
 	{
-		StudioCamera->CaptureScene();
+		if (!StudioCamera->bCaptureEveryFrame)
+		{
+			StudioCamera->CaptureScene();
+		}
 	}
 }
 

@@ -144,6 +144,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Attachment")
 	void AttachToHolster(int32 SlotIndex);
 
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Studio")
+	void RefreshStudioEquipment();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -173,8 +176,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> CrouchAction;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> LeanAction;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> InteractAction;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input") class UInputAction* InventoryAction;
-
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> InventoryAction;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon1Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon2Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon3Action;

@@ -133,6 +133,8 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 				Player->PlayerInventory->UseItemByID(CurrentItemID);
 			}
 
+			Player->RefreshStudioEquipment();
+
 			if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
 			{
 				MainUI->RefreshInventory();

@@ -355,6 +355,7 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 		Player->PlayerInventory->UnequipItemByID(ItemID);
 	}
 
+	Player->RefreshStudioEquipment();
 	RefreshInventory();
 	ForceNearbyRefresh();
 }

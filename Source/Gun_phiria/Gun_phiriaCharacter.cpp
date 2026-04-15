@@ -108,24 +108,7 @@ void AGun_phiriaCharacter::BeginPlay()
 	// 3. Components Init
 	InitializeWeapon();
 	InitializeInventoryUI();
-
-	EStudioAnimType AnimState = EStudioAnimType::Idle;
-
-	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
-	{
-		AnimState = EStudioAnimType::Rifle;
-	}
-
-	if (SpawnedStudio)
-	{
-		SpawnedStudio->UpdateStudioEquipment(
-			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
-			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
-			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
-			CurrentWeapon,
-			AnimState
-		);
-	}
+	RefreshStudioEquipment();
 }
 
 // Tick & Tick Helpers
@@ -466,23 +449,7 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 		}
 	}
 
-	// ====================================================================
-	// 3. 스튜디오 (프리뷰) 업데이트
-	// ====================================================================
-	EStudioAnimType AnimState = EStudioAnimType::Idle;
-	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0]) AnimState = EStudioAnimType::Rifle;
-
-	// 스튜디오가 생성되어 있다면, 현재 장착된 무기(CurrentWeapon)를 스튜디오에 전달하여 렌더링 갱신
-	if (SpawnedStudio && CurrentWeapon->GetWeaponMesh())
-	{
-		SpawnedStudio->UpdateStudioEquipment(
-			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
-			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
-			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
-			CurrentWeapon,
-			AnimState
-		);
-	}
+	RefreshStudioEquipment();
 }
 
 void AGun_phiriaCharacter::Look(const FInputActionValue& Value)
@@ -883,6 +850,8 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 			DroppedItem->Quantity = 1;
 		}
 	}
+
+	RefreshStudioEquipment();
 }
 
 // Casting & Buffs
@@ -999,23 +968,7 @@ void AGun_phiriaCharacter::UpdateEquipmentVisuals(EEquipType EquipType, UStaticM
 	default: break;
 	}
 
-	EStudioAnimType AnimState = EStudioAnimType::Idle;
-
-	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
-	{
-		AnimState = EStudioAnimType::Rifle;
-	}
-
-	if (SpawnedStudio)
-	{
-		SpawnedStudio->UpdateStudioEquipment(
-			HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
-			VestMesh ? VestMesh->GetStaticMesh() : nullptr,
-			BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
-			CurrentWeapon,
-			AnimState
-		);
-	}
+	RefreshStudioEquipment();
 }
 
 void AGun_phiriaCharacter::RestoreEquipmentVisuals()
@@ -1120,4 +1073,27 @@ void AGun_phiriaCharacter::AttachToHolster(int32 SlotIndex)
 	// [핵심] 데이터 테이블의 회전값 적용 및 스케일 1.0 강제 고정
 	WeaponToHolster->SetActorRelativeRotation(WeaponToHolster->HolsterRotationOffset);
 	WeaponToHolster->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+
+	RefreshStudioEquipment();
+}
+
+void AGun_phiriaCharacter::RefreshStudioEquipment()
+{
+	// 스튜디오가 띄워져 있지 않다면 무시
+	if (!SpawnedStudio) return;
+
+	EStudioAnimType AnimState = EStudioAnimType::Idle;
+
+	if (CurrentWeapon && WeaponSlots.IsValidIndex(0) && CurrentWeapon != WeaponSlots[0])
+	{
+		AnimState = EStudioAnimType::Rifle;
+	}
+
+	SpawnedStudio->UpdateStudioEquipment(
+		HelmetMesh ? HelmetMesh->GetStaticMesh() : nullptr,
+		VestMesh ? VestMesh->GetStaticMesh() : nullptr,
+		BackpackMesh ? BackpackMesh->GetStaticMesh() : nullptr,
+		CurrentWeapon,
+		AnimState
+	);
 }

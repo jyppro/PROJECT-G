@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "InventoryStudio.generated.h"
 
+class UStaticMeshComponent;
+
 UENUM(BlueprintType)
 enum class EStudioAnimType : uint8
 {
@@ -39,16 +41,25 @@ protected:
 	TObjectPtr<class USkeletalMeshComponent> CloneBodyMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<class UStaticMeshComponent> CloneHelmetMesh;
+	TObjectPtr<UStaticMeshComponent> CloneHelmetMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<class UStaticMeshComponent> CloneVestMesh;
+	TObjectPtr<UStaticMeshComponent> CloneVestMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<class UStaticMeshComponent> CloneBackpackMesh;
+	TObjectPtr<UStaticMeshComponent> CloneBackpackMesh;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<class UStaticMeshComponent> CloneWeaponMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Studio")
+	TObjectPtr<UStaticMeshComponent> CloneWeaponMesh_Hand; // 손에 들고 있는 무기
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Studio")
+	TObjectPtr<UStaticMeshComponent> CloneWeaponMesh0; // 권총 보관용
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Studio")
+	TObjectPtr<UStaticMeshComponent> CloneWeaponMesh1; // 주무기 1 보관용
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Studio")
+	TObjectPtr<UStaticMeshComponent> CloneWeaponMesh2; // 주무기 2 보관용
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
