@@ -22,9 +22,18 @@ void UCastBarWidget::StartCast(float Duration, UTexture2D* ItemIcon)
 	bIsCasting = true;
 
 	// 1. 아이템 아이콘 텍스처 설정
-	if (IMG_ItemIcon && ItemIcon)
+	if (IMG_ItemIcon)
 	{
-		IMG_ItemIcon->SetBrushFromTexture(ItemIcon);
+		if (ItemIcon)
+		{
+			IMG_ItemIcon->SetBrushFromTexture(ItemIcon);
+			IMG_ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible); // 아이콘 보이게
+		}
+		else
+		{
+			// [수정] ItemIcon이 nullptr(없음)이면 이미지를 완전히 숨깁니다!
+			IMG_ItemIcon->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 
 	// 2. 초기 텍스트 설정 (예: 6.0)

@@ -23,7 +23,6 @@ protected:
 	void DrawHealthBar(TObjectPtr<AGun_phiriaCharacter> PlayerChar, const FVector2D& Center);
 	void DrawMissionClear(const FVector2D& Center);
 	void DrawInteractPrompt(TObjectPtr<class AGun_phiriaCharacter> PlayerChar, const FVector2D& Center);
-	// void DrawCurrency(TObjectPtr<class AGun_phiriaCharacter> PlayerChar);
 
 private:
 	// --- Crosshair Settings ---

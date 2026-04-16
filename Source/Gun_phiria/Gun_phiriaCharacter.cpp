@@ -1012,44 +1012,70 @@ void AGun_phiriaCharacter::StartFadeIn(float FadeInDuration)
 
 void AGun_phiriaCharacter::Reload()
 {
-	// 1. 예외 처리
+	// 1. 기존 예외 처리 유지
 	if (bIsReloading || bIsCasting || bIsDead || bIsInventoryOpen) return;
 	if (!CurrentWeapon || !PlayerInventory) return;
 	if (CurrentWeapon->CurrentAmmo >= CurrentWeapon->MagazineCapacity) return;
 
 	FName NeededAmmoID = CurrentWeapon->AmmoItemID;
 	int32 TotalReserveAmmo = PlayerInventory->GetTotalItemCount(NeededAmmoID);
-	if (TotalReserveAmmo <= 0) return; // 총알 없으면 무시
+	if (TotalReserveAmmo <= 0) return;
 
-	// =================================================================
-	// [추가] 장전 시작: 조준 중이었다면 조준을 풀고, 이동 속도를 캐스팅 속도로 줄입니다.
-	// =================================================================
-	if (bIsAiming) StopAiming(); // 줌 풀기
+	if (bIsAiming) StopAiming();
 
-	OriginalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed; // 현재 속도 기억
-	GetCharacterMovement()->MaxWalkSpeed = CastingWalkSpeed;  // 느린 속도로 변경
+	OriginalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = CastingWalkSpeed;
 
-	// 장전 상태 돌입
 	bIsReloading = true;
 
 	if (CurrentWeapon->ReloadMontage)
 	{
 		if (TObjectPtr<UAnimInstance> AnimInst = GetMesh()->GetAnimInstance())
 		{
-			AnimInst->Montage_Play(CurrentWeapon->ReloadMontage);
+			// 1. 몽타주 재생을 요청하고, 그 전체 길이를 가져옵니다.
+			float ReloadDuration = AnimInst->Montage_Play(CurrentWeapon->ReloadMontage);
+
+			// 2. [추가] 장전 시간(ReloadDuration)만큼 캐스트 바를 화면에 띄웁니다!
+			if (CastBarWidgetClass)
+			{
+				if (!CastBarInstance)
+				{
+					if (APlayerController* PC = Cast<APlayerController>(GetController()))
+					{
+						CastBarInstance = CreateWidget<UCastBarWidget>(PC, CastBarWidgetClass);
+					}
+				}
+
+				if (CastBarInstance && !CastBarInstance->IsInViewport())
+				{
+					CastBarInstance->AddToViewport();
+				}
+
+				if (CastBarInstance)
+				{
+					// 아이콘 자리에 nullptr을 넘겨주어 아이콘 없이 타이머만 돌아가게 합니다.
+					CastBarInstance->StartCast(ReloadDuration, nullptr);
+				}
+			}
 		}
 	}
-	else FinishReload();
+	else
+	{
+		FinishReload();
+	}
 }
 
 void AGun_phiriaCharacter::FinishReload()
 {
-	// =================================================================
 	// [추가] 장전 완료: 이동 속도를 원래대로 복구합니다.
-	// =================================================================
 	if (bIsReloading) // 장전 중일 때만 복구 (버그 방지)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
+
+		if (CastBarInstance && CastBarInstance->IsInViewport())
+		{
+			CastBarInstance->RemoveFromParent();
+		}
 	}
 
 	if (!CurrentWeapon || !PlayerInventory)

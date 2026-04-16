@@ -11,10 +11,6 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "DragVisualWidget.h"
 
-// FItemData 구조체가 정의된 헤더를 반드시 포함해야 합니다! 
-// (본인의 프로젝트 경로에 맞게 수정해 주세요. 예: #include "Item/ItemData.h")
-// 만약 InventoryComponent.h 안에 FItemData가 있다면 이 주석은 무시하셔도 됩니다.
-
 void UItemSlotWidget::SetItemInfo(FName InItemID, int32 InQuantity)
 {
 	CurrentItemID = InItemID;
