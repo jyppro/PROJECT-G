@@ -117,6 +117,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Effects")
 	TObjectPtr<UNiagaraSystem> EnemyHitEffect;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Effects")
+	TObjectPtr<UNiagaraSystem> ShellEjectEffect;
+
+	// 탄피가 튀어나올 소켓 이름
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Effects")
+	FName EjectSocketName = TEXT("AmmoEjectSocket");
+
 	// --- Combat Settings ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon|Combat")
 	float SpreadPerShot = 1.0f;
