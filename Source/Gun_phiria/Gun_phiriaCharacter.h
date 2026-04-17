@@ -35,6 +35,10 @@ public:
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
 	FORCEINLINE TObjectPtr<AWeaponBase> GetCurrentWeapon() const { return CurrentWeapon; }
 
+	FORCEINLINE FTimerHandle GetSpeedBuffTimerHandle() const { return SpeedBuffTimerHandle; }
+	FORCEINLINE int32 GetMaxHOTTicks() const { return MaxHOTTicks; }
+	FORCEINLINE int32 GetCurrentHOTTicks() const { return CurrentHOTTicks; }
+
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool GetIsAiming() const { return bIsAiming; }
 

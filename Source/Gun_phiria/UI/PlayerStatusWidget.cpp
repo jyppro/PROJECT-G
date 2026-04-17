@@ -30,11 +30,16 @@ void UPlayerStatusWidget::UpdateVestDurability(float Percent)
 
 void UPlayerStatusWidget::UpdateAmmo(int32 CurrentAmmo, int32 ReserveAmmo)
 {
-	if (TXT_Ammo)
+	// 1. 현재 탄창에 있는 탄약 수 업데이트 (예: "34")
+	if (TXT_CurrentAmmo)
 	{
-		// 30 / 120 같은 형태로 문자열을 만듭니다.
-		FString AmmoText = FString::Printf(TEXT("%d / %d"), CurrentAmmo, ReserveAmmo);
-		TXT_Ammo->SetText(FText::FromString(AmmoText));
+		TXT_CurrentAmmo->SetText(FText::AsNumber(CurrentAmmo));
+	}
+
+	// 2. 가방에 있는 전체 탄약 수 업데이트 (예: "120")
+	if (TXT_BackpackAmmo)
+	{
+		TXT_BackpackAmmo->SetText(FText::AsNumber(ReserveAmmo));
 	}
 }
 
@@ -57,10 +62,10 @@ void UPlayerStatusWidget::UpdateHealBoost(float Percent)
 	}
 }
 
-void UPlayerStatusWidget::UpdateStamina(float Percent)
+void UPlayerStatusWidget::UpdateHealth(float Percent)
 {
-	if (PB_Stamina)
+	if (PB_Health)
 	{
-		PB_Stamina->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
+		PB_Health->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
 	}
 }

@@ -2,11 +2,28 @@
 #include "../Gun_phiriaCharacter.h"
 #include "../Weapon/WeaponBase.h"
 #include "../Interface/InteractInterface.h"
+#include "PlayerStatusWidget.h"
+#include "../Component/InventoryComponent.h"
 
 // Engine Headers
 #include "Engine/Canvas.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Actor.h"
+
+void AGun_phiriaHUD::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 게임이 시작될 때 UMG 위젯을 생성하고 화면에 추가해 줘
+	if (PlayerStatusWidgetClass)
+	{
+		PlayerStatusWidget = CreateWidget<UPlayerStatusWidget>(GetWorld(), PlayerStatusWidgetClass);
+		if (PlayerStatusWidget)
+		{
+			PlayerStatusWidget->AddToViewport();
+		}
+	}
+}
 
 void AGun_phiriaHUD::DrawHUD()
 {
@@ -19,7 +36,7 @@ void AGun_phiriaHUD::DrawHUD()
 
 	if (!PlayerChar) return;
 
-	// 1. Crosshair Logic
+	// 1. Crosshair Logic (기존 동일)
 	if (!PlayerChar->bIsCasting && !PlayerChar->bIsReloading)
 	{
 		if (TObjectPtr<AWeaponBase> CurrentWeapon = PlayerChar->GetCurrentWeapon())
@@ -28,16 +45,89 @@ void AGun_phiriaHUD::DrawHUD()
 		}
 	}
 
-	// 2. Health Bar Logic
-	DrawHealthBar(PlayerChar, Center);
+	// 2. Mission Clear Message (기존 동일)
+	if (bIsShowingClearMessage) DrawMissionClear(Center);
 
-	// 3. Mission Clear Message
-	if (bIsShowingClearMessage)
-	{
-		DrawMissionClear(Center);
-	}
-
+	// 3. Interact Prompt (기존 동일)
 	DrawInteractPrompt(PlayerChar, Center);
+
+	// 4. [신규] PlayerStatus UMG 위젯 실시간 데이터 업데이트!
+	if (PlayerStatusWidget)
+	{
+		// 1. 체력 업데이트
+		float HealthPercent = PlayerChar->MaxHealth > 0.0f ? (PlayerChar->CurrentHealth / PlayerChar->MaxHealth) : 0.0f;
+		PlayerStatusWidget->UpdateHealth(HealthPercent);
+
+		// 2. 탄약 업데이트
+		if (TObjectPtr<AWeaponBase> CurrentWeapon = PlayerChar->GetCurrentWeapon())
+		{
+			int32 ReserveAmmo = 0;
+			if (PlayerChar->PlayerInventory)
+			{
+				ReserveAmmo = PlayerChar->PlayerInventory->GetTotalItemCount(CurrentWeapon->AmmoItemID);
+			}
+			PlayerStatusWidget->UpdateAmmo(CurrentWeapon->CurrentAmmo, ReserveAmmo);
+		}
+		else
+		{
+			PlayerStatusWidget->UpdateAmmo(0, 0);
+		}
+
+		// ==========================================================
+		// [신규] 배틀그라운드 장비 및 부스트 실시간 데이터 연결 (완성본)
+		// ==========================================================
+
+		if (PlayerChar->PlayerInventory)
+		{
+			// 3. 가방 용량 (CurrentWeight / MaxWeight)
+			float BackpackPercent = PlayerChar->PlayerInventory->MaxWeight > 0.0f ?
+				(PlayerChar->PlayerInventory->CurrentWeight / PlayerChar->PlayerInventory->MaxWeight) : 0.0f;
+			PlayerStatusWidget->UpdateBackpackCapacity(BackpackPercent);
+
+			// 4. 헬멧 내구도 (장착 중이지 않으면 0%)
+			float HelmetPercent = 0.0f;
+			if (!PlayerChar->PlayerInventory->EquippedHelmetID.IsNone())
+			{
+				// *참고: 현재 헤더에 MaxDurability가 InventoryComponent에 없어서 기본값 100.0f로 계산합니다.
+				// 나중에 데이터 테이블에서 가져오게 수정하셔도 됩니다.
+				float MaxHelmetDurability = 100.0f;
+				HelmetPercent = FMath::Clamp(PlayerChar->PlayerInventory->CurrentHelmetDurability / MaxHelmetDurability, 0.0f, 1.0f);
+			}
+			PlayerStatusWidget->UpdateHelmetDurability(HelmetPercent);
+
+			// 5. 조끼 내구도 (장착 중이지 않으면 0%)
+			float VestPercent = 0.0f;
+			if (!PlayerChar->PlayerInventory->EquippedVestID.IsNone())
+			{
+				float MaxVestDurability = 100.0f;
+				VestPercent = FMath::Clamp(PlayerChar->PlayerInventory->CurrentVestDurability / MaxVestDurability, 0.0f, 1.0f);
+			}
+			PlayerStatusWidget->UpdateVestDurability(VestPercent);
+		}
+
+		// 6. 스피드 부스트 (Getter 사용)
+		float SpeedBoostPercent = 0.0f;
+		FTimerHandle SpeedTimer = PlayerChar->GetSpeedBuffTimerHandle(); // 함수로 가져옴
+
+		if (GetWorld()->GetTimerManager().IsTimerActive(SpeedTimer))
+		{
+			float Rate = GetWorld()->GetTimerManager().GetTimerRate(SpeedTimer);
+			float Remaining = GetWorld()->GetTimerManager().GetTimerRemaining(SpeedTimer);
+			SpeedBoostPercent = Rate > 0.0f ? (Remaining / Rate) : 0.0f;
+		}
+		PlayerStatusWidget->UpdateSpeedBoost(SpeedBoostPercent);
+
+		// 7. 힐 부스트 (Getter 사용)
+		float HealBoostPercent = 0.0f;
+		int32 MaxHot = PlayerChar->GetMaxHOTTicks(); // 함수로 가져옴
+		int32 CurHot = PlayerChar->GetCurrentHOTTicks(); // 함수로 가져옴
+
+		if (MaxHot > 0)
+		{
+			HealBoostPercent = FMath::Clamp((float)CurHot / (float)MaxHot, 0.0f, 1.0f);
+		}
+		PlayerStatusWidget->UpdateHealBoost(HealBoostPercent);
+	}
 }
 
 void AGun_phiriaHUD::DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, TObjectPtr<AWeaponBase> CurrentWeapon, const FVector2D& Center)
@@ -79,23 +169,6 @@ void AGun_phiriaHUD::DrawCrosshair(TObjectPtr<AGun_phiriaCharacter> PlayerChar, 
 		DrawRect(CrosshairColor, Center.X - FinalOffset - CrosshairLength, Center.Y - HalfThick, CrosshairLength, CrosshairThickness);
 		DrawRect(CrosshairColor, Center.X + FinalOffset, Center.Y - HalfThick, CrosshairLength, CrosshairThickness);
 	}
-}
-
-void AGun_phiriaHUD::DrawHealthBar(TObjectPtr<AGun_phiriaCharacter> PlayerChar, const FVector2D& Center)
-{
-	const float BarWidth = 400.0f;
-	const float BarHeight = 15.0f;
-	const float BarPosX = Center.X - (BarWidth * 0.5f);
-	const float BarPosY = Canvas->ClipY - 60.0f;
-
-	// Background
-	DrawRect(FLinearColor(0.05f, 0.05f, 0.05f, 0.7f), BarPosX, BarPosY, BarWidth, BarHeight);
-
-	// Foreground
-	const float HealthPercent = FMath::Clamp(PlayerChar->CurrentHealth / PlayerChar->MaxHealth, 0.0f, 1.0f);
-	FLinearColor HealthColor = (HealthPercent <= 0.3f) ? FLinearColor(0.8f, 0.0f, 0.0f, 1.0f) : FLinearColor::White;
-
-	DrawRect(HealthColor, BarPosX, BarPosY, BarWidth * HealthPercent, BarHeight);
 }
 
 void AGun_phiriaHUD::DrawMissionClear(const FVector2D& Center)

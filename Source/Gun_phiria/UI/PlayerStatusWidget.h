@@ -22,7 +22,7 @@ public:
 	// 부스트 효과 업데이트 (지속시간 기반)
 	void UpdateSpeedBoost(float Percent);
 	void UpdateHealBoost(float Percent);
-	void UpdateStamina(float Percent);
+	void UpdateHealth(float Percent);
 
 protected:
 	// UMG의 위젯 이름과 반드시 동일해야 합니다.
@@ -36,7 +36,10 @@ protected:
 	TObjectPtr<UProgressBar> PB_Vest;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> TXT_Ammo;
+	TObjectPtr<UTextBlock> TXT_CurrentAmmo;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> TXT_BackpackAmmo;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UProgressBar> PB_SpeedBoost;
@@ -45,5 +48,5 @@ protected:
 	TObjectPtr<UProgressBar> PB_HealBoost;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UProgressBar> PB_Stamina;
+	TObjectPtr<UProgressBar> PB_Health;
 };
