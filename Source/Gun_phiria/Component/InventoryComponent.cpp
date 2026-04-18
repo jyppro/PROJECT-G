@@ -133,9 +133,6 @@ void UInventoryComponent::UseItemAtIndex(int32 SlotIndex)
 		// [수정됨] UseItem 호출 시 ItemID를 함께 넘겨줍니다!
 		if (EffectCDO && EffectCDO->UseItem(Player, ItemID))
 		{
-			// (참고) 진통제처럼 캐스팅이 있는 아이템은 여기서 즉시 삭제되지 않도록 
-			// ItemEffect 내부에서 false를 반환하고, 캐스팅 성공 시 ItemEffect 내부에서 RemoveItem을 호출하게 됩니다.
-			// 만약 캐스팅 없이 즉시 사용되는 아이템(예: 사과)라면 Effect 안에서 true를 반환하여 여기서 삭제됩니다.
 			RemoveItem(ItemID, 1);
 		}
 	}
@@ -168,7 +165,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 	switch (ItemInfo->ItemType)
 	{
 	case EItemType::Consumable:
-	case EItemType::Throwable:
 	case EItemType::Artifact:
 	{
 		if (ItemInfo->ItemEffectClass)
@@ -179,6 +175,19 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 				bUseSuccess = true;
 			}
 		}
+		break;
+	}
+
+	case EItemType::Throwable:
+	{
+		// 투척 무기 슬롯에 ID를 등록합니다.
+		EquippedThrowableID = UseItemID;
+
+		// 무기를 새로 스폰하여 허리춤(홀스터)에 달아줍니다.
+		Player->InitializeWeapon();
+		Player->RefreshStudioEquipment();
+
+		bUseSuccess = true;
 		break;
 	}
 
@@ -359,13 +368,13 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 		break;
 	}
 
-	// ========================================================
 	// [중요 수정] 아이템 삭제 처리 방어 코드
-	// 무기(Weapon)도 내부에서 수량을 조절했기 때문에 여기서 또 삭제되면 안 됩니다.
-	// ========================================================
 	if (bUseSuccess)
 	{
-		if (ItemInfo->ItemType != EItemType::Equipment && ItemInfo->ItemType != EItemType::Weapon)
+		// [핵심] 투척물(Throwable)도 장착 시점에는 삭제하면 안 되므로 예외로 추가!
+		if (ItemInfo->ItemType != EItemType::Equipment &&
+			ItemInfo->ItemType != EItemType::Weapon &&
+			ItemInfo->ItemType != EItemType::Throwable)
 		{
 			RemoveItem(UseItemID, 1);
 		}

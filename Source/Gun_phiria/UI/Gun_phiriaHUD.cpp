@@ -122,10 +122,16 @@ void AGun_phiriaHUD::DrawHUD()
 		int32 MaxHot = PlayerChar->GetMaxHOTTicks(); // 함수로 가져옴
 		int32 CurHot = PlayerChar->GetCurrentHOTTicks(); // 함수로 가져옴
 
-		if (MaxHot > 0)
+		if (MaxHot > 0 && CurHot > 0)
 		{
 			HealBoostPercent = FMath::Clamp((float)CurHot / (float)MaxHot, 0.0f, 1.0f);
 		}
+		else
+		{
+			// 버프가 끝났거나 없으면 무조건 0.0f로 밀어서 UMG에서 Collapsed 되도록 함
+			HealBoostPercent = 0.0f;
+		}
+
 		PlayerStatusWidget->UpdateHealBoost(HealBoostPercent);
 	}
 }

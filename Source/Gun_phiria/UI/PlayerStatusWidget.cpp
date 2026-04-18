@@ -7,6 +7,10 @@ void UPlayerStatusWidget::UpdateBackpackCapacity(float Percent)
 	if (PB_Backpack)
 	{
 		PB_Backpack->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
+
+		// [추가] 용량이 100% (1.0) 이상이면 빨간색, 아니면 기본 하얀색으로 변경
+		FLinearColor FillColor = (Percent >= 1.0f) ? FLinearColor::Red : FLinearColor::White;
+		PB_Backpack->SetFillColorAndOpacity(FillColor);
 	}
 }
 
@@ -15,8 +19,11 @@ void UPlayerStatusWidget::UpdateHelmetDurability(float Percent)
 	if (PB_Helmet)
 	{
 		PB_Helmet->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
-		// 내구도가 0이면 아예 숨기고 싶을 경우 아래 주석 해제
-		// PB_Helmet->SetVisibility(Percent > 0.0f ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+
+		// [추가] 내구도가 30% (0.3) 이하로 떨어지면 빨간색, 아니면 기본 하얀색으로 변경
+		// (장착 해제 상태여서 0%일 때는 어차피 Fill 이미지가 보이지 않으므로 괜찮습니다.)
+		FLinearColor FillColor = (Percent <= 0.3f) ? FLinearColor::Red : FLinearColor::White;
+		PB_Helmet->SetFillColorAndOpacity(FillColor);
 	}
 }
 
@@ -25,6 +32,10 @@ void UPlayerStatusWidget::UpdateVestDurability(float Percent)
 	if (PB_Vest)
 	{
 		PB_Vest->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
+
+		// [추가] 조끼 내구도 30% 이하일 때 빨간색 경고
+		FLinearColor FillColor = (Percent <= 0.3f) ? FLinearColor::Red : FLinearColor::White;
+		PB_Vest->SetFillColorAndOpacity(FillColor);
 	}
 }
 
@@ -66,6 +77,34 @@ void UPlayerStatusWidget::UpdateHealth(float Percent)
 {
 	if (PB_Health)
 	{
-		PB_Health->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
+		float ClampedPercent = FMath::Clamp(Percent, 0.0f, 1.0f);
+		PB_Health->SetPercent(ClampedPercent);
+
+		// [수정 포인트 1] 색상을 미리 변수로 정의하여 50% 구간의 색상을 완벽하게 일치시킵니다.
+		FLinearColor CustomWhite = FLinearColor::White;
+		FLinearColor CustomYellow = FLinearColor(1.0f, 0.95f, 0.3f, 1.0f);
+		FLinearColor CustomRed = FLinearColor(0.55f, 0.0f, 0.0f, 1.0f);
+
+		FLinearColor FillColor;
+
+		// 1. 체력이 50% ~ 100% 사이일 때: 노란색 -> 하얀색으로 부드럽게 전환
+		if (ClampedPercent >= 0.5f)
+		{
+			float Alpha = (ClampedPercent - 0.5f) * 2.0f;
+			FillColor = FMath::Lerp(CustomYellow, CustomWhite, Alpha);
+		}
+		// 2. 체력이 20% ~ 50% 미만 사이일 때: 빨간색 -> 노란색으로 부드럽게 전환
+		else if (ClampedPercent > 0.2f)
+		{
+			float Alpha = (ClampedPercent - 0.2f) * (1.0f / 0.3f);
+			FillColor = FMath::Lerp(CustomRed, CustomYellow, Alpha);
+		}
+		// 3. [수정 포인트 2] 체력이 20% 이하일 때: 마이너스 알파값이 나오지 않게 무조건 빨간색 고정!
+		else
+		{
+			FillColor = CustomRed;
+		}
+
+		PB_Health->SetFillColorAndOpacity(FillColor);
 	}
 }

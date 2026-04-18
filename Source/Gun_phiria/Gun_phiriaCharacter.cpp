@@ -9,6 +9,7 @@
 #include "UI/CastBarWidget.h"
 #include "Gun_phiriaGameInstance.h"
 #include "UI/InventoryStudio.h"
+#include "Weapon/ThrowableWeapon.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Camera/CameraComponent.h"
@@ -78,6 +79,11 @@ AGun_phiriaCharacter::AGun_phiriaCharacter()
 	BackpackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BackpackMesh"));
 	BackpackMesh->SetupAttachment(GetMesh(), FName("BackpackSocket"));
 	BackpackMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	MaxHOTTicks = 0;
+	CurrentHOTTicks = 0;
+	CurrentSpeedBoost = 0.0f;
+	bHasSpeedBuff = false;
 }
 
 void AGun_phiriaCharacter::BeginPlay()
@@ -221,22 +227,16 @@ void AGun_phiriaCharacter::UpdateLeanAndCameraOffset(float DeltaTime)
 
 void AGun_phiriaCharacter::PreventWeaponClipping()
 {
-	// 1. 유효성 검사
 	if (!CurrentWeapon) return;
 
-	// 2. 캐릭터 상태에 따른 트레이스 시작 높이와 거리 설정
-	// bIsProne 변수를 프로젝트에 구현된 변수명으로 변경해줘!
 	const bool bIsProneStatus = bIsProne;
 	FVector Start = GetActorLocation();
 
-	// 캐릭터 가슴/명치 높이 (기울이기 기능과 함께 쓰면 좋습니다)
 	Start.Z += bIsProneStatus ? 20.0f : 60.0f;
 
 	FVector FwdDir = GetActorForwardVector();
 
-	// 3. 트레이스 거리 (긴 총의 길이에 맞춰 조절하세요)
-	// 누운 상태에서는 엎드려서 기어가기 때문에 좀 더 짧은 거리로 설정합니다.
-	float TraceDistance = bIsProneStatus ? 55.0f : 65.0f; // 막히는 범위를 더 작게 만들어 줍니다.
+	float TraceDistance = bIsProneStatus ? 55.0f : 65.0f;
 	FVector End = Start + (FwdDir * TraceDistance);
 
 	FHitResult Hit;
@@ -244,28 +244,22 @@ void AGun_phiriaCharacter::PreventWeaponClipping()
 	Params.AddIgnoredActor(this);
 	Params.AddIgnoredActor(CurrentWeapon);
 
-	// 4. 장애물 감지용 구체 (두께 10cm)
-	// 엎드린 상태에서는 좀 더 정밀하게 감지하기 위해 구체 반지름을 줄여봅니다.
 	FCollisionShape Sphere = FCollisionShape::MakeSphere(bIsProneStatus ? 7.0f : 12.0f);
 
 	float TargetAlpha = 0.0f;
 
-	// 5. 전방에 부딪히는 모든 시각적 장애물(벽, 계단 등) 감지
 	if (GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, Sphere, Params))
 	{
-		// [핵심 로직] 누운 상태일 때만 바닥을 무시하는 예외 처리
-		// 엎드려서 기어가다가 레이저가 수평 바닥에 닿았다면 무시합니다.
 		if (bIsProneStatus && FMath::Abs(Hit.ImpactNormal.Z) > 0.7f)
 		{
-			TargetAlpha = 0.0f; // 이것은 장애물이 아니라 바닥이므로 총을 들지 않습니다.
+			TargetAlpha = 0.0f;
 		}
 		else
 		{
-			TargetAlpha = 1.0f; // 벽이나 계단 앞 모서리 같은 수직 장애물이므로 총을 듭니다.
+			TargetAlpha = 1.0f;
 		}
 	}
 
-	// 6. 벽 뚫림 방지: 올릴 때는 빠르게(20.0f), 내릴 때는 자연스럽게(10.0f)
 	float InterpSpeed = (TargetAlpha > WeaponObstructionAlpha) ? 20.0f : 10.0f;
 
 	WeaponObstructionAlpha = FMath::FInterpTo(WeaponObstructionAlpha, TargetAlpha, GetWorld()->GetDeltaSeconds(), InterpSpeed);
@@ -276,19 +270,22 @@ void AGun_phiriaCharacter::InitializeWeapon()
 	WeaponSlots.Init(nullptr, 4);
 	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
 
+	// [추가] 시작할 때 미리 GameInstance를 가져와 둡니다.
+	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
+
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 
 	// 1. [0번 슬롯: 권총]
 	FName PistolID = PlayerInventory->EquippedPistolID.IsNone() ? FName("DefaultPistol") : PlayerInventory->EquippedPistolID;
+
 	if (FItemData* PistolData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PistolID, TEXT("SpawnPistol"))) {
 		if (PistolData->WeaponClass) {
 			WeaponSlots[0] = GetWorld()->SpawnActor<AWeaponBase>(PistolData->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-
-			// [버그 해결!] 데이터 테이블의 회전값을 방금 태어난 무기에게 전달!
 			if (WeaponSlots[0]) WeaponSlots[0]->HolsterRotationOffset = PistolData->HolsterRotationOffset;
 		}
 	}
+
 	if (!WeaponSlots[0] && DefaultWeaponClass) {
 		WeaponSlots[0] = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 	}
@@ -301,13 +298,17 @@ void AGun_phiriaCharacter::InitializeWeapon()
 			if (W1Data->WeaponClass) {
 				WeaponSlots[1] = GetWorld()->SpawnActor<AWeaponBase>(W1Data->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-				// [버그 해결!] 
-				if (WeaponSlots[1]) WeaponSlots[1]->HolsterRotationOffset = W1Data->HolsterRotationOffset;
+				if (WeaponSlots[1]) {
+					WeaponSlots[1]->HolsterRotationOffset = W1Data->HolsterRotationOffset;
+
+					// [추가] 주무기1 탄창 복구!
+					if (GameInst && GameInst->bHasSavedData) {
+						WeaponSlots[1]->CurrentAmmo = GameInst->SavedWeapon1Ammo;
+					}
+				}
 			}
 		}
 	}
-
-	AttachToHolster(1);
 
 	// 3. [2번 슬롯: 주무기 2]
 	if (!PlayerInventory->EquippedWeapon2ID.IsNone()) {
@@ -315,13 +316,49 @@ void AGun_phiriaCharacter::InitializeWeapon()
 			if (W2Data->WeaponClass) {
 				WeaponSlots[2] = GetWorld()->SpawnActor<AWeaponBase>(W2Data->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-				// [버그 해결!] 
-				if (WeaponSlots[2]) WeaponSlots[2]->HolsterRotationOffset = W2Data->HolsterRotationOffset;
+				if (WeaponSlots[2]) {
+					WeaponSlots[2]->HolsterRotationOffset = W2Data->HolsterRotationOffset;
+
+					// [추가] 주무기2 탄창 복구!
+					if (GameInst && GameInst->bHasSavedData) {
+						WeaponSlots[2]->CurrentAmmo = GameInst->SavedWeapon2Ammo;
+					}
+				}
 			}
 		}
 	}
 
 	AttachToHolster(2);
+
+	if (!PlayerInventory->EquippedThrowableID.IsNone())
+	{
+		if (FItemData* TData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedThrowableID, TEXT("SpawnThrowable")))
+		{
+			if (TData->WeaponClass)
+			{
+				WeaponSlots[3] = GetWorld()->SpawnActor<AWeaponBase>(TData->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+				if (WeaponSlots[3])
+				{
+					WeaponSlots[3]->HolsterRotationOffset = TData->HolsterRotationOffset;
+
+					// 수류탄은 탄약이 곧 인벤토리 개수입니다. 인벤토리를 뒤져서 총 개수를 구합니다.
+					int32 ThrowableCount = 0;
+					for (const FInventorySlot& Slot : PlayerInventory->InventorySlots)
+					{
+						if (Slot.ItemID == PlayerInventory->EquippedThrowableID)
+						{
+							ThrowableCount += Slot.Quantity;
+						}
+					}
+					WeaponSlots[3]->CurrentAmmo = ThrowableCount;
+				}
+			}
+		}
+	}
+
+	// 투척 무기도 홀스터(3번 인덱스)에 부착합니다.
+	AttachToHolster(3);
 
 	// 4. 활성 슬롯 무기 꺼내기
 	if (ActiveWeaponSlot < 0 || ActiveWeaponSlot >= 4 || WeaponSlots[ActiveWeaponSlot] == nullptr) ActiveWeaponSlot = 0;
@@ -407,47 +444,55 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 	AWeaponBase* TargetWeapon = WeaponSlots[SlotIndex];
 	if (!TargetWeapon || TargetWeapon == CurrentWeapon) return;
 
-	// ====================================================================
-	// 1. 기존 무기를 등에 있는 '보관 소켓'으로 다시 집어넣기
-	// ====================================================================
+	// 1. 기존 무기를 확실하게 등에 있는 '보관 소켓'으로 보내기
 	if (CurrentWeapon)
 	{
 		StopFiring();
 		if (bIsAiming) StopAiming();
 
-		// 기존의 길었던 부착 코드를 지우고, 함수 한 줄로 끝냅니다!
+		// [보강] 기존 무기의 충돌을 끄고 물리 영향을 받지 않게 함 (겹침 방지)
+		CurrentWeapon->SetActorEnableCollision(false);
+
+		// 기존 무기를 등에 붙입니다.
 		AttachToHolster(ActiveWeaponSlot);
 	}
 
-	// ====================================================================
-	// 2. 새 무기를 손으로 가져와서 쥐기
-	// ====================================================================
+	// 2. 새 무기(수류탄 포함) 정보 갱신
 	ActiveWeaponSlot = SlotIndex;
 	CurrentWeapon = TargetWeapon;
 
+	// 새 무기가 나타나도록 설정
 	CurrentWeapon->SetActorHiddenInGame(false);
-	CurrentWeapon->SetActorEnableCollision(true);
 
-	// 손에 쥘 때도 스케일 유지 규칙 적용
-	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
+	// [중요] 손에 쥐고 있을 때는 충돌을 꺼야 캐릭터 이동이나 다른 무기와 겹쳐서 튕기는 걸 막습니다.
+	CurrentWeapon->SetActorEnableCollision(false);
+
+	// 손으로 가져와서 부착 (SnapToTarget으로 확실하게 위치 고정)
+	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
 	CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
 
-	// [크기 버그 해결 핵심] 손에 쥘 때도 스케일을 무조건 1.0으로 고정!
+	// [크기 버그 해결]
 	CurrentWeapon->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
 
 	if (CurrentWeapon->GetWeaponMesh())
 	{
-		// 역행렬 그립 보정 로직 (유저님이 설정한 크기와 회전을 완벽히 유지해 줌)
+		// 역행렬 그립 보정 로직
 		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
-		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f)); // 여기서도 내부 스케일 보호
+		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
 		FTransform InverseGrip = GripSocketRelative.Inverse();
 
 		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
 		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
 
-		if (ADSCamera)
+		// 투척 무기는 조준경(SightSocket)이 없을 수 있으므로 체크 후 부착
+		if (ADSCamera && CurrentWeapon->GetWeaponMesh()->DoesSocketExist(FName("SightSocket")))
 		{
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
+		}
+		else if (ADSCamera)
+		{
+			// 투척 무기일 때는 카메라를 다시 원래 위치(메쉬)로 복구하거나 그대로 둡니다.
+			ADSCamera->AttachToComponent(GetMesh(), AttachRules);
 		}
 	}
 
@@ -531,6 +576,16 @@ void AGun_phiriaCharacter::Fire()
 	if (bIsInventoryOpen || bIsCasting) { CancelCasting(); return; }
 	if (!CurrentWeapon || !FollowCamera || !ADSCamera) return;
 
+	if (AThrowableWeapon* ThrowableWep = Cast<AThrowableWeapon>(CurrentWeapon))
+	{
+		// StartCooking() 대신 부모를 오버라이드한 Fire()를 호출합니다.
+		// (투척 무기 쿠킹에는 타겟 위치가 필요 없으므로 ZeroVector를 넘겨줍니다)
+		ThrowableWep->Fire(FVector::ZeroVector);
+
+		bIsAimingThrowable = true;
+		return;
+	}
+
 	if (CurrentWeapon->FireMode == EFireMode::Auto)
 	{
 		float TimeBetweenShots = 60.0f / CurrentWeapon->FireRate;
@@ -544,6 +599,19 @@ void AGun_phiriaCharacter::Fire()
 
 void AGun_phiriaCharacter::StopFiring()
 {
+	if (AThrowableWeapon* ThrowableWep = Cast<AThrowableWeapon>(CurrentWeapon))
+	{
+		bIsAimingThrowable = false; // 궤적 그리기 끄기
+
+		// 던질 방향을 카메라가 바라보는 방향으로 설정 (배그와 동일)
+		FVector CameraLocation = FollowCamera->GetComponentLocation();
+		FVector ThrowDirection = FollowCamera->GetForwardVector();
+
+		// 실제 투척 실행!
+		ThrowableWep->ReleaseThrow(CameraLocation, ThrowDirection);
+		return;
+	}
+
 	GetWorldTimerManager().ClearTimer(AutoFireTimerHandle);
 }
 
@@ -935,6 +1003,8 @@ void AGun_phiriaCharacter::ApplySpeedBuff(float BoostAmount, float Duration)
 				if (WeakThis->bIsCasting) WeakThis->OriginalWalkSpeed -= WeakThis->CurrentSpeedBoost;
 				else WeakThis->GetCharacterMovement()->MaxWalkSpeed -= WeakThis->CurrentSpeedBoost;
 				WeakThis->CurrentSpeedBoost = 0.0f;
+
+				WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->SpeedBuffTimerHandle);
 			}
 		}, Duration, false);
 }
@@ -944,7 +1014,7 @@ void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
 	GetWorldTimerManager().ClearTimer(HOTTimerHandle);
 
 	MaxHOTTicks = FMath::FloorToInt(Duration);
-	CurrentHOTTicks = 0;
+	CurrentHOTTicks = MaxHOTTicks; // [수정] 0이 아니라 Max에서 시작! (100% 상태)
 	HOTAmountPerTick = TotalHeal / Duration;
 
 	TWeakObjectPtr<AGun_phiriaCharacter> WeakThis(this);
@@ -953,8 +1023,16 @@ void AGun_phiriaCharacter::ApplyHealOverTime(float TotalHeal, float Duration)
 			if (WeakThis.IsValid())
 			{
 				WeakThis->CurrentHealth = FMath::Clamp(WeakThis->CurrentHealth + WeakThis->HOTAmountPerTick, 0.0f, WeakThis->MaxHealth);
-				WeakThis->CurrentHOTTicks++;
-				if (WeakThis->CurrentHOTTicks >= WeakThis->MaxHOTTicks) WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->HOTTimerHandle);
+
+				// [수정] 틱을 감소시킵니다.
+				WeakThis->CurrentHOTTicks--;
+
+				// [수정] 틱이 0 이하가 되면(버프 종료)
+				if (WeakThis->CurrentHOTTicks <= 0)
+				{
+					WeakThis->GetWorldTimerManager().ClearTimer(WeakThis->HOTTimerHandle);
+					// CurrentHOTTicks가 0이 되었으므로 HUD에서 즉시 UI를 숨김!
+				}
 			}
 		}, 1.0f, true);
 }

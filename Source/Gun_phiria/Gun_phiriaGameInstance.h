@@ -22,7 +22,11 @@ public:
 
 	// --- 장비 정보 ---
 	FName SavedHelmetID;
+	float SavedHelmetDurability; // [추가] 헬멧 내구도 보존용
+
 	FName SavedVestID;
+	float SavedVestDurability;   // [추가] 조끼 내구도 보존용
+
 	FName SavedBackpackID;
 
 	// [추가] 전투 슬롯(무기) 정보 백업
@@ -30,6 +34,10 @@ public:
 	FName SavedWeapon2ID;
 	FName SavedPistolID;
 	FName SavedThrowableID;
+
+	int32 SavedWeapon1Ammo = 0;
+	int32 SavedWeapon2Ammo = 0;
+	int32 SavedThrowableAmmo = 0;
 
 	UPROPERTY(BlueprintReadWrite, Category = "SaveData")
 	int32 SavedActiveSlotIndex = 0;

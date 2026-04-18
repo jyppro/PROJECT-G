@@ -10,6 +10,7 @@
 #include "../Item/PickupItemBase.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "DragVisualWidget.h"
+#include "../NPC/ShopNPC.h"
 
 void UItemSlotWidget::SetItemInfo(FName InItemID, int32 InQuantity)
 {
@@ -106,11 +107,51 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 	}
 
 	// [1] 우클릭 (빠른 이동 및 장착/사용 로직)
+	// [1] 우클릭 (빠른 이동, 장착/사용, 그리고 상점 거래 로직)
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
 		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
-		if (Player && Player->PlayerInventory)
+		UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>();
+
+		if (Player && Player->PlayerInventory && MainUI)
 		{
+			// ==========================================================
+			// [핵심 추가] 상점 모드가 켜져 있을 때의 우클릭 처리
+			// ==========================================================
+			if (MainUI->CurrentMode == EInventoryMode::IM_Shop)
+			{
+				// NPC 상점의 아이템(Vicinity 슬롯을 공유함)을 우클릭했을 때 -> 구매
+				if (bIsVicinitySlot)
+				{
+					if (MainUI->CurrentShopNPC && MainUI->CurrentShopNPC->ShopInventory.Contains(CurrentItemID))
+					{
+						int32 MaxNPCStock = MainUI->CurrentShopNPC->ShopInventory[CurrentItemID];
+						MainUI->PromptQuantitySelection(CurrentItemID, MaxNPCStock, true); // true = 구매 팝업
+					}
+				}
+				// 내 가방의 아이템을 우클릭했을 때 -> 판매
+				else if (!bIsEquipSlot && !bIsWeaponSlot && !bIsAttachmentSlot)
+				{
+					// 플레이어 인벤토리를 뒤져서 이 아이템을 총 몇 개 가졌는지 확인
+					int32 TotalPlayerStock = 0;
+					for (const FInventorySlot& InvSlot : Player->PlayerInventory->InventorySlots)
+					{
+						if (InvSlot.ItemID == CurrentItemID) TotalPlayerStock += InvSlot.Quantity;
+					}
+
+					if (TotalPlayerStock > 0)
+					{
+						MainUI->PromptQuantitySelection(CurrentItemID, TotalPlayerStock, false); // false = 판매 팝업
+					}
+				}
+
+				// 상점 모드일 때는 일반 줍기/사용 로직이 실행되지 않도록 여기서 종료합니다.
+				return FReply::Handled();
+			}
+
+			// ==========================================================
+			// [기존 로직] 일반 인벤토리 모드일 때의 우클릭 처리
+			// ==========================================================
 			if (bIsVicinitySlot)
 			{
 				// 바닥 -> 가방 (줍기)
@@ -119,9 +160,6 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 			}
 			else if (bIsEquipSlot || bIsWeaponSlot || bIsAttachmentSlot)
 			{
-				// (팁: 나중에 인벤토리 컴포넌트 쪽에 UnequipWeapon 같은 전용 함수를 만들어서
-				// if(bIsWeaponSlot) { Player->PlayerInventory->UnequipWeapon(...) } 
-				// 이렇게 세분화해주면 훨씬 깔끔합니다. 우선은 기존 함수로 연결!)
 				Player->PlayerInventory->UnequipItemByID(CurrentItemID);
 			}
 			else
@@ -130,13 +168,10 @@ FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, con
 			}
 
 			Player->RefreshStudioEquipment();
-
-			if (UInventoryMainWidget* MainUI = GetTypedOuter<UInventoryMainWidget>())
-			{
-				MainUI->RefreshInventory();
-				MainUI->ForceNearbyRefresh();
-			}
+			MainUI->RefreshInventory();
+			MainUI->ForceNearbyRefresh();
 		}
+
 		return FReply::Handled();
 	}
 

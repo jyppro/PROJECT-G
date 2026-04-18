@@ -160,6 +160,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Studio")
 	void RefreshStudioEquipment();
 
+	void InitializeWeapon();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -203,6 +205,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon") TObjectPtr<AWeaponBase> CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|State") bool bIsAiming = false;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|State") bool bIsFiring = false;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Combat|State") bool bIsAimingThrowable = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Spread") float CurrentSpread = 0.0f;
 	UPROPERTY(EditAnywhere, Category = "Combat|Spread") float SpreadPerShot = 1.0f;
@@ -248,7 +251,6 @@ private:
 	void EquipWeapon4();
 
 	// --- Core Logic Refactored Helpers ---
-	void InitializeWeapon();
 	void InitializeInventoryUI();
 	void CheckForInteractables();
 	void Die();
