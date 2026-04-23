@@ -122,6 +122,11 @@ void AGun_phiriaCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (CurrentWeapon != nullptr && CurrentWeapon->WeaponType == EWeaponType::Throwable)
+	{
+		DrawThrowableTrajectory();
+	}
+
 	UpdateCameraFOV(DeltaTime);
 	UpdateWeaponSpread(DeltaTime);
 	UpdateADSOffset(DeltaTime);
@@ -267,7 +272,16 @@ void AGun_phiriaCharacter::PreventWeaponClipping()
 
 void AGun_phiriaCharacter::InitializeWeapon()
 {
-	WeaponSlots.Init(nullptr, 4);
+	for (AWeaponBase* ExistingWeapon : WeaponSlots)
+	{
+		if (ExistingWeapon)
+		{
+			ExistingWeapon->Destroy(); // 손에 굳어있던 껍데기 권총을 삭제!
+		}
+	}
+
+	WeaponSlots.Init(nullptr, 4); // 슬롯 초기화
+
 	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
 
 	// [추가] 시작할 때 미리 GameInstance를 가져와 둡니다.
@@ -340,25 +354,16 @@ void AGun_phiriaCharacter::InitializeWeapon()
 
 				if (WeaponSlots[3])
 				{
-					WeaponSlots[3]->HolsterRotationOffset = TData->HolsterRotationOffset;
+					// [핵심 수정] 인벤토리를 뒤져서 합산하던 로직을 지우고 무조건 1로 세팅
+					WeaponSlots[3]->CurrentAmmo = 1;
 
-					// 수류탄은 탄약이 곧 인벤토리 개수입니다. 인벤토리를 뒤져서 총 개수를 구합니다.
-					int32 ThrowableCount = 0;
-					for (const FInventorySlot& Slot : PlayerInventory->InventorySlots)
-					{
-						if (Slot.ItemID == PlayerInventory->EquippedThrowableID)
-						{
-							ThrowableCount += Slot.Quantity;
-						}
-					}
-					WeaponSlots[3]->CurrentAmmo = ThrowableCount;
+					WeaponSlots[3]->SetActorHiddenInGame(true);
+					WeaponSlots[3]->SetActorEnableCollision(false);
+					WeaponSlots[3]->HolsterRotationOffset = TData->HolsterRotationOffset;
 				}
 			}
 		}
 	}
-
-	// 투척 무기도 홀스터(3번 인덱스)에 부착합니다.
-	AttachToHolster(3);
 
 	// 4. 활성 슬롯 무기 꺼내기
 	if (ActiveWeaponSlot < 0 || ActiveWeaponSlot >= 4 || WeaponSlots[ActiveWeaponSlot] == nullptr) ActiveWeaponSlot = 0;
@@ -444,54 +449,76 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 	AWeaponBase* TargetWeapon = WeaponSlots[SlotIndex];
 	if (!TargetWeapon || TargetWeapon == CurrentWeapon) return;
 
-	// 1. 기존 무기를 확실하게 등에 있는 '보관 소켓'으로 보내기
+	if (SlotIndex == 3 && PlayerInventory && PlayerInventory->EquippedThrowableID.IsNone())
+	{
+		return;
+	}
+
+	// =================================================================
+	// 1. 기존 무기 보관 (수류탄 숨기기 로직 추가)
+	// =================================================================
+	for (int32 i = 0; i < WeaponSlots.Num(); i++)
+	{
+		if (WeaponSlots[i] && i != SlotIndex)
+		{
+			// [핵심 수정] 무기가 '투척 무기(Throwable)'라면 등에 붙이지 말고 투명하게 숨겨버립니다!
+			if (WeaponSlots[i]->WeaponType == EWeaponType::Throwable)
+			{
+				WeaponSlots[i]->SetActorHiddenInGame(true);
+			}
+			else
+			{
+				// 권총, 소총 등은 기존처럼 등에 시각적으로 부착
+				AttachToHolster(i);
+			}
+		}
+	}
+
 	if (CurrentWeapon)
 	{
 		StopFiring();
 		if (bIsAiming) StopAiming();
-
-		// [보강] 기존 무기의 충돌을 끄고 물리 영향을 받지 않게 함 (겹침 방지)
 		CurrentWeapon->SetActorEnableCollision(false);
-
-		// 기존 무기를 등에 붙입니다.
-		AttachToHolster(ActiveWeaponSlot);
 	}
 
-	// 2. 새 무기(수류탄 포함) 정보 갱신
+	// =================================================================
+	// 2. 새 무기 장착
+	// =================================================================
 	ActiveWeaponSlot = SlotIndex;
 	CurrentWeapon = TargetWeapon;
 
-	// 새 무기가 나타나도록 설정
+	// [중요] 아까 숨겨뒀던 수류탄을 다시 꺼낼 때는 보이게 만들어줍니다!
 	CurrentWeapon->SetActorHiddenInGame(false);
-
-	// [중요] 손에 쥐고 있을 때는 충돌을 꺼야 캐릭터 이동이나 다른 무기와 겹쳐서 튕기는 걸 막습니다.
 	CurrentWeapon->SetActorEnableCollision(false);
 
-	// 손으로 가져와서 부착 (SnapToTarget으로 확실하게 위치 고정)
 	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-	CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket"));
-
-	// [크기 버그 해결]
+	CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("WeaponSocket")); // 실제 손 소켓 이름
 	CurrentWeapon->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
 
 	if (CurrentWeapon->GetWeaponMesh())
 	{
-		// 역행렬 그립 보정 로직
-		FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
-		GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
-		FTransform InverseGrip = GripSocketRelative.Inverse();
+		// [유지] 수류탄에 소켓을 만드셨기 때문에 자동으로 이 if문을 타게 됩니다. 완벽합니다!
+		if (CurrentWeapon->GetWeaponMesh()->DoesSocketExist(FName("RightHandGripSocket")))
+		{
+			FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
+			GripSocketRelative.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
+			FTransform InverseGrip = GripSocketRelative.Inverse();
 
-		CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
-		CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
+			CurrentWeapon->SetActorRelativeLocation(InverseGrip.GetLocation());
+			CurrentWeapon->SetActorRelativeRotation(InverseGrip.GetRotation());
+		}
+		else
+		{
+			CurrentWeapon->SetActorRelativeLocation(FVector::ZeroVector);
+			CurrentWeapon->SetActorRelativeRotation(FRotator::ZeroRotator);
+		}
 
-		// 투척 무기는 조준경(SightSocket)이 없을 수 있으므로 체크 후 부착
 		if (ADSCamera && CurrentWeapon->GetWeaponMesh()->DoesSocketExist(FName("SightSocket")))
 		{
 			ADSCamera->AttachToComponent(CurrentWeapon->GetWeaponMesh(), AttachRules, FName("SightSocket"));
 		}
 		else if (ADSCamera)
 		{
-			// 투척 무기일 때는 카메라를 다시 원래 위치(메쉬)로 복구하거나 그대로 둡니다.
 			ADSCamera->AttachToComponent(GetMesh(), AttachRules);
 		}
 	}
@@ -554,9 +581,14 @@ void AGun_phiriaCharacter::InputLeanEnd(const FInputActionValue& Value) { Target
 // Combat
 void AGun_phiriaCharacter::StartAiming()
 {
-	if (bIsInventoryOpen || bIsCasting || bIsReloading) return;
-	if (bIsInventoryOpen) return;
+	if (bIsInventoryOpen || bIsReloading) return;
 	if (bIsCasting) { CancelCasting(); return; }
+	if (CurrentWeapon == nullptr) return;
+
+	if (CurrentWeapon->WeaponType == EWeaponType::Throwable)
+	{
+		return;
+	}
 
 	bIsAiming = true;
 	if (FollowCamera) FollowCamera->SetActive(false);
@@ -566,6 +598,7 @@ void AGun_phiriaCharacter::StartAiming()
 void AGun_phiriaCharacter::StopAiming()
 {
 	bIsAiming = false;
+	bIsAimingThrowable = false;
 	if (ADSCamera) ADSCamera->SetActive(false);
 	if (FollowCamera) FollowCamera->SetActive(true);
 }
@@ -578,12 +611,8 @@ void AGun_phiriaCharacter::Fire()
 
 	if (AThrowableWeapon* ThrowableWep = Cast<AThrowableWeapon>(CurrentWeapon))
 	{
-		// StartCooking() 대신 부모를 오버라이드한 Fire()를 호출합니다.
-		// (투척 무기 쿠킹에는 타겟 위치가 필요 없으므로 ZeroVector를 넘겨줍니다)
 		ThrowableWep->Fire(FVector::ZeroVector);
-
-		bIsAimingThrowable = true;
-		return;
+		return; // 총기 사격 로직 무시
 	}
 
 	if (CurrentWeapon->FireMode == EFireMode::Auto)
@@ -601,14 +630,11 @@ void AGun_phiriaCharacter::StopFiring()
 {
 	if (AThrowableWeapon* ThrowableWep = Cast<AThrowableWeapon>(CurrentWeapon))
 	{
-		bIsAimingThrowable = false; // 궤적 그리기 끄기
-
-		// 던질 방향을 카메라가 바라보는 방향으로 설정 (배그와 동일)
-		FVector CameraLocation = FollowCamera->GetComponentLocation();
+		// 카메라 앞 150 위치에서 던지기 (몸통 충돌 방지)
+		FVector StartLocation = FollowCamera->GetComponentLocation() + (FollowCamera->GetForwardVector() * 150.0f);
 		FVector ThrowDirection = FollowCamera->GetForwardVector();
 
-		// 실제 투척 실행!
-		ThrowableWep->ReleaseThrow(CameraLocation, ThrowDirection);
+		ThrowableWep->ReleaseThrow(StartLocation, ThrowDirection);
 		return;
 	}
 
@@ -1223,4 +1249,68 @@ void AGun_phiriaCharacter::RefreshStudioEquipment()
 		CurrentWeapon,
 		AnimState
 	);
+}
+
+void AGun_phiriaCharacter::DrawThrowableTrajectory()
+{
+	AThrowableWeapon* ThrowableWep = Cast<AThrowableWeapon>(CurrentWeapon);
+	if (!ThrowableWep || !FollowCamera) return;
+
+	// 던질 시작 위치와 속도 계산 (카메라 앞 100 기준)
+	FVector StartLocation = FollowCamera->GetComponentLocation() + (FollowCamera->GetForwardVector() * 100.0f);
+	FVector LaunchVelocity = FollowCamera->GetForwardVector() * ThrowableWep->ThrowSpeed;
+
+	FPredictProjectilePathParams PredictParams;
+	PredictParams.StartLocation = StartLocation;
+	PredictParams.LaunchVelocity = LaunchVelocity;
+	PredictParams.ProjectileRadius = 5.0f; // 수류탄 크기
+	PredictParams.bTraceWithCollision = true; // 벽에 부딪히는지 검사
+	PredictParams.TraceChannel = ECC_Visibility;
+
+	// 빨간색 디버그 선으로 궤적을 그립니다 (ForOneFrame = 매 프레임 그렸다가 지움)
+	PredictParams.DrawDebugType = EDrawDebugTrace::ForOneFrame;
+	PredictParams.DrawDebugTime = 0.0f;
+	PredictParams.MaxSimTime = 2.0f; // 2초 뒤까지의 궤적을 보여줌
+	PredictParams.OverrideGravityZ = GetWorld()->GetGravityZ();
+
+	FPredictProjectilePathResult PredictResult;
+
+	// 엔진이 물리 예측을 실행합니다.
+	UGameplayStatics::PredictProjectilePath(this, PredictParams, PredictResult);
+
+	// PredictResult.HitResult 를 사용하면 수류탄이 떨어질 바닥 위치에 데칼(원형 마커)을 그릴 수도 있습니다!
+}
+
+void AGun_phiriaCharacter::UpdateThrowableSlot()
+{
+	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
+
+	// 1. 만약 이미 손이나 3번 슬롯에 수류탄 껍데기가 남아있다면 파괴해서 비워줍니다.
+	if (WeaponSlots.IsValidIndex(3) && WeaponSlots[3])
+	{
+		WeaponSlots[3]->Destroy();
+		WeaponSlots[3] = nullptr;
+	}
+
+	// 2. 인벤토리에 장착된 수류탄 ID가 있다면 새로 스폰합니다.
+	if (!PlayerInventory->EquippedThrowableID.IsNone())
+	{
+		if (FItemData* TData = PlayerInventory->ItemDataTable->FindRow<FItemData>(PlayerInventory->EquippedThrowableID, TEXT("SpawnThrowable")))
+		{
+			if (TData->WeaponClass)
+			{
+				FActorSpawnParameters SpawnParams;
+				SpawnParams.Owner = this;
+				WeaponSlots[3] = GetWorld()->SpawnActor<AWeaponBase>(TData->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+
+				if (WeaponSlots[3])
+				{
+					// 스폰 직후에는 무조건 안 보이게 숨김 (4번 누를 때까지 대기)
+					WeaponSlots[3]->SetActorHiddenInGame(true);
+					WeaponSlots[3]->SetActorEnableCollision(false);
+					WeaponSlots[3]->CurrentAmmo = 1;
+				}
+			}
+		}
+	}
 }

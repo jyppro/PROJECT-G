@@ -180,11 +180,21 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 
 	case EItemType::Throwable:
 	{
-		// 투척 무기 슬롯에 ID를 등록합니다.
+		// 이미 장착된 수류탄이 있으면 장착 거부
+		if (!EquippedThrowableID.IsNone())
+		{
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, TEXT("Already Equip Grenade"));
+			return;
+		}
+
+		// [핵심 수정] 가방에서 수류탄 1개를 즉시 제거합니다.
+		RemoveItem(UseItemID, 1);
+
+		// 장착 슬롯에 ID 등록
 		EquippedThrowableID = UseItemID;
 
-		// 무기를 새로 스폰하여 허리춤(홀스터)에 달아줍니다.
-		Player->InitializeWeapon();
+		// 무기 스폰 및 초기화
+		Player->UpdateThrowableSlot();
 		Player->RefreshStudioEquipment();
 
 		bUseSuccess = true;

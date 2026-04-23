@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "../Gun_phiriaCharacter.h"
+#include "../Component/InventoryComponent.h"
 
 AThrowableWeapon::AThrowableWeapon()
 {
@@ -20,37 +21,27 @@ void AThrowableWeapon::BeginPlay()
 	Super::BeginPlay();
 }
 
-// ==============================================================
 // 1. 좌클릭 누를 때 (핀 뽑기 & 쿠킹 시작)
-// ==============================================================
 void AThrowableWeapon::Fire(FVector TargetLocation)
 {
-	// 이미 핀을 뽑았거나 수류탄이 없으면 무시
 	if (bIsCooking || CurrentAmmo <= 0) return;
 
 	bIsCooking = true;
-
-	// 핀을 뽑은 '현재 시간'을 기록합니다.
 	CookStartTime = GetWorld()->GetTimeSeconds();
 
-	// 핀 뽑는 소리 재생 (찰칵!)
-	if (FireSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
-	}
+	if (FireSound) UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
 
-	// 5초(MaxCookTime) 뒤에 손에서 터지도록 자폭 타이머 가동!
 	GetWorldTimerManager().SetTimer(CookTimerHandle, this, &AThrowableWeapon::ExplodeInHand, MaxCookTime, false);
 
-	// 쿠킹 애니메이션 재생 (선택)
+	// [애니메이션 1] 핀을 뽑거나 팔을 뒤로 젖히는 쿠킹 몽타주 재생
+	// (헤더에 UAnimMontage* CookMontage; 를 추가해 주시면 더 완벽합니다)
 	if (ThrowMontage)
 	{
-		ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
-		if (OwnerCharacter) OwnerCharacter->PlayAnimMontage(ThrowMontage);
+		if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+			OwnerCharacter->PlayAnimMontage(ThrowMontage);
 	}
 }
 
-// 2. 좌클릭 뗄 때 (투척 실행)
 void AThrowableWeapon::ReleaseThrow(FVector StartLocation, FVector ThrowDirection)
 {
 	if (!bIsCooking || CurrentAmmo <= 0) return;
@@ -61,19 +52,17 @@ void AThrowableWeapon::ReleaseThrow(FVector StartLocation, FVector ThrowDirectio
 	float ElapsedTime = GetWorld()->GetTimeSeconds() - CookStartTime;
 	float RemainingTime = FMath::Max(0.1f, MaxCookTime - ElapsedTime);
 
+	// 발사체 스폰
 	if (ProjectileClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = GetOwner();
 		SpawnParams.Instigator = Cast<APawn>(GetOwner());
 
-		// [해결책] 무조건 스폰시키고, 위치를 손에 든 무기 메시 위치에서 시작하게 함
+		// [겹침 버그 해결 핵심] 몸통에 겹쳐도 무조건 스폰해라! ( AlwaysSpawn )
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-		// 카메라 위치가 아닌, 현재 손에 들고 있는 수류탄의 위치를 사용합니다.
-		FVector SpawnLocation = WeaponMesh ? WeaponMesh->GetComponentLocation() : StartLocation;
-
-		AGrenadeProjectile* Projectile = GetWorld()->SpawnActor<AGrenadeProjectile>(ProjectileClass, SpawnLocation, ThrowDirection.Rotation(), SpawnParams);
+		AGrenadeProjectile* Projectile = GetWorld()->SpawnActor<AGrenadeProjectile>(ProjectileClass, StartLocation, ThrowDirection.Rotation(), SpawnParams);
 
 		if (Projectile)
 		{
@@ -81,24 +70,38 @@ void AThrowableWeapon::ReleaseThrow(FVector StartLocation, FVector ThrowDirectio
 		}
 	}
 
-	CurrentAmmo--;
-
-	// 수류탄을 다 던지면 손에서 안 보이게 처리
-	if (CurrentAmmo <= 0 && WeaponMesh)
+	// [수량 미감소 해결 핵심] 플레이어 인벤토리에서 실제 아이템 1개를 삭제합니다.
+	if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner()))
 	{
-		WeaponMesh->SetVisibility(false);
+		if (UInventoryComponent* PlayerInv = Player->PlayerInventory)
+		{
+			// [핵심] 던졌으므로 장착 슬롯을 비워줍니다.
+			// 그래야 다시 가방에서 다음 수류탄을 장착할 수 있습니다.
+			PlayerInv->EquippedThrowableID = NAME_None;
+		}
+	}
 
-		// [추가] 다 던졌으면 다시 주무기(1번)로 자동으로 바꾸게 하면 편리합니다.
+	CurrentAmmo--; // 손에 든 수량 1 -> 0
+
+	if (CurrentAmmo <= 0)
+	{
+		if (WeaponMesh) WeaponMesh->SetVisibility(false);
+
 		if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner()))
 		{
+			// 1. 주무기1로 먼저 자동 스왑
 			Player->EquipWeaponSlot(1);
+
+			if (Player->WeaponSlots.IsValidIndex(3))
+			{
+				Player->WeaponSlots[3] = nullptr;
+			}
+			this->Destroy(); // 나 자신(빈 수류탄)을 월드에서 삭제
 		}
 	}
 }
 
-// ==============================================================
 // 3. 수류탄 핀을 뽑은 채로 다른 무기로 스왑할 때 (취소)
-// ==============================================================
 void AThrowableWeapon::CancelThrow()
 {
 	if (!bIsCooking) return;
@@ -109,34 +112,55 @@ void AThrowableWeapon::CancelThrow()
 	GetWorldTimerManager().ClearTimer(CookTimerHandle);
 }
 
-// ==============================================================
 // 4. 타이머 오버 (손에서 쾅!)
-// ==============================================================
 void AThrowableWeapon::ExplodeInHand()
 {
 	bIsCooking = false;
 
-	// 플레이어 위치에 발사체를 생성하고 남은 시간을 0으로 줘서 즉시 폭발시킵니다!
 	if (ProjectileClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = GetOwner();
 		SpawnParams.Instigator = Cast<APawn>(GetOwner());
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	FVector HandLocation = WeaponMesh->GetComponentLocation();
+		// 손 위치에서 스폰
+		FVector HandLocation = WeaponMesh ? WeaponMesh->GetComponentLocation() : GetActorLocation();
 
-	AGrenadeProjectile* Projectile = GetWorld()->SpawnActor<AGrenadeProjectile>(ProjectileClass, HandLocation, FRotator::ZeroRotator, SpawnParams);
+		AGrenadeProjectile* Projectile = GetWorld()->SpawnActor<AGrenadeProjectile>(ProjectileClass, HandLocation, FRotator::ZeroRotator, SpawnParams);
 
 		if (Projectile)
 		{
-			// 속도 0, 남은 시간 0 = 손에서 즉사
-			Projectile->InitializeThrow(FVector::ZeroVector, 0.0f);
+			// =======================================================
+			// [핵심] 속도는 0으로 주고, 타이머는 0이 아닌 아주 짧은 시간(0.01초)을 주어 즉시 폭발하게 만듭니다!
+			// =======================================================
+			Projectile->InitializeThrow(FVector::ZeroVector, 0.01f);
 		}
 	}
 
 	CurrentAmmo--;
-	if (CurrentAmmo <= 0 && WeaponMesh)
+
+	// =======================================================
+	// [후처리] 손에서 터졌을 때도 '던졌을 때'와 똑같이 슬롯을 비우고 스왑해야 합니다.
+	// =======================================================
+	if (WeaponMesh) WeaponMesh->SetVisibility(false);
+
+	if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner()))
 	{
-		WeaponMesh->SetVisibility(false);
+		// 1. 장착 슬롯 비우기 (다시 장착할 수 있도록)
+		if (UInventoryComponent* PlayerInv = Player->PlayerInventory)
+		{
+			PlayerInv->EquippedThrowableID = NAME_None;
+		}
+
+		// 2. 주무기(1번)로 강제 스왑
+		Player->EquipWeaponSlot(1);
+
+		// 3. 껍데기 파괴
+		if (Player->WeaponSlots.IsValidIndex(3))
+		{
+			Player->WeaponSlots[3] = nullptr;
+		}
+		this->Destroy();
 	}
 }

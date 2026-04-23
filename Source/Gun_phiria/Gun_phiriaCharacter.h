@@ -162,6 +162,8 @@ public:
 
 	void InitializeWeapon();
 
+	void UpdateThrowableSlot();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -227,6 +229,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI") TSubclassOf<class UUserWidget> InventoryWidgetClass;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Obstruction") float WeaponObstructionAlpha = 0.0f;
+
+	void DrawThrowableTrajectory();
 
 private:
 	// --- Input Handlers ---

@@ -17,7 +17,7 @@ AThrowableProjectileBase::AThrowableProjectileBase()
 	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // 던진 본인은 통과
 	CollisionComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
-	CollisionComp->SetSimulatePhysics(true);
+	CollisionComp->SetSimulatePhysics(false);
 	RootComponent = CollisionComp;
 
 	// 2. 외형 메쉬 설정 (수류탄 모델링)

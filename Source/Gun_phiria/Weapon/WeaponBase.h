@@ -17,7 +17,8 @@ enum class EWeaponType : uint8
 	AR      UMETA(DisplayName = "AR"),
 	SR	    UMETA(DisplayName = "SR"),
 	DMR	    UMETA(DisplayName = "DMR"),
-	Shotgun UMETA(DisplayName = "Shotgun")
+	Shotgun UMETA(DisplayName = "Shotgun"),
+	Throwable UMETA(DisplayName = "Throwable")
 };
 
 UENUM(BlueprintType)
