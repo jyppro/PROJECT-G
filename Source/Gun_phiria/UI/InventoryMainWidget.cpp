@@ -1,5 +1,8 @@
 #include "InventoryMainWidget.h"
 #include "Components/ScrollBox.h"
+#include "Components/Image.h"
+#include "Components/TextBlock.h"
+#include "Components/PanelWidget.h"
 #include "TimerManager.h"
 #include "ItemSlotWidget.h" 
 #include "../Gun_phiriaCharacter.h"
@@ -7,19 +10,16 @@
 #include "../component/InventoryComponent.h"
 #include "ItemTooltipWidget.h"
 #include "ItemDragOperation.h"
-#include "DropZoneWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "DragVisualWidget.h"
 #include "Blueprint/SlateBlueprintLibrary.h"
 #include "../NPC/ShopNPC.h"
 #include "QuantityPopupWidget.h"
-#include "Components/TextBlock.h"
 
 void UInventoryMainWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// 인벤토리가 열릴 때 가방과 주변 아이템을 즉시 새로고침
 	RefreshInventory();
 	ForceNearbyRefresh();
 
@@ -38,7 +38,6 @@ void UInventoryMainWidget::NativeDestruct()
 	GetWorld()->GetTimerManager().ClearTimer(NearbyCheckTimer);
 }
 
-// 1. 가방(인벤토리) 아이템 리스트 갱신
 void UInventoryMainWidget::RefreshInventory()
 {
 	if (!InventoryScrollBox || !ItemSlotWidgetClass) return;
@@ -49,16 +48,13 @@ void UInventoryMainWidget::RefreshInventory()
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
 	if (!Player || !Player->PlayerInventory) return;
 
-	const TArray<FInventorySlot>& Slots = Player->PlayerInventory->InventorySlots;
-
-	for (const FInventorySlot& InventorySlot : Slots)
+	for (const FInventorySlot& InvSlot : Player->PlayerInventory->InventorySlots)
 	{
-		if (!InventorySlot.IsEmpty())
+		if (!InvSlot.IsEmpty())
 		{
-			UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass);
-			if (NewSlot)
+			if (UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass))
 			{
-				NewSlot->SetItemInfo(InventorySlot.ItemID, InventorySlot.Quantity);
+				NewSlot->SetItemInfo(InvSlot.ItemID, InvSlot.Quantity);
 				InventoryScrollBox->AddChild(NewSlot);
 			}
 		}
@@ -79,8 +75,7 @@ void UInventoryMainWidget::UpdateNearbyUI(const TArray<APickupItemBase*>& Nearby
 	{
 		if (Item)
 		{
-			UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass);
-			if (NewSlot)
+			if (UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass))
 			{
 				NewSlot->bIsVicinitySlot = true;
 				NewSlot->TargetItemActor = Item;
@@ -96,7 +91,6 @@ void UInventoryMainWidget::CheckNearbyItems()
 	if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn()))
 	{
 		TArray<APickupItemBase*> NearbyItems = Player->GetNearbyItems();
-
 		if (NearbyItems.Num() != LastNearbyCount)
 		{
 			LastNearbyCount = NearbyItems.Num();
@@ -123,10 +117,7 @@ void UInventoryMainWidget::ShowTooltip(FName ItemID, UDataTable* DataTable)
 
 void UInventoryMainWidget::HideTooltip()
 {
-	if (CachedTooltip)
-	{
-		CachedTooltip->SetVisibility(ESlateVisibility::Collapsed);
-	}
+	if (CachedTooltip) CachedTooltip->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UInventoryMainWidget::UpdateEquipmentUI()
@@ -134,110 +125,55 @@ void UInventoryMainWidget::UpdateEquipmentUI()
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
 	if (!Player || !Player->PlayerInventory) return;
 
-	UInventoryComponent* Inventory = Player->PlayerInventory;
+	UInventoryComponent* Inv = Player->PlayerInventory;
 
-	// --- [1] 조끼 (Vest) ---
-	if (WBP_VestSlot)
-	{
-		if (Inventory->EquippedVestID.IsNone()) WBP_VestSlot->SetItemInfo(NAME_None, 0);
-		else WBP_VestSlot->SetItemInfo(Inventory->EquippedVestID, 1);
-	}
+	// [리팩토링] 장착 슬롯 업데이트 람다 함수 (중복 제거)
+	auto UpdateEquipSlot = [](UItemSlotWidget* TargetSlot, FName ItemID) {
+		if (TargetSlot) TargetSlot->SetItemInfo(ItemID, ItemID.IsNone() ? 0 : 1);
+		};
 
-	// --- [2] 헬멧 (Helmet) ---
-	if (WBP_HelmetSlot)
-	{
-		// 네 InventoryComponent에 있는 헬멧 ID 변수명을 사용해! (예: EquippedHelmetID)
-		if (Inventory->EquippedHelmetID.IsNone()) WBP_HelmetSlot->SetItemInfo(NAME_None, 0);
-		else WBP_HelmetSlot->SetItemInfo(Inventory->EquippedHelmetID, 1);
-	}
+	UpdateEquipSlot(WBP_VestSlot, Inv->EquippedVestID);
+	UpdateEquipSlot(WBP_HelmetSlot, Inv->EquippedHelmetID);
+	UpdateEquipSlot(WBP_BackpackSlot, Inv->EquippedBackpackID);
 
-	// --- [3] 가방 (Backpack) ---
-	if (WBP_BackpackSlot)
-	{
-		// 네 InventoryComponent에 있는 가방 ID 변수명을 사용해! (예: EquippedBackpackID)
-		if (Inventory->EquippedBackpackID.IsNone()) WBP_BackpackSlot->SetItemInfo(NAME_None, 0);
-		else WBP_BackpackSlot->SetItemInfo(Inventory->EquippedBackpackID, 1);
-	}
-
-	// ==========================================
-	// --- [1] 주무기 1 (Primary Weapon) ---
-	// ==========================================
-	if (WBP_Weapon1Slot)
-	{
-		WBP_Weapon1Slot->bIsEquipSlot = true;
-		WBP_Weapon1Slot->bIsWeaponSlot = true;
-		WBP_Weapon1Slot->SetItemInfo(Inventory->EquippedWeapon1ID, 1);
-	}
-
-	if (Container_Weapon1_Parts)
-	{
-		if (Inventory->EquippedWeapon1ID.IsNone())
+	// [리팩토링] 무기 장착 슬롯 업데이트 람다 함수 (중복 제거)
+	auto UpdateWeaponSlot = [](UItemSlotWidget* TargetSlot, FName ItemID) {
+		if (TargetSlot)
 		{
-			// 무기가 없으면 파츠 상자를 완전히 접어서 숨김
-			Container_Weapon1_Parts->SetVisibility(ESlateVisibility::Collapsed);
+			TargetSlot->bIsEquipSlot = true;
+			TargetSlot->bIsWeaponSlot = true;
+			TargetSlot->SetItemInfo(ItemID, ItemID.IsNone() ? 0 : 1);
 		}
-		else
-		{
-			// 무기가 있으면 파츠 상자를 화면에 표시 (클릭은 내용물만 되도록 SelfHitTestInvisible 권장)
-			Container_Weapon1_Parts->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-		}
-	}
+		};
 
-	// 파츠 슬롯들도 빈칸(NAME_None)으로 초기화 (나중에 부착물 데이터가 추가되면 여기에 ID를 넣습니다)
-	if (WBP_AttachmentSlot1_Scope) WBP_AttachmentSlot1_Scope->SetItemInfo(NAME_None, 0);
-	if (WBP_AttachmentSlot1_Muzzle) WBP_AttachmentSlot1_Muzzle->SetItemInfo(NAME_None, 0);
-	if (WBP_AttachmentSlot1_Magazine) WBP_AttachmentSlot1_Magazine->SetItemInfo(NAME_None, 0);
+	UpdateWeaponSlot(WBP_Weapon1Slot, Inv->EquippedWeapon1ID);
+	UpdateWeaponSlot(WBP_Weapon2Slot, Inv->EquippedWeapon2ID);
+	UpdateWeaponSlot(WBP_ThrowableSlot, Inv->EquippedThrowableID);
 
-	// ==========================================
-	// --- [2] 주무기 2 (Secondary Weapon) ---
-	// ==========================================
-	if (WBP_Weapon2Slot)
-	{
-		WBP_Weapon2Slot->bIsEquipSlot = true;
-		WBP_Weapon2Slot->bIsWeaponSlot = true;
-		WBP_Weapon2Slot->SetItemInfo(Inventory->EquippedWeapon2ID, 1);
-	}
-
-	if (Container_Weapon2_Parts)
-	{
-		if (Inventory->EquippedWeapon2ID.IsNone())
-		{
-			Container_Weapon2_Parts->SetVisibility(ESlateVisibility::Collapsed);
-		}
-		else
-		{
-			Container_Weapon2_Parts->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-		}
-	}
-
-	if (WBP_AttachmentSlot2_Scope) WBP_AttachmentSlot2_Scope->SetItemInfo(NAME_None, 0);
-	if (WBP_AttachmentSlot2_Muzzle) WBP_AttachmentSlot2_Muzzle->SetItemInfo(NAME_None, 0);
-	if (WBP_AttachmentSlot2_Magazine) WBP_AttachmentSlot2_Magazine->SetItemInfo(NAME_None, 0);
-
-	// ==========================================
-	// --- [3] 권총 (Pistol) ---
-	// ==========================================
 	if (WBP_PistolSlot)
 	{
 		WBP_PistolSlot->bIsEquipSlot = true;
 		WBP_PistolSlot->bIsWeaponSlot = true;
-
-		// 블루프린트에서 권총을 드래그 못하게 체크했다면 코드에서도 확인
 		WBP_PistolSlot->bIsLockedSlot = true;
-
-		// 인벤토리 변수를 읽지 않고, 데이터 테이블의 "DefaultPistol"을 강제로 고정!
 		WBP_PistolSlot->SetItemInfo(FName("DefaultPistol"), 1);
 	}
 
-	// ==========================================
-	// --- [4] 투척 무기 (Throwable) ---
-	// ==========================================
-	if (WBP_ThrowableSlot)
-	{
-		WBP_ThrowableSlot->bIsEquipSlot = true;
-		WBP_ThrowableSlot->bIsWeaponSlot = true;
-		WBP_ThrowableSlot->SetItemInfo(Inventory->EquippedThrowableID, 1);
-	}
+	// [리팩토링] 부착물 컨테이너 가시성 업데이트 람다 함수
+	auto UpdateContainerVisibility = [](UPanelWidget* Container, FName WeaponID) {
+		if (Container) Container->SetVisibility(WeaponID.IsNone() ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+		};
+
+	UpdateContainerVisibility(Container_Weapon1_Parts, Inv->EquippedWeapon1ID);
+	UpdateContainerVisibility(Container_Weapon2_Parts, Inv->EquippedWeapon2ID);
+
+	// 파츠 슬롯 초기화
+	auto ClearAttachment = [&](UItemSlotWidget* TargetSlot) { if (TargetSlot) TargetSlot->SetItemInfo(NAME_None, 0); };
+	ClearAttachment(WBP_AttachmentSlot1_Scope);
+	ClearAttachment(WBP_AttachmentSlot1_Muzzle);
+	ClearAttachment(WBP_AttachmentSlot1_Magazine);
+	ClearAttachment(WBP_AttachmentSlot2_Scope);
+	ClearAttachment(WBP_AttachmentSlot2_Muzzle);
+	ClearAttachment(WBP_AttachmentSlot2_Magazine);
 }
 
 bool UInventoryMainWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
@@ -247,26 +183,19 @@ bool UInventoryMainWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 	UItemDragOperation* DragOp = Cast<UItemDragOperation>(InOperation);
 	if (!DragOp) return false;
 
-	FVector2D DropPosition = InDragDropEvent.GetScreenSpacePosition();
+	FVector2D DropPos = InDragDropEvent.GetScreenSpacePosition();
 	EDropZoneType TargetZone = EDropZoneType::Nearby;
 
-	if (InventoryScrollBox && InventoryScrollBox->GetCachedGeometry().IsUnderLocation(DropPosition))
-	{
-		TargetZone = EDropZoneType::Backpack;
-	}
-	else if ((WBP_VestSlot && WBP_VestSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(WBP_HelmetSlot && WBP_HelmetSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(WBP_BackpackSlot && WBP_BackpackSlot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(IMG_CharacterPreview && IMG_CharacterPreview->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(WBP_Weapon1Slot && WBP_Weapon1Slot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(WBP_Weapon2Slot && WBP_Weapon2Slot->GetCachedGeometry().IsUnderLocation(DropPosition)) ||
-		(WBP_ThrowableSlot && WBP_ThrowableSlot->GetCachedGeometry().IsUnderLocation(DropPosition)))
+	auto IsUnder = [&](UWidget* Widget) { return Widget && Widget->GetCachedGeometry().IsUnderLocation(DropPos); };
+
+	if (IsUnder(InventoryScrollBox)) TargetZone = EDropZoneType::Backpack;
+	else if (IsUnder(WBP_VestSlot) || IsUnder(WBP_HelmetSlot) || IsUnder(WBP_BackpackSlot) ||
+		IsUnder(IMG_CharacterPreview) || IsUnder(WBP_Weapon1Slot) || IsUnder(WBP_Weapon2Slot) || IsUnder(WBP_ThrowableSlot))
 	{
 		TargetZone = EDropZoneType::Equipment;
 	}
 
 	HandleItemDrop(DragOp, TargetZone);
-
 	return true;
 }
 
@@ -276,54 +205,35 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 	if (!Player || !Player->PlayerInventory || !Player->PlayerInventory->ItemDataTable) return;
 
 	FName ItemID = Operation->DraggedItemID;
-
-	EDropZoneType SourceZone;
-	if (Operation->bIsFromGround) SourceZone = EDropZoneType::Nearby;
-	else if (Operation->bIsFromEquip) SourceZone = EDropZoneType::Equipment;
-	else SourceZone = EDropZoneType::Backpack;
+	EDropZoneType SourceZone = Operation->bIsFromGround ? EDropZoneType::Nearby : (Operation->bIsFromEquip ? EDropZoneType::Equipment : EDropZoneType::Backpack);
 
 	if (SourceZone == TargetZone) return;
 
 	if (CurrentMode == EInventoryMode::IM_Shop)
 	{
-		// 1. 상점 -> 가방 (구매)
 		if (SourceZone == EDropZoneType::Nearby && TargetZone == EDropZoneType::Backpack)
 		{
 			if (CurrentShopNPC && CurrentShopNPC->ShopInventory.Contains(ItemID))
 			{
-				int32 MaxNPCStock = CurrentShopNPC->ShopInventory[ItemID];
-				PromptQuantitySelection(ItemID, MaxNPCStock, true); // true = 구매
+				PromptQuantitySelection(ItemID, CurrentShopNPC->ShopInventory[ItemID], true);
 			}
 		}
-		// 2. 가방 -> 상점 (판매)
 		else if (SourceZone == EDropZoneType::Backpack && TargetZone == EDropZoneType::Nearby)
 		{
-			// 플레이어 인벤토리를 뒤져서 이 아이템을 총 몇 개 가졌는지 확인
-			int32 TotalPlayerStock = 0;
-			for (const FInventorySlot& InvSlot : Player->PlayerInventory->InventorySlots)
-			{
-				if (InvSlot.ItemID == ItemID) TotalPlayerStock += InvSlot.Quantity;
-			}
-
+			// [리팩토링] 이전에 만들었던 GetTotalItemCount를 활용하여 for문 제거!
+			int32 TotalPlayerStock = Player->PlayerInventory->GetTotalItemCount(ItemID);
 			if (TotalPlayerStock > 0)
 			{
-				PromptQuantitySelection(ItemID, TotalPlayerStock, false); // false = 판매
+				PromptQuantitySelection(ItemID, TotalPlayerStock, false);
 			}
 		}
-
-		return; // 일반 파밍 로직 실행 방지
+		return;
 	}
 
 	if (TargetZone == EDropZoneType::Equipment)
 	{
 		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropTypeCheck"));
-
-		if (!ItemData || (ItemData->ItemType != EItemType::Equipment &&
-			ItemData->ItemType != EItemType::Weapon &&
-			ItemData->ItemType != EItemType::Throwable))
-		{
-			return; // 방어구, 무기, 투척물이 아니면 (예: 소비 아이템 등) 장착 불가
-		}
+		if (!ItemData || (ItemData->ItemType != EItemType::Equipment && ItemData->ItemType != EItemType::Weapon && ItemData->ItemType != EItemType::Throwable)) return;
 	}
 
 	if (SourceZone == EDropZoneType::Nearby && TargetZone == EDropZoneType::Backpack)
@@ -363,11 +273,8 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 void UInventoryMainWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
 	Super::NativeOnDragCancelled(InDragDropEvent, InOperation);
-
-	UItemDragOperation* DragOp = Cast<UItemDragOperation>(InOperation);
-	if (DragOp)
+	if (UItemDragOperation* DragOp = Cast<UItemDragOperation>(InOperation))
 	{
-		// 드래그가 취소되면(허공에 놓으면) 바닥에 버리는 로직
 		HandleItemDrop(DragOp, EDropZoneType::Nearby);
 	}
 }
@@ -375,7 +282,7 @@ void UInventoryMainWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDro
 void UInventoryMainWidget::OpenShopMode(const TMap<FName, int32>& ShopItems)
 {
 	CurrentMode = EInventoryMode::IM_Shop;
-	GetWorld()->GetTimerManager().ClearTimer(NearbyCheckTimer);
+	StopNearbyTimer();
 	UpdateShopUI(ShopItems);
 }
 
@@ -386,15 +293,13 @@ void UInventoryMainWidget::UpdateShopUI(const TMap<FName, int32>& ShopItems)
 	HideTooltip();
 	VicinityScrollBox->ClearChildren();
 
-	// TMap 순회 (Pair.Key가 ItemID, Pair.Value가 Quantity)
 	for (const TPair<FName, int32>& Pair : ShopItems)
 	{
-		UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass);
-		if (NewSlot)
+		if (UItemSlotWidget* NewSlot = CreateWidget<UItemSlotWidget>(this, ItemSlotWidgetClass))
 		{
 			NewSlot->bIsVicinitySlot = true;
 			NewSlot->TargetItemActor = nullptr;
-			NewSlot->SetItemInfo(Pair.Key, Pair.Value); // NPC가 가진 수량 띄우기
+			NewSlot->SetItemInfo(Pair.Key, Pair.Value);
 			VicinityScrollBox->AddChild(NewSlot);
 		}
 	}
@@ -404,23 +309,15 @@ void UInventoryMainWidget::BuyItem(FName ItemID)
 {
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
-	if (!ItemData) return;
+	if (!ItemData || !CurrentShopNPC) return;
 
-	// 돈이 충분한지 확인
 	if (Player->SpendGold(ItemData->BuyPrice))
 	{
-		// 아이템 추가 시도 (무게 체크 등은 네가 만든 AddItem이 다 해줌!)
 		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, 1);
-
 		if (UnaddedAmount > 0)
 		{
-			// 가방 공간이 없어서 못 샀다면 돈을 환불해 줍니다.
 			Player->AddGold(ItemData->BuyPrice);
 			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Full Backpack!"));
-		}
-		else
-		{
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, FString::Printf(TEXT("%s Complete Buy!"), *ItemData->ItemName.ToString()));
 		}
 	}
 	else
@@ -428,7 +325,7 @@ void UInventoryMainWidget::BuyItem(FName ItemID)
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Need More Gold!"));
 	}
 
-	RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+	RefreshInventory();
 	UpdateShopUI(CurrentShopNPC->ShopInventory);
 }
 
@@ -436,23 +333,19 @@ void UInventoryMainWidget::SellItem(FName ItemID)
 {
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("SellCheck"));
-	if (!ItemData) return;
+	if (!ItemData || !CurrentShopNPC) return;
 
-	// 인벤토리에서 아이템 1개 제거 (네가 만든 RemoveItem 활용)
 	if (Player->PlayerInventory->RemoveItem(ItemID, 1))
 	{
-		// 골드 지급
 		Player->AddGold(ItemData->SellPrice);
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, FString::Printf(TEXT("%s Complete Sell! +%d G"), *ItemData->ItemName.ToString(), ItemData->SellPrice));
 	}
 
-	RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+	RefreshInventory();
 	UpdateShopUI(CurrentShopNPC->ShopInventory);
 }
 
 void UInventoryMainWidget::StartNearbyTimer()
 {
-	// 타이머가 이미 돌고 있지 않을 때만 새로 시작
 	if (!GetWorld()->GetTimerManager().IsTimerActive(NearbyCheckTimer))
 	{
 		GetWorld()->GetTimerManager().SetTimer(NearbyCheckTimer, this, &UInventoryMainWidget::CheckNearbyItems, 0.2f, true);
@@ -461,7 +354,6 @@ void UInventoryMainWidget::StartNearbyTimer()
 
 void UInventoryMainWidget::StopNearbyTimer()
 {
-	// 타이머 정지
 	GetWorld()->GetTimerManager().ClearTimer(NearbyCheckTimer);
 }
 
@@ -471,126 +363,68 @@ void UInventoryMainWidget::ConfirmBuyItem(FName ItemID, int32 AmountToBuy)
 	if (!Player || !CurrentShopNPC || !CurrentShopNPC->ShopInventory.Contains(ItemID)) return;
 
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
-	if (!ItemData || AmountToBuy <= 0) return;
+	if (!ItemData || AmountToBuy <= 0 || AmountToBuy > CurrentShopNPC->ShopInventory[ItemID]) return;
 
-	// 내가 사려는 개수만큼의 총 가격 계산
-	int32 TotalCost = ItemData->BuyPrice * AmountToBuy;
-
-	// NPC 재고 체크 방어 코드
-	if (AmountToBuy > CurrentShopNPC->ShopInventory[ItemID]) return;
-
-	if (Player->SpendGold(TotalCost))
+	if (Player->SpendGold(ItemData->BuyPrice * AmountToBuy))
 	{
-		// 인벤토리에 아이템 추가 시도
 		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, AmountToBuy);
 		int32 SuccessfullyAdded = AmountToBuy - UnaddedAmount;
 
 		if (SuccessfullyAdded > 0)
 		{
-			// 성공적으로 가방에 넣은 개수만큼만 NPC 재고에서 차감
 			CurrentShopNPC->ShopInventory[ItemID] -= SuccessfullyAdded;
-
-			// NPC 재고가 0이 되면 리스트에서 삭제
-			if (CurrentShopNPC->ShopInventory[ItemID] <= 0)
-			{
-				CurrentShopNPC->ShopInventory.Remove(ItemID);
-			}
-
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, FString::Printf(TEXT("%s %d Buy Complete!"), *ItemData->ItemName.ToString(), SuccessfullyAdded));
+			if (CurrentShopNPC->ShopInventory[ItemID] <= 0) CurrentShopNPC->ShopInventory.Remove(ItemID);
 		}
 
-		// 가방 공간 부족으로 못 산 아이템이 있다면 골드 환불
-		if (UnaddedAmount > 0)
-		{
-			Player->AddGold(UnaddedAmount * ItemData->BuyPrice);
-			//if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("가방 용량이 부족하여 일부만 구매했습니다!"));
-		}
+		if (UnaddedAmount > 0) Player->AddGold(UnaddedAmount * ItemData->BuyPrice);
 
-		// UI들 새로고침
 		RefreshInventory();
-		UpdateShopUI(CurrentShopNPC->ShopInventory); // NPC 쪽 리스트 새로고침
-	}
-	else
-	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Need More Gold!"));
+		UpdateShopUI(CurrentShopNPC->ShopInventory);
 	}
 }
 
 void UInventoryMainWidget::ConfirmSellItem(FName ItemID, int32 AmountToSell)
 {
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
-	if (!Player || AmountToSell <= 0) return;
+	if (!Player || AmountToSell <= 0 || !CurrentShopNPC) return;
 
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("SellCheck"));
 	if (!ItemData) return;
 
-	// 인벤토리에서 지정한 개수(AmountToSell)만큼 아이템 제거
 	if (Player->PlayerInventory->RemoveItem(ItemID, AmountToSell))
 	{
-		// 개수만큼 판매 금액 정산
-		int32 TotalEarned = ItemData->SellPrice * AmountToSell;
-		Player->AddGold(TotalEarned);
-
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow, FString::Printf(TEXT("%s %d Sell Complete! +%d G"), *ItemData->ItemName.ToString(), AmountToSell, TotalEarned));
-
-		// 화면 갱신
-		RefreshInventory(); // 이 안에 UpdateCurrencyUI가 들어있으므로 자동으로 갱신됨!
+		Player->AddGold(ItemData->SellPrice * AmountToSell);
+		RefreshInventory();
 		UpdateShopUI(CurrentShopNPC->ShopInventory);
 	}
 }
 
 void UInventoryMainWidget::PromptQuantitySelection(FName ItemID, int32 MaxAvailable, bool bIsBuying)
 {
-	if (QuantityPopupClass)
+	if (!QuantityPopupClass) return;
+
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	if (!Player || !Player->PlayerInventory || !Player->PlayerInventory->ItemDataTable) return;
+
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("PopupPriceCheck"));
+	if (!ItemData) return;
+
+	int32 TargetUnitPrice = bIsBuying ? ItemData->BuyPrice : ItemData->SellPrice;
+	int32 AffordableQty = (bIsBuying && TargetUnitPrice > 0) ? (Player->CurrentGold / TargetUnitPrice) : MaxAvailable;
+
+	if (UQuantityPopupWidget* Popup = CreateWidget<UQuantityPopupWidget>(this, QuantityPopupClass))
 	{
-		AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
-		if (!Player || !Player->PlayerInventory || !Player->PlayerInventory->ItemDataTable) return;
-
-		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("PopupPriceCheck"));
-		if (!ItemData) return;
-
-		int32 TargetUnitPrice = bIsBuying ? ItemData->BuyPrice : ItemData->SellPrice;
-
-		// ==========================================================
-		// [추가된 부분] 내 돈으로 살 수 있는 개수 계산!
-		// ==========================================================
-		int32 AffordableQty = MaxAvailable; // 기본은 상점 재고만큼
-
-		if (bIsBuying && TargetUnitPrice > 0)
-		{
-			// 현재 골드 나누기 가격 = 살 수 있는 개수
-			// (주의: Player->CurrentGold 변수가 protected로 되어있어 에러가 난다면,
-			// 캐릭터 헤더에서 public으로 바꾸거나 GetGold() 같은 함수를 만들어야 해!)
-			AffordableQty = Player->CurrentGold / TargetUnitPrice;
-		}
-
-		UQuantityPopupWidget* Popup = CreateWidget<UQuantityPopupWidget>(this, QuantityPopupClass);
-		if (Popup)
-		{
-			// 변경된 SetupPopup! AffordableQty를 넘겨줍니다.
-			Popup->SetupPopup(ItemID, MaxAvailable, AffordableQty, TargetUnitPrice, bIsBuying, this);
-			Popup->AddToViewport();
-
-			Popup->SetKeyboardFocus();
-		}
+		Popup->SetupPopup(ItemID, MaxAvailable, AffordableQty, TargetUnitPrice, bIsBuying, this);
+		Popup->AddToViewport();
+		Popup->SetKeyboardFocus();
 	}
 }
 
 void UInventoryMainWidget::UpdateCurrencyUI()
 {
-	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
-	if (!Player) return;
-
-	// 골드 텍스트 갱신
-	if (Txt_GoldAmount)
+	if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn()))
 	{
-		// Player->CurrentGold 변수에 접근할 수 있다고 가정합니다.
-		Txt_GoldAmount->SetText(FText::AsNumber(Player->CurrentGold));
-	}
-
-	// 사파이어 텍스트 갱신
-	if (Txt_SapphireAmount)
-	{
-		Txt_SapphireAmount->SetText(FText::AsNumber(Player->CurrentSapphire));
+		if (Txt_GoldAmount) Txt_GoldAmount->SetText(FText::AsNumber(Player->CurrentGold));
+		if (Txt_SapphireAmount) Txt_SapphireAmount->SetText(FText::AsNumber(Player->CurrentSapphire));
 	}
 }
