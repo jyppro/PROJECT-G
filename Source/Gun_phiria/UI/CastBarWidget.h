@@ -20,7 +20,10 @@ protected:
 
 public:
 	// 캐릭터가 시전을 시작할 때 C++에서 직접 호출할 함수
-	void StartCast(float Duration, UTexture2D* ItemIcon);
+	void StartCast(float Duration, UTexture2D* ItemIcon, bool bInUseWarningColor = false, float InWarningTimeThreshold = 2.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Casting")
+	void StopCast();
 
 protected:
 	// [중요] 블루프린트 디자이너에 있는 위젯 이름과 정확히 일치해야 자동 연결됩니다!
@@ -32,6 +35,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* TXT_Timer;
+
+	// 경고 색상 사용 여부 및 기준 시간
+	bool bUseWarningColor = false;
+	float WarningTimeThreshold = 2.0f;
 
 private:
 	float TotalDuration;

@@ -958,7 +958,7 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 }
 
 // Casting & Buffs
-void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess)
+void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess, bool bUseWarningColor, float WarningTimeThreshold)
 {
 	if (bIsReloading) return;
 	if (bIsCasting) CancelCasting();
@@ -981,7 +981,9 @@ void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<
 			if (APlayerController* PC = Cast<APlayerController>(GetController())) CastBarInstance = CreateWidget<UCastBarWidget>(PC, CastBarWidgetClass);
 		}
 		if (CastBarInstance && !CastBarInstance->IsInViewport()) CastBarInstance->AddToViewport();
-		if (CastBarInstance) CastBarInstance->StartCast(Duration, IconTexture);
+
+		// [수정] 갱신된 매개변수들을 CastBar에 넘겨줍니다.
+		if (CastBarInstance) CastBarInstance->StartCast(Duration, IconTexture, bUseWarningColor, WarningTimeThreshold);
 	}
 
 	GetWorldTimerManager().SetTimer(CastTimerHandle, [this]() {

@@ -57,4 +57,9 @@ private:
 
 	// 손에서 터지는 자폭 함수
 	void ExplodeInHand();
+
+	FTimerHandle SwapTimerHandle;
+
+	// 수류탄 투척 애니메이션 종료 후 실행될 스왑 및 삭제 함수
+	void ExecutePostThrowSwap();
 };

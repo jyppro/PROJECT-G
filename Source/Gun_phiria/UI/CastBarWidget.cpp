@@ -15,11 +15,18 @@ void UCastBarWidget::NativeConstruct()
 	bIsCasting = false;
 }
 
-void UCastBarWidget::StartCast(float Duration, UTexture2D* ItemIcon)
+void UCastBarWidget::StartCast(float Duration, UTexture2D* ItemIcon, bool bInUseWarningColor, float InWarningTimeThreshold)
 {
 	TotalDuration = Duration;
 	TimeRemaining = Duration;
 	bIsCasting = true;
+
+	bUseWarningColor = bInUseWarningColor;
+	WarningTimeThreshold = InWarningTimeThreshold;
+
+	// [중요] 시전을 시작할 때는 무조건 기본색(White)으로 초기화!
+	if (TXT_Timer) TXT_Timer->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	if (RadialMaterial) RadialMaterial->SetVectorParameterValue(FName("Color"), FLinearColor::White);
 
 	// 1. 아이템 아이콘 텍스처 설정
 	if (IMG_ItemIcon)
@@ -46,36 +53,51 @@ void UCastBarWidget::StartCast(float Duration, UTexture2D* ItemIcon)
 	}
 }
 
+void UCastBarWidget::StopCast()
+{
+	// 캐스팅 상태를 끄고, 위젯을 화면에서 숨깁니다.
+	bIsCasting = false;
+	SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UCastBarWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	// 시전 중일 때만 작동하도록 최적화
 	if (bIsCasting && TimeRemaining > 0.0f)
 	{
 		TimeRemaining -= InDeltaTime;
 		if (TimeRemaining < 0.0f) TimeRemaining = 0.0f;
 
-		// 1. 텍스트 소수점 첫째 자리까지 실시간 업데이트
+		// --- [수정] 조건부 색상 로직 ---
+		FLinearColor TargetColor = FLinearColor::White;
+		if (bUseWarningColor && TimeRemaining <= WarningTimeThreshold)
+		{
+			TargetColor = FLinearColor::Red;
+		}
+
+		// 1. 텍스트 업데이트 및 색상 설정
 		if (TXT_Timer)
 		{
 			FNumberFormattingOptions Opts;
 			Opts.MinimumFractionalDigits = 1;
 			Opts.MaximumFractionalDigits = 1;
 			TXT_Timer->SetText(FText::AsNumber(TimeRemaining, &Opts));
+			TXT_Timer->SetColorAndOpacity(FSlateColor(TargetColor));
 		}
 
-		// 2. 도넛 프로그레스 바 실시간 업데이트
+		// 2. 도넛 프로그레스 바 업데이트 및 색상 설정
 		if (RadialMaterial && TotalDuration > 0.0f)
 		{
 			float Percent = 1.0f - (TimeRemaining / TotalDuration);
 			RadialMaterial->SetScalarParameterValue(FName("Percent"), Percent);
+			RadialMaterial->SetVectorParameterValue(FName("Color"), TargetColor);
 		}
 
-		// 시전이 끝나면 틱 로직 정지
 		if (TimeRemaining <= 0.0f)
 		{
 			bIsCasting = false;
+			SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }

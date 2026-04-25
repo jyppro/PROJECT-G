@@ -111,7 +111,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Casting")
 	float CastingWalkSpeed = 160.0f;
 
-	void StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess);
+	void StartCasting(float Duration, FName ItemID, TFunction<void()> OnSuccess, bool bUseWarningColor = false, float WarningTimeThreshold = 2.0f);
 	void CancelCasting();
 	void ApplySpeedBuff(float BoostAmount, float Duration);
 	void ApplyHealOverTime(float TotalHeal, float Duration);
