@@ -23,6 +23,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon|Throwable")
 	void CancelThrow();
 
+	UFUNCTION(BlueprintCallable, Category = "Weapon|Throwable")
+	void SpawnAndLaunchProjectile();
+
+
 	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Throwable")
 	TSubclassOf<AGrenadeProjectile> ProjectileClass;
 
@@ -35,6 +39,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
 	TObjectPtr<UAnimMontage> ThrowMontage;
 
+protected:
+	// 애니메이션 재생 후, 노티파이가 울릴 때 던지기 위해 데이터를 임시 보관할 변수들
+	FVector PendingStartLocation;
+	FVector PendingThrowDirection;
+	float PendingRemainingTime;
+
 private:
 	bool bIsCooking = false;
 	float CookStartTime = 0.0f;
@@ -44,6 +54,6 @@ private:
 	void ExplodeInHand();
 	void ExecutePostThrowSwap();
 
-	// [추가] 중복되는 무기 해제 및 스왑 로직을 처리하는 함수
+	// 중복되는 무기 해제 및 스왑 로직을 처리하는 함수
 	void CleanupAndDestroy();
 };

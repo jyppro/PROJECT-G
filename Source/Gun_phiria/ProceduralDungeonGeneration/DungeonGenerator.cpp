@@ -29,13 +29,13 @@ void ADungeonGenerator::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 1. 맵이 열리자마자 렉이 걸리기 전에 플레이어 화면을 강제로 까맣게 만듭니다.
+	// 맵이 열리자마자 렉이 걸리기 전에 플레이어 화면을 강제로 까맣게 만듦
 	if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
 	{
 		PlayerChar->ForceBlackScreen();
 	}
 
-	// 2. 화면이 까맣게 렌더링될 아주 짧은 시간(0.2초)을 벌어준 뒤에 진짜 생성을 시작합니다.
+	// 화면이 까맣게 렌더링될 아주 짧은 시간(0.2초)을 벌어준 뒤에 진짜 생성 시작
 	FTimerHandle GenerationTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(
 		GenerationTimerHandle,
@@ -48,10 +48,6 @@ void ADungeonGenerator::BeginPlay()
 
 void ADungeonGenerator::ExecuteGeneration()
 {
-	// =========================================================
-	// 원래 BeginPlay에 있던 무거운 맵 생성 로직들을 여기서 실행합니다.
-	// 화면이 까맣기 때문에 유저는 프레임 드랍을 전혀 느끼지 못합니다.
-	// =========================================================
 	GenerateRandomRooms();
 	SeparateRooms();
 	SelectMainRooms();
@@ -69,15 +65,14 @@ void ADungeonGenerator::ExecuteGeneration()
 
 	if (bShowDebugBoxes) DrawDebugRooms();
 
-	// 3. 모든 생성이 끝났습니다! 이제 화면을 서서히 밝힙니다.
+	// 모든 생성이 끝나고 화면 서서히 밝히기
 	if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
 	{
-		PlayerChar->StartFadeIn(2.0f); // 2초 동안 페이드 인
+		PlayerChar->StartFadeIn(2.0f);
 	}
 }
 
 // --- Logic Helpers ---
-
 float ADungeonGenerator::SnapToGrid(float Value)
 {
 	return FMath::RoundHalfToEven(Value / GridSize) * GridSize;
@@ -99,14 +94,16 @@ bool ADungeonGenerator::DoRoomsOverlap(const FDungeonRoom& A, const FDungeonRoom
 }
 
 // --- Generation Logic ---
-
 void ADungeonGenerator::GenerateRandomRooms()
 {
 	RoomList.Empty();
 	if (MainRoomPrefabs.IsEmpty()) return;
 
 	float TotalWeight = 0.0f;
-	for (const auto& Prefab : MainRoomPrefabs) TotalWeight += Prefab.SpawnWeight;
+	for (const auto& Prefab : MainRoomPrefabs)
+	{
+		TotalWeight += Prefab.SpawnWeight;
+	}
 
 	for (int32 i = 0; i < NumberOfRoomsToGenerate; ++i)
 	{
@@ -117,7 +114,10 @@ void ADungeonGenerator::GenerateRandomRooms()
 		for (int32 j = 0; j < MainRoomPrefabs.Num(); ++j)
 		{
 			AccumulatedWeight += MainRoomPrefabs[j].SpawnWeight;
-			if (RandomValue <= AccumulatedWeight) { SelectedIndex = j; break; }
+			if (RandomValue <= AccumulatedWeight)
+			{
+				SelectedIndex = j; break;
+			}
 		}
 
 		FDungeonRoom NewRoom;
@@ -125,7 +125,8 @@ void ADungeonGenerator::GenerateRandomRooms()
 		NewRoom.Size = MainRoomPrefabs[SelectedIndex].Size;
 
 		const FVector2D RandomPoint = FMath::RandPointInCircle(SpawnRadius);
-		NewRoom.CenterLocation = FVector(SnapToGrid(RandomPoint.X), SnapToGrid(RandomPoint.Y), 0.0f);
+		NewRoom.CenterLocation = FVector(SnapToGrid(RandomPoint.X), 
+			SnapToGrid(RandomPoint.Y), 0.0f);
 		RoomList.Add(NewRoom);
 	}
 }
@@ -146,7 +147,11 @@ void ADungeonGenerator::SeparateRooms()
 				{
 					bHasOverlaps = true;
 					FVector Dir = RoomList[i].CenterLocation - RoomList[j].CenterLocation;
-					if (Dir.IsNearlyZero()) Dir = FVector(FMath::RandRange(-1.f, 1.f), FMath::RandRange(-1.f, 1.f), 0.f);
+					if (Dir.IsNearlyZero())
+					{
+						Dir = FVector(FMath::RandRange(-1.f, 1.f),
+							FMath::RandRange(-1.f, 1.f), 0.f);
+					}
 					Dir.Normalize();
 
 					if (FMath::Abs(Dir.X) > FMath::Abs(Dir.Y))
@@ -174,7 +179,10 @@ void ADungeonGenerator::ConnectMainRooms()
 {
 	FinalPaths.Empty();
 	TArray<int32> MainRoomIndices;
-	for (int32 i = 0; i < RoomList.Num(); i++) if (RoomList[i].bIsMainRoom) MainRoomIndices.Add(i);
+	for (int32 i = 0; i < RoomList.Num(); i++)
+	{
+		if (RoomList[i].bIsMainRoom) MainRoomIndices.Add(i);
+	}
 
 	if (MainRoomIndices.Num() == 0) return;
 	TArray<int32> Reached = { MainRoomIndices[0] };
@@ -190,9 +198,13 @@ void ADungeonGenerator::ConnectMainRooms()
 		{
 			for (int32 u : Unreached)
 			{
-				float Dist = FVector::Dist(RoomList[r].CenterLocation, RoomList[u].CenterLocation);
+				float Dist = FVector::Dist(RoomList[r].CenterLocation,
+					RoomList[u].CenterLocation);
 				ExtraPaths.AddUnique({ r, u, Dist });
-				if (Dist < MinDist) { MinDist = Dist; R_Idx = r; U_Idx = u; }
+				if (Dist < MinDist)
+				{
+					MinDist = Dist; R_Idx = r; U_Idx = u;
+				}
 			}
 		}
 		FinalPaths.Add({ R_Idx, U_Idx, MinDist });
@@ -201,7 +213,11 @@ void ADungeonGenerator::ConnectMainRooms()
 	}
 	for (const auto& Edge : ExtraPaths)
 	{
-		if (!FinalPaths.Contains(Edge) && FMath::FRand() <= AdditionalPathProbability) FinalPaths.Add(Edge);
+		if (!FinalPaths.Contains(Edge) &&
+			FMath::FRand() <= AdditionalPathProbability)
+		{
+			FinalPaths.Add(Edge);
+		}
 	}
 }
 
@@ -330,7 +346,7 @@ void ADungeonGenerator::SpawnDungeonActors()
 					FTransform DoorTr = Result.GetComponent()->GetComponentTransform();
 					if (TObjectPtr<AActor> Door = GetWorld()->SpawnActor<AActor>(DoorPrefab, DoorTr))
 					{
-						// 문의 크기를 원래 FakeWall의 크기로 설정합니다.
+						// 문의 크기를 원래 FakeWall의 크기로 설정
 						Door->SetActorScale3D(DoorTr.GetScale3D());
 
 						Door->SetActorHiddenInGame(true);
@@ -384,9 +400,7 @@ void ADungeonGenerator::SpawnItemsInRooms()
 	TArray<FSpawnCandidate> SpawnCandidates;
 	float TotalSpawnWeight = 0.0f;
 
-	// =========================================================
-	// 1. 데이터 테이블의 모든 행을 순회하며 "Item"으로 시작하는 것만 긁어오기!
-	// =========================================================
+	// 데이터 테이블의 모든 행을 순회하며 "Item"으로 시작하는 것만 긁어오기
 	TArray<FName> RowNames = ItemDataTable->GetRowNames();
 	for (FName RowName : RowNames)
 	{
@@ -415,9 +429,7 @@ void ADungeonGenerator::SpawnItemsInRooms()
 		FVector SpawnLoc;
 		bool bFound = false;
 
-		// ---------------------------------------------------------
-		// 바닥 좌표 찾기 (기존 동일)
-		// ---------------------------------------------------------
+		// 바닥 좌표 찾기
 		for (int32 Tries = 0; Tries < 10 && !bFound; Tries++)
 		{
 			float RX = FMath::RandRange(StartRoom.CenterLocation.X - StartRoom.Size.X * 0.4f, StartRoom.CenterLocation.X + StartRoom.Size.X * 0.4f);
@@ -440,9 +452,7 @@ void ADungeonGenerator::SpawnItemsInRooms()
 
 		if (bFound)
 		{
-			// =========================================================
-			// 2. 긁어온 데이터들을 바탕으로 가중치 랜덤 룰렛 돌리기
-			// =========================================================
+			// 긁어온 데이터들을 바탕으로 가중치 랜덤 룰렛 돌리기
 			float RandomValue = FMath::FRandRange(0.0f, TotalSpawnWeight);
 			float AccumulatedWeight = 0.0f;
 			FSpawnCandidate SelectedCandidate;
@@ -459,9 +469,7 @@ void ADungeonGenerator::SpawnItemsInRooms()
 
 			if (!SelectedCandidate.Data || !SelectedCandidate.Data->ItemClass) continue;
 
-			// =========================================================
-			// 3. 아이템 스폰 및 자동으로 ItemID 세팅까지 한 번에!
-			// =========================================================
+			// 아이템 스폰 및 자동으로 ItemID 세팅
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -482,7 +490,6 @@ void ADungeonGenerator::SpawnItemsInRooms()
 }
 
 // --- Helper Implementation ---
-
 bool ADungeonGenerator::IsPointInAnyMainRoom(FVector Point)
 {
 	for (const auto& Room : RoomList)
@@ -519,6 +526,7 @@ void ADungeonGenerator::SpawnShopNPC()
 	if (!ShopNPCPrefab) return;
 
 	TArray<int32> CandidateIndices;
+
 	// 플레이어 시작 방을 제외한 메인 방을 후보로 등록
 	for (int32 i = 0; i < RoomList.Num(); i++)
 	{
@@ -536,12 +544,11 @@ void ADungeonGenerator::SpawnShopNPC()
 
 	FVector RoomCenter = RoomList[ShopRoomIndex].CenterLocation;
 
-	// =========================================================
-	// 1. NPC가 바라볼 '입구 방향' (회전) 계산 (기존 유지)
-	// =========================================================
+
+	// NPC가 바라볼 '입구 방향' (회전) 계산
 	TArray<FVector> EntryDirections;
 
-	// FinalPaths에서 상점 방과 연결된 모든 복도의 방향을 찾습니다.
+	// FinalPaths에서 상점 방과 연결된 모든 복도의 방향을 찾기
 	for (const auto& Path : FinalPaths)
 	{
 		if (Path.RoomAIndex == ShopRoomIndex)
@@ -560,21 +567,18 @@ void ADungeonGenerator::SpawnShopNPC()
 	FVector TargetDirVector = FVector::ForwardVector;
 	FRotator NPCRotation = FRotator::ZeroRotator;
 
-	// 연결된 복도가 있다면, 그중 랜덤하게 하나를 선택합니다.
+	// 연결된 복도가 있다면, 그중 랜덤하게 하나를 선택
 	if (!EntryDirections.IsEmpty())
 	{
 		TargetDirVector = EntryDirections[FMath::RandRange(0, EntryDirections.Num() - 1)];
 
-		// FindLookAtRotation을 사용하여 방향 벡터를 FRotator로 변환합니다.
+		// FindLookAtRotation을 사용하여 방향 벡터를 FRotator로 변환
 		NPCRotation = UKismetMathLibrary::FindLookAtRotation(FVector::ZeroVector, TargetDirVector);
-		// 상점 주인은 똑바로 서있어야 하므로, Pitch와 Roll을 0으로 고정합니다.
 		NPCRotation.Pitch = 0.0f;
 		NPCRotation.Roll = 0.0f;
 	}
 
-	// =========================================================
-	// 2. 바닥 높이 찾기 (LineTrace) (기존 유지)
-	// =========================================================
+	// 바닥 높이 찾기 (LineTrace)
 	FHitResult HitResult;
 	FCollisionQueryParams TraceParams;
 	TraceParams.AddIgnoredActor(this);
@@ -588,33 +592,23 @@ void ADungeonGenerator::SpawnShopNPC()
 		GroundZ = HitResult.ImpactPoint.Z;
 	}
 
-	// =========================================================
-	// 3. NPC 및 가판대 스폰 위치 계산 (정중앙 맞춤, ★완전 수정됨)
-	// =========================================================
-	// NPC와 가판대 사이의 총 간격을 200.0f로 설정합니다. (네 메시 크기에 맞게 조절하세요!)
 	const float TotalOffset = 55.0f;
 	const float HalfOffset = TotalOffset * 0.5f;
 
-	// ★가판대 스폰 위치: 방 중앙에서 '입구 방향'으로 HalfOffset만큼 이동 (입구 쪽)
 	FVector StallSpawnLoc = RoomCenter + (TargetDirVector * HalfOffset);
-	StallSpawnLoc.Z = GroundZ; // 가판대는 바닥에 붙입니다.
+	StallSpawnLoc.Z = GroundZ;
 
-	// ★NPC 스폰 위치: 방 중앙에서 '입구 반대 방향'으로 HalfOffset만큼 이동 (가판대 뒤쪽)
-	// (TargetDirVector에 마이너스(-)를 곱해서 반대 방향으로 이동합니다)
 	FVector NPCSpawnLoc = RoomCenter - (TargetDirVector * HalfOffset);
-	// 바닥에서 발 띄우기 (캡슐 Half-Height 96.0f)
 	NPCSpawnLoc.Z = GroundZ + 96.0f;
 
-	// =========================================================
-	// 4. 스폰 실행
-	// =========================================================
+	// 스폰 실행
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// NPC 스폰 (계산한 NPCRotation 사용, 입구를 바라봅니다)
+	// NPC 스폰
 	AShopNPC* SpawnedNPC = GetWorld()->SpawnActor<AShopNPC>(ShopNPCPrefab, NPCSpawnLoc, NPCRotation, SpawnParams);
 
-	// 가판대 스폰 (NPC와 동일한 방향을 바라보도록 NPCRotation 사용)
+	// 가판대 스폰
 	if (SpawnedNPC && ShopStallPrefab)
 	{
 		GetWorld()->SpawnActor<AActor>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
@@ -668,50 +662,36 @@ void ADungeonGenerator::SpawnStageDoor()
 			{
 				UPrimitiveComponent* ChosenWall = RemainingFakeWalls[FMath::RandRange(0, RemainingFakeWalls.Num() - 1)];
 
-				// =========================================================
-				// 1단계: 벽의 실제 정보 파악 (가로로 긴지, 세로로 긴지)
-				// =========================================================
+				// 벽의 실제 정보 파악
 				FTransform WallTransform = ChosenWall->GetComponentTransform();
 				FVector WallScale = WallTransform.GetScale3D();
 
-				// 벽 큐브의 기본 크기는 100x100x100cm라고 가정합니다.
-				// 벽이 X축으로 길게 늘어났는지, Y축으로 늘어났는지 판별합니다.
+				// 벽이 X축으로 길게 늘어났는지, Y축으로 늘어났는지 판별
 				bool bIsWideAlongX = FMath::Abs(WallScale.X) > FMath::Abs(WallScale.Y);
 
 				float WallWidth = bIsWideAlongX ? (100.0f * FMath::Abs(WallScale.X)) : (100.0f * FMath::Abs(WallScale.Y));
 				float WallThickness = bIsWideAlongX ? (100.0f * FMath::Abs(WallScale.Y)) : (100.0f * FMath::Abs(WallScale.X));
 				float WallHeight = 100.0f * FMath::Abs(WallScale.Z);
 
-				// =========================================================
-				// 2단계: 문이 무조건 방 안쪽(RoomCenter)을 바라보게 회전 계산
-				// =========================================================
+				// 문이 무조건 방 안쪽(RoomCenter)을 바라보게 회전 계산
 				FVector SpawnLoc = WallTransform.GetLocation();
 
 				// 문 위치에서 방 중심을 향하는 방향 벡터 계산
 				FVector DirectionToCenter = RoomCenter - SpawnLoc;
-				DirectionToCenter.Z = 0.0f; // Z축(위아래) 기울기는 무시
+				DirectionToCenter.Z = 0.0f;
 				DirectionToCenter.Normalize();
 
 				// 방향 벡터를 회전값(FRotator)으로 변환
 				FRotator LookAtRot = DirectionToCenter.Rotation();
 
-				// [주의] 만약 문의 스태틱 메시 원본이 앞면(Front)을 X축으로 바라보고 있지 않다면,
-				// 여기서 Yaw 값을 ±90도 또는 180도 추가로 보정해 줘야 합니다.
-				// (예: LookAtRot.Yaw += 90.0f;) 
-				// 지금 모델링 상태에 맞춰 필요하다면 주석을 풀고 숫자를 바꿔보세요!
-
-				// =========================================================
-				// 3단계: 위치 맞추기 (벽의 정중앙에서 바닥으로 내림)
-				// =========================================================
-				SpawnLoc.Z -= (WallHeight * 0.5f); // 벽의 절반만큼 아래로 내려서 바닥에 맞춤
-				SpawnLoc.Z += 0.5f; // Z-Fighting(깜빡임) 방지용 미세 조정
+				// 위치 맞추기
+				SpawnLoc.Z -= (WallHeight * 0.5f);
+				SpawnLoc.Z += 0.5f;
 
 				// 새롭게 계산된 회전값(LookAtRot) 적용
 				FTransform SpawnTransform(LookAtRot, SpawnLoc);
 
-				// =========================================================
-				// 4단계: 문 스폰 및 스케일 자동 계산 (빈 공간 덮기 적용!)
-				// =========================================================
+				// 문 스폰 및 스케일 자동 계산
 				FActorSpawnParameters SpawnParams;
 				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -726,11 +706,9 @@ void ADungeonGenerator::SpawnStageDoor()
 						if (MeshSize.Y == 0) MeshSize.Y = 1.0f;
 						if (MeshSize.Z == 0) MeshSize.Z = 1.0f;
 
-						// [추가된 부분] 빈틈을 메우기 위해 크기를 더 키워줍니다!
-						// 수치를 조절해서 완벽한 핏을 맞춰보세요. (1.2f = 20% 더 크게)
-						float WidthMultiplier = 1.25f;  // 양옆 빈틈을 덮기 위해 가로를 25% 키움
-						float HeightMultiplier = 1.1f;  // 위쪽 빈틈을 덮기 위해 높이를 10% 키움
-						float ThicknessMultiplier = 1.0f; // 두께는 그대로 유지
+						float WidthMultiplier = 1.25f;
+						float HeightMultiplier = 1.1f;
+						float ThicknessMultiplier = 1.0f;
 
 						// 비율 계산
 						FVector FinalScale;

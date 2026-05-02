@@ -25,7 +25,7 @@ int32 UInventoryComponent::AddItem(FName ItemID, int32 Quantity)
 
 	int32 RemainingToAdd = Quantity;
 
-	// [리팩토링] 무게 계산 로직을 람다로 분리하여 중복 제거
+	// 무게 계산 로직을 람다로 분리하여 중복 제거
 	auto GetAllowedAmount = [&](int32 MaxCanAdd) -> int32 {
 		if (ItemInfo->ItemWeight <= 0.f) return MaxCanAdd;
 		int32 WeightPossible = FMath::FloorToInt((MaxWeight - CurrentWeight) / ItemInfo->ItemWeight);
@@ -129,7 +129,7 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 {
 	if (UseItemID.IsNone() || !ItemDataTable) return;
 
-	// [리팩토링] for문 대신 IndexOfByPredicate를 사용하여 코드 간결화 및 탐색 중복 제거
+	// for문 대신 IndexOfByPredicate를 사용하여 코드 간결화 및 탐색 중복 제거
 	int32 TargetIndex = InventorySlots.IndexOfByPredicate([&](const FInventorySlot& Slot) {
 		return Slot.ItemID == UseItemID && Slot.Quantity > 0;
 		});
@@ -200,7 +200,6 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 				float NewMaxWeight = MaxWeight - OldItemInfo->StatBonus + ItemInfo->StatBonus;
 				if (CurrentWeight > NewMaxWeight)
 				{
-					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("용량이 부족하여 교체할 수 없습니다!"));
 
 					// 원상복구
 					if (ItemInfo->EquipType == EEquipType::Helmet) { EquippedHelmetID = OldEquipID; CurrentHelmetDurability = OldDurability; }
@@ -328,14 +327,14 @@ void UInventoryComponent::UnequipItemByID(FName ItemID)
 		if (CurrentWeight > (MaxWeight - ItemData->StatBonus)) return;
 	}
 
-	// [리팩토링] 무기 해제 로직이 완전히 동일하여 람다로 통합
+	// 무기 해제 로직이 완전히 동일하여 람다로 통합
 	auto UnequipWeaponSlot = [&](int32 SlotIndex, FName& EquippedSlotID) {
 		EquippedSlotID = NAME_None;
 		if (Player->WeaponSlots.IsValidIndex(SlotIndex) && Player->WeaponSlots[SlotIndex])
 		{
 			if (Player->GetCurrentWeapon() == Player->WeaponSlots[SlotIndex])
 			{
-				// 인벤토리 강제 종료를 막기 위한 우회 처리 (원래 코드 기능 유지)
+				// 인벤토리 강제 종료를 막기 위한 우회 처리
 				bool bWasOpen = Player->bIsInventoryOpen;
 				Player->bIsInventoryOpen = false;
 				Player->EquipWeaponSlot(0);

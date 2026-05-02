@@ -15,8 +15,6 @@ class UAnimMontage;
 struct FInputActionValue;
 class UCastBarWidget;
 
-DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
-
 UCLASS(config = Game)
 class GUN_PHIRIA_API AGun_phiriaCharacter : public ACharacter
 {
@@ -27,9 +25,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
-	// ==========================================
 	// Getters
-	// ==========================================
 	FORCEINLINE TObjectPtr<USpringArmComponent> GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE TObjectPtr<UCameraComponent> GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE float GetCurrentSpread() const { return CurrentSpread; }
@@ -42,9 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool GetIsAiming() const { return bIsAiming; }
 
-	// ==========================================
 	// Stats & State
-	// ==========================================
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
 	float MaxHealth = 100.0f;
 
@@ -54,9 +48,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats|State")
 	bool bIsAimingAtHead = false;
 
-	// ==========================================
 	// Movement & Stance
-	// ==========================================
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	FVector LeanAxisCS;
 
@@ -66,9 +58,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Movement|Prone")
 	float MaxWalkSpeedProne = 100.0f;
 
-	// ==========================================
 	// Interaction & Inventory
-	// ==========================================
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	TObjectPtr<AActor> TargetInteractable;
 
@@ -102,9 +92,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	bool bIsReloading = false;
 
-	// ==========================================
 	// Casting & Buffs
-	// ==========================================
 	UPROPERTY(BlueprintReadWrite, Category = "Casting")
 	bool bIsCasting = false;
 
@@ -122,9 +110,7 @@ public:
 	UPROPERTY()
 	TObjectPtr <UCastBarWidget> CastBarInstance = nullptr;
 
-	// ==========================================
 	// Currency
-	// ==========================================
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Currency")
 	int32 CurrentGold = 0;
 
@@ -140,9 +126,7 @@ public:
 	UFUNCTION(Exec)
 	void CheatCurrency(int32 GoldAmount, int32 SapphireAmount);
 
-	// ==========================================
 	// Equipment & Level Transition
-	// ==========================================
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
 	void UpdateEquipmentVisuals(EEquipType EquipType, class UStaticMesh* NewMesh);
 	void RestoreEquipmentVisuals();
@@ -164,13 +148,14 @@ public:
 
 	void UpdateThrowableSlot();
 
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void TriggerThrowableLaunch();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-	// ==========================================
 	// Components
-	// ==========================================
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components") TObjectPtr<USpringArmComponent> CameraBoom;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components") TObjectPtr<UCameraComponent> FollowCamera;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components") TObjectPtr<UCameraComponent> ADSCamera;
@@ -180,9 +165,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment") TObjectPtr<class UStaticMeshComponent> VestMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Equipment") TObjectPtr<class UStaticMeshComponent> BackpackMesh;
 
-	// ==========================================
 	// Inputs
-	// ==========================================
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputMappingContext> DefaultMappingContext;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> MoveAction;
@@ -200,9 +183,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon4Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> ReloadAction;
 
-	// ==========================================
 	// Combat & Animation Settings
-	// ==========================================
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Weapon") TSubclassOf<AWeaponBase> DefaultWeaponClass;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon") TObjectPtr<AWeaponBase> CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|State") bool bIsAiming = false;

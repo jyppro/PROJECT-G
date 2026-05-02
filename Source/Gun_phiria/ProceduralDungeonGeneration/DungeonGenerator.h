@@ -168,9 +168,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
 	int32 MaxEnemiesPerRoom = 3;
 
-	/*UPROPERTY(EditAnywhere, Category = "Dungeon|Spawning")
-	TArray<TSubclassOf<AActor>> ItemPrefabs;*/
-
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Items")
 	TArray<FItemSpawnData> ItemSpawnList;
 
@@ -200,12 +197,9 @@ protected:
 	// 상점 방을 고르고 NPC를 스폰하는 함수
 	void SpawnShopNPC();
 
-	// --- 새로 추가: 상점 가판대(테이블) 프리팹 ---
+	// --- 상점 가판대(테이블) 프리팹 ---
 	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
 	TSubclassOf<class AActor> ShopStallPrefab;
-
-	/*UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Loot")
-	TArray<FName> LootPool;*/
 
 	// 다음 스테이지로 가는 문 프리팹
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Prefabs")

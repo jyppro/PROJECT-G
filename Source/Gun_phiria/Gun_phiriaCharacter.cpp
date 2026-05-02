@@ -25,8 +25,6 @@
 #include "Engine/Texture2D.h"
 #include "Components/SceneComponent.h"
 
-DEFINE_LOG_CATEGORY(LogTemplateCharacter);
-
 AGun_phiriaCharacter::AGun_phiriaCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -284,7 +282,7 @@ void AGun_phiriaCharacter::InitializeWeapon()
 
 	if (!PlayerInventory || !PlayerInventory->ItemDataTable) return;
 
-	// [추가] 시작할 때 미리 GameInstance를 가져와 둡니다.
+	// 시작할 때 미리 GameInstance를 가져와 둡니다.
 	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
 
 	FActorSpawnParameters SpawnParams;
@@ -315,7 +313,7 @@ void AGun_phiriaCharacter::InitializeWeapon()
 				if (WeaponSlots[1]) {
 					WeaponSlots[1]->HolsterRotationOffset = W1Data->HolsterRotationOffset;
 
-					// [추가] 주무기1 탄창 복구!
+					// 주무기1 탄창 복구!
 					if (GameInst && GameInst->bHasSavedData) {
 						WeaponSlots[1]->CurrentAmmo = GameInst->SavedWeapon1Ammo;
 					}
@@ -333,7 +331,7 @@ void AGun_phiriaCharacter::InitializeWeapon()
 				if (WeaponSlots[2]) {
 					WeaponSlots[2]->HolsterRotationOffset = W2Data->HolsterRotationOffset;
 
-					// [추가] 주무기2 탄창 복구!
+					// 주무기2 탄창 복구!
 					if (GameInst && GameInst->bHasSavedData) {
 						WeaponSlots[2]->CurrentAmmo = GameInst->SavedWeapon2Ammo;
 					}
@@ -354,7 +352,7 @@ void AGun_phiriaCharacter::InitializeWeapon()
 
 				if (WeaponSlots[3])
 				{
-					// [핵심 수정] 인벤토리를 뒤져서 합산하던 로직을 지우고 무조건 1로 세팅
+					// 인벤토리를 뒤져서 합산하던 로직을 지우고 무조건 1로 세팅
 					WeaponSlots[3]->CurrentAmmo = 1;
 
 					WeaponSlots[3]->SetActorHiddenInGame(true);
@@ -454,14 +452,12 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 		return;
 	}
 
-	// =================================================================
 	// 1. 기존 무기 보관 (수류탄 숨기기 로직 추가)
-	// =================================================================
 	for (int32 i = 0; i < WeaponSlots.Num(); i++)
 	{
 		if (WeaponSlots[i] && i != SlotIndex)
 		{
-			// [핵심 수정] 무기가 '투척 무기(Throwable)'라면 등에 붙이지 말고 투명하게 숨겨버립니다!
+			// 무기가 '투척 무기(Throwable)'라면 등에 붙이지 말고 투명하게 숨겨버립니다!
 			if (WeaponSlots[i]->WeaponType == EWeaponType::Throwable)
 			{
 				WeaponSlots[i]->SetActorHiddenInGame(true);
@@ -481,9 +477,7 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 		CurrentWeapon->SetActorEnableCollision(false);
 	}
 
-	// =================================================================
 	// 2. 새 무기 장착
-	// =================================================================
 	ActiveWeaponSlot = SlotIndex;
 	CurrentWeapon = TargetWeapon;
 
@@ -497,7 +491,7 @@ void AGun_phiriaCharacter::EquipWeaponSlot(int32 SlotIndex)
 
 	if (CurrentWeapon->GetWeaponMesh())
 	{
-		// [유지] 수류탄에 소켓을 만드셨기 때문에 자동으로 이 if문을 타게 됩니다. 완벽합니다!
+		// 수류탄에 소켓을 만드셨기 때문에 자동으로 이 if문을 타게 됩니다.
 		if (CurrentWeapon->GetWeaponMesh()->DoesSocketExist(FName("RightHandGripSocket")))
 		{
 			FTransform GripSocketRelative = CurrentWeapon->GetWeaponMesh()->GetSocketTransform(FName("RightHandGripSocket"), ERelativeTransformSpace::RTS_Actor);
@@ -932,7 +926,6 @@ void AGun_phiriaCharacter::DropItemToGround(FName ItemID)
 		if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility, Params))
 		{
 			// 레이저가 바닥에 맞았다면? -> 닿은 지점(ImpactPoint)을 최종 위치로 결정
-			// (팁: 아이템이 바닥에 너무 파묻히면 ImpactPoint.Z + 5.0f 처럼 살짝 올려주세요)
 			FinalSpawnLoc = HitResult.ImpactPoint;
 		}
 		else
@@ -982,7 +975,7 @@ void AGun_phiriaCharacter::StartCasting(float Duration, FName ItemID, TFunction<
 		}
 		if (CastBarInstance && !CastBarInstance->IsInViewport()) CastBarInstance->AddToViewport();
 
-		// [수정] 갱신된 매개변수들을 CastBar에 넘겨줍니다.
+		// 갱신된 매개변수들을 CastBar에 넘겨줍니다.
 		if (CastBarInstance) CastBarInstance->StartCast(Duration, IconTexture, bUseWarningColor, WarningTimeThreshold);
 	}
 
@@ -1141,7 +1134,7 @@ void AGun_phiriaCharacter::Reload()
 			// 1. 몽타주 재생을 요청하고, 그 전체 길이를 가져옵니다.
 			float ReloadDuration = AnimInst->Montage_Play(CurrentWeapon->ReloadMontage);
 
-			// 2. [추가] 장전 시간(ReloadDuration)만큼 캐스트 바를 화면에 띄웁니다!
+			// 2. 장전 시간(ReloadDuration)만큼 캐스트 바를 화면에 띄웁니다!
 			if (CastBarWidgetClass)
 			{
 				if (!CastBarInstance)
@@ -1173,7 +1166,7 @@ void AGun_phiriaCharacter::Reload()
 
 void AGun_phiriaCharacter::FinishReload()
 {
-	// [추가] 장전 완료: 이동 속도를 원래대로 복구합니다.
+	// 장전 완료: 이동 속도를 원래대로 복구합니다.
 	if (bIsReloading) // 장전 중일 때만 복구 (버그 방지)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = OriginalWalkSpeed;
@@ -1225,7 +1218,7 @@ void AGun_phiriaCharacter::AttachToHolster(int32 SlotIndex)
 	// 무기 액터를 해당 소켓에 부착
 	WeaponToHolster->AttachToComponent(GetMesh(), AttachRules, HolsterSocketName);
 
-	// [핵심] 데이터 테이블의 회전값 적용 및 스케일 1.0 강제 고정
+	// 데이터 테이블의 회전값 적용 및 스케일 1.0 강제 고정
 	WeaponToHolster->SetActorRelativeRotation(WeaponToHolster->HolsterRotationOffset);
 	WeaponToHolster->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
 
@@ -1313,6 +1306,20 @@ void AGun_phiriaCharacter::UpdateThrowableSlot()
 					WeaponSlots[3]->CurrentAmmo = 1;
 				}
 			}
+		}
+	}
+}
+
+void AGun_phiriaCharacter::TriggerThrowableLaunch()
+{
+	// 1. 3번 슬롯(투척 무기 슬롯)이 유효한지 확인합니다.
+	if (WeaponSlots.IsValidIndex(3))
+	{
+		// 2. 3번 슬롯의 무기를 AThrowableWeapon 클래스로 안전하게 캐스팅합니다.
+		if (AThrowableWeapon* Throwable = Cast<AThrowableWeapon>(WeaponSlots[3]))
+		{
+			// 3. (이전에 무기 클래스에 추가했던) 실제 수류탄 생성 및 투척 함수를 호출합니다!
+			Throwable->SpawnAndLaunchProjectile();
 		}
 	}
 }
