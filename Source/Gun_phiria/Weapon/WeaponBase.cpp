@@ -7,6 +7,91 @@
 #include "GameFramework/Character.h"
 #include "Components/StaticMeshComponent.h"
 
+#if WITH_EDITOR
+void AWeaponBase::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	// 1. 부모 클래스의 원래 기능을 먼저 실행합니다.
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// 2. 방금 변경된 변수(Property)의 이름을 가져옵니다.
+	FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+
+	// 3. 만약 변경된 변수가 'WeaponType' 이라면?
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(AWeaponBase, WeaponType))
+	{
+		// 4. 무기 타입에 맞게 기본값을 세팅하는 함수를 실행합니다.
+		ApplyDefaultStatsByType();
+	}
+}
+
+void AWeaponBase::ApplyDefaultStatsByType()
+{
+	// 무기 타입(Enum)에 따라 다른 기본값을 세팅합니다.
+	switch (WeaponType)
+	{
+	case EWeaponType::SMG:
+		WeaponSpreadMultiplier = 1.2f;
+		WeaponBaseSpreadHUD = 3.0f;
+		MinWeaponDamage = 30.0f;
+		MaxWeaponDamage = 33.0f;
+		FireRate = 1100.0f;
+		FireMode = EFireMode::Auto;
+		CurrentAmmo = 0;
+		MagazineCapacity = 60;
+		AmmoItemID = FName("Item_Ammo_9mm"); 
+		break;
+
+	case EWeaponType::AR:
+		WeaponSpreadMultiplier = 1.5f;
+		WeaponBaseSpreadHUD = 5.0f;
+		MinWeaponDamage = 40.0f;
+		MaxWeaponDamage = 43.0f;
+		FireRate = 700.0f;
+		FireMode = EFireMode::Auto;
+		CurrentAmmo = 0;
+		MagazineCapacity = 30;
+		AmmoItemID = FName("Item_Ammo_5-56mm");
+		break;
+
+	case EWeaponType::SR:
+		WeaponSpreadMultiplier = 5.0f;
+		WeaponBaseSpreadHUD = 20.0f;
+		MinWeaponDamage = 75.0f;
+		MaxWeaponDamage = 80.0f;
+		FireRate = 35.0f;
+		FireMode = EFireMode::Single;
+		CurrentAmmo = 0;
+		MagazineCapacity = 10;
+		AmmoItemID = FName("Item_Ammo_7-62mm");
+		break;
+
+	case EWeaponType::DMR:
+		WeaponSpreadMultiplier = 2.5f;
+		WeaponBaseSpreadHUD = 8.0f;
+		MinWeaponDamage = 50.0f;
+		MaxWeaponDamage = 55.0f;
+		FireRate = 400.0f;
+		FireMode = EFireMode::Single;
+		CurrentAmmo = 0;
+		MagazineCapacity = 10;
+		AmmoItemID = FName("Item_Ammo_7-62mm");
+		break;
+
+	case EWeaponType::Shotgun:
+		WeaponSpreadMultiplier = 3.0f;
+		WeaponBaseSpreadHUD = 15.0f;
+		MinWeaponDamage = 180.0f;
+		MaxWeaponDamage = 220.0f;
+		FireRate = 250.0f;
+		FireMode = EFireMode::Single;
+		CurrentAmmo = 0;
+		MagazineCapacity = 2;
+		AmmoItemID = FName("Item_Ammo_12Gauge");
+		break;
+	}
+}
+#endif
+
 AWeaponBase::AWeaponBase()
 {
 	PrimaryActorTick.bCanEverTick = false;

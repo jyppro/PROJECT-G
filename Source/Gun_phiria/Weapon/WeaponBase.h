@@ -101,6 +101,15 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon|Animation")
 	TObjectPtr<class UAnimMontage> ReloadMontage;
 
+#if WITH_EDITOR
+	// 에디터에서 속성값이 변경될 때마다 호출되는 함수입니다.
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+private:
+	// 무기 타입에 맞춰 기본 스탯을 세팅해주는 헬퍼 함수입니다.
+	void ApplyDefaultStatsByType();
+#endif
+
 protected:
 	// --- Components ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Components")
