@@ -72,6 +72,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void UpdateCurrencyUI();
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Shop")
+	bool bIsShopLootMode = false;
+
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;

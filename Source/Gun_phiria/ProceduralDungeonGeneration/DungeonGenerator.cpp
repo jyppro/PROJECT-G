@@ -6,6 +6,7 @@
 #include "../Item/PickupItemBase.h"
 #include "../Interactable/DungeonStageDoor.h"
 #include "../component/InventoryComponent.h"
+#include "../NPC/ShopDesk.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -605,13 +606,22 @@ void ADungeonGenerator::SpawnShopNPC()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// NPC 스폰
+	// 1. NPC 스폰
 	AShopNPC* SpawnedNPC = GetWorld()->SpawnActor<AShopNPC>(ShopNPCPrefab, NPCSpawnLoc, NPCRotation, SpawnParams);
 
-	// 가판대 스폰
+	// 2. 가판대(상점 데스크) 스폰 및 자동 연결 로직 추가!
 	if (SpawnedNPC && ShopStallPrefab)
 	{
-		GetWorld()->SpawnActor<AActor>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
+		// 단순 AActor가 아닌 AShopDesk로 스폰합니다.
+		AShopDesk* SpawnedDesk = GetWorld()->SpawnActor<AShopDesk>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
+
+		if (SpawnedDesk)
+		{
+			// [핵심] 스폰된 데스크에 방금 스폰된 NPC를 짝지어줍니다!
+			SpawnedDesk->LinkedNPC = SpawnedNPC;
+
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("Shop Desk and NPC perfectly linked in Dungeon!"));
+		}
 	}
 }
 

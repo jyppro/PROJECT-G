@@ -198,8 +198,8 @@ protected:
 	void SpawnShopNPC();
 
 	// --- 상점 가판대(테이블) 프리팹 ---
-	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
-	TSubclassOf<class AActor> ShopStallPrefab;
+	UPROPERTY(EditAnywhere, Category = "Dungeon|Shop")
+	TSubclassOf<class AShopDesk> ShopStallPrefab; // AActor 대신 AShopDesk를 사용합니다.
 
 	// 다음 스테이지로 가는 문 프리팹
 	UPROPERTY(EditAnywhere, Category = "Dungeon|Prefabs")

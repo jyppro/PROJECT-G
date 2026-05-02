@@ -34,6 +34,7 @@ public:
 	FORCEINLINE FTimerHandle GetSpeedBuffTimerHandle() const { return SpeedBuffTimerHandle; }
 	FORCEINLINE int32 GetMaxHOTTicks() const { return MaxHOTTicks; }
 	FORCEINLINE int32 GetCurrentHOTTicks() const { return CurrentHOTTicks; }
+	FORCEINLINE bool GetIsDead() const { return bIsDead; }
 
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool GetIsAiming() const { return bIsAiming; }

@@ -209,18 +209,22 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 
 	if (SourceZone == TargetZone) return;
 
+	// [수정] 상점 모드(거래 또는 약탈)일 때의 드래그 처리
 	if (CurrentMode == EInventoryMode::IM_Shop)
 	{
+		// 1. 상점 -> 가방 (가져오기)
 		if (SourceZone == EDropZoneType::Nearby && TargetZone == EDropZoneType::Backpack)
 		{
 			if (CurrentShopNPC && CurrentShopNPC->ShopInventory.Contains(ItemID))
 			{
-				PromptQuantitySelection(ItemID, CurrentShopNPC->ShopInventory[ItemID], true);
+				int32 AvailableQty = CurrentShopNPC->ShopInventory[ItemID];
+				// 약탈이든 거래든 무조건 팝업을 띄웁니다!
+				PromptQuantitySelection(ItemID, AvailableQty, true);
 			}
 		}
+		// 2. 가방 -> 상점 (넣기/팔기)
 		else if (SourceZone == EDropZoneType::Backpack && TargetZone == EDropZoneType::Nearby)
 		{
-			// [리팩토링] 이전에 만들었던 GetTotalItemCount를 활용하여 for문 제거!
 			int32 TotalPlayerStock = Player->PlayerInventory->GetTotalItemCount(ItemID);
 			if (TotalPlayerStock > 0)
 			{
@@ -230,6 +234,7 @@ void UInventoryMainWidget::HandleItemDrop(UItemDragOperation* Operation, EDropZo
 		return;
 	}
 
+	// ... (아래쪽 일반 인벤토리 동작 코드는 기존과 동일하게 유지) ...
 	if (TargetZone == EDropZoneType::Equipment)
 	{
 		FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("DropTypeCheck"));
@@ -305,18 +310,28 @@ void UInventoryMainWidget::UpdateShopUI(const TMap<FName, int32>& ShopItems)
 	}
 }
 
-void UInventoryMainWidget::BuyItem(FName ItemID)
+void UInventoryMainWidget::BuyItem(FName ItemID) // 마우스 우클릭 빠른 구매
 {
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
-	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
-	if (!ItemData || !CurrentShopNPC) return;
+	if (!Player || !CurrentShopNPC || !CurrentShopNPC->ShopInventory.Contains(ItemID)) return;
 
-	if (Player->SpendGold(ItemData->BuyPrice))
+	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
+	if (!ItemData) return;
+
+	// [수정] 약탈 모드면 돈 지불 패스
+	bool bCanAfford = bIsShopLootMode ? true : Player->SpendGold(ItemData->BuyPrice);
+
+	if (bCanAfford)
 	{
 		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, 1);
-		if (UnaddedAmount > 0)
+		if (UnaddedAmount == 0) // 무사히 들어갔을 때만 상점에서 삭제!
 		{
-			Player->AddGold(ItemData->BuyPrice);
+			CurrentShopNPC->ShopInventory[ItemID] -= 1;
+			if (CurrentShopNPC->ShopInventory[ItemID] <= 0) CurrentShopNPC->ShopInventory.Remove(ItemID);
+		}
+		else // 가방이 꽉 참
+		{
+			if (!bIsShopLootMode) Player->AddGold(ItemData->BuyPrice); // 돈 환불
 			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Full Backpack!"));
 		}
 	}
@@ -329,15 +344,26 @@ void UInventoryMainWidget::BuyItem(FName ItemID)
 	UpdateShopUI(CurrentShopNPC->ShopInventory);
 }
 
-void UInventoryMainWidget::SellItem(FName ItemID)
+void UInventoryMainWidget::SellItem(FName ItemID) // 마우스 우클릭 빠른 판매
 {
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwningPlayerPawn());
+	if (!Player || !CurrentShopNPC) return;
+
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("SellCheck"));
-	if (!ItemData || !CurrentShopNPC) return;
+	if (!ItemData) return;
 
 	if (Player->PlayerInventory->RemoveItem(ItemID, 1))
 	{
-		Player->AddGold(ItemData->SellPrice);
+		if (bIsShopLootMode)
+		{
+			// [수정] 시체에 넣기
+			if (CurrentShopNPC->ShopInventory.Contains(ItemID)) CurrentShopNPC->ShopInventory[ItemID] += 1;
+			else CurrentShopNPC->ShopInventory.Add(ItemID, 1);
+		}
+		else
+		{
+			Player->AddGold(ItemData->SellPrice);
+		}
 	}
 
 	RefreshInventory();
@@ -365,8 +391,12 @@ void UInventoryMainWidget::ConfirmBuyItem(FName ItemID, int32 AmountToBuy)
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("BuyCheck"));
 	if (!ItemData || AmountToBuy <= 0 || AmountToBuy > CurrentShopNPC->ShopInventory[ItemID]) return;
 
-	if (Player->SpendGold(ItemData->BuyPrice * AmountToBuy))
+	// [수정] 약탈 모드면 돈 지불 패스!
+	bool bCanAfford = bIsShopLootMode ? true : Player->SpendGold(ItemData->BuyPrice * AmountToBuy);
+
+	if (bCanAfford)
 	{
+		// 가방에 들어간 만큼만 상점에서 차감합니다. (복사 버그 원천 차단)
 		int32 UnaddedAmount = Player->PlayerInventory->AddItem(ItemID, AmountToBuy);
 		int32 SuccessfullyAdded = AmountToBuy - UnaddedAmount;
 
@@ -376,10 +406,19 @@ void UInventoryMainWidget::ConfirmBuyItem(FName ItemID, int32 AmountToBuy)
 			if (CurrentShopNPC->ShopInventory[ItemID] <= 0) CurrentShopNPC->ShopInventory.Remove(ItemID);
 		}
 
-		if (UnaddedAmount > 0) Player->AddGold(UnaddedAmount * ItemData->BuyPrice);
+		// 다 들어가지 못했고 정상 거래였다면 돈을 돌려줍니다.
+		if (UnaddedAmount > 0)
+		{
+			if (!bIsShopLootMode) Player->AddGold(UnaddedAmount * ItemData->BuyPrice);
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Not enough space!"));
+		}
 
 		RefreshInventory();
 		UpdateShopUI(CurrentShopNPC->ShopInventory);
+	}
+	else
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("Need More Gold!"));
 	}
 }
 
@@ -393,7 +432,18 @@ void UInventoryMainWidget::ConfirmSellItem(FName ItemID, int32 AmountToSell)
 
 	if (Player->PlayerInventory->RemoveItem(ItemID, AmountToSell))
 	{
-		Player->AddGold(ItemData->SellPrice * AmountToSell);
+		if (bIsShopLootMode)
+		{
+			// [수정] 약탈 모드: 시체에 아이템을 돌려놓고 돈은 안 받음
+			if (CurrentShopNPC->ShopInventory.Contains(ItemID)) CurrentShopNPC->ShopInventory[ItemID] += AmountToSell;
+			else CurrentShopNPC->ShopInventory.Add(ItemID, AmountToSell);
+		}
+		else
+		{
+			// 정상 판매
+			Player->AddGold(ItemData->SellPrice * AmountToSell);
+		}
+
 		RefreshInventory();
 		UpdateShopUI(CurrentShopNPC->ShopInventory);
 	}
@@ -409,7 +459,10 @@ void UInventoryMainWidget::PromptQuantitySelection(FName ItemID, int32 MaxAvaila
 	FItemData* ItemData = Player->PlayerInventory->ItemDataTable->FindRow<FItemData>(ItemID, TEXT("PopupPriceCheck"));
 	if (!ItemData) return;
 
-	int32 TargetUnitPrice = bIsBuying ? ItemData->BuyPrice : ItemData->SellPrice;
+	// [핵심] 약탈 모드라면 단가(TargetUnitPrice)를 0으로 만듭니다!
+	int32 TargetUnitPrice = bIsShopLootMode ? 0 : (bIsBuying ? ItemData->BuyPrice : ItemData->SellPrice);
+
+	// 단가가 0보다 크면 돈에 맞춰 최대 구매 가능 수량을 계산하고, 0(약탈/무료)이면 가진 수량 전부를 선택 가능하게 합니다.
 	int32 AffordableQty = (bIsBuying && TargetUnitPrice > 0) ? (Player->CurrentGold / TargetUnitPrice) : MaxAvailable;
 
 	if (UQuantityPopupWidget* Popup = CreateWidget<UQuantityPopupWidget>(this, QuantityPopupClass))
