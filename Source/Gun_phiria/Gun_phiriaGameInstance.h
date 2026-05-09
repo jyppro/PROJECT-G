@@ -49,4 +49,7 @@ public:
 
 	void SavePlayerData(class AGun_phiriaCharacter* Player, bool bKeepOnlySapphire);
 	void LoadPlayerData(class AGun_phiriaCharacter* Player);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Game Data|Shop")
+	bool bIsShopKeeperKilled = false;
 };

@@ -67,13 +67,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Reward")
 	int32 MaxGoldDrop;
 
-	void Die(AController* Killer);
+	virtual void Die(AController* Killer);
+
+	bool bIsDead = false;
 
 private:
 	void SetReadyToFire();
 
 	// --- State Flags & Timers ---
-	bool bIsDead = false;
+	
 	bool bIsReadyToFire = false;
 
 	FTimerHandle SpawnDelayTimer;

@@ -7,6 +7,7 @@
 #include "../Interactable/DungeonStageDoor.h"
 #include "../component/InventoryComponent.h"
 #include "../NPC/ShopDesk.h"
+#include "../Gun_phiriaGameInstance.h"
 
 // Engine Headers
 #include "DrawDebugHelpers.h"
@@ -525,6 +526,17 @@ void ADungeonGenerator::DrawDebugRooms()
 void ADungeonGenerator::SpawnShopNPC()
 {
 	if (!ShopNPCPrefab) return;
+
+	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
+	{
+		// 만약 이전 스테이지에서 상점 주인을 죽였다면?
+		if (GameInst->bIsShopKeeperKilled)
+		{
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("Shopkeeper is dead. The shop room is empty this time."));
+			// 아무것도 스폰하지 않고 함수를 즉시 종료합니다!
+			return;
+		}
+	}
 
 	TArray<int32> CandidateIndices;
 

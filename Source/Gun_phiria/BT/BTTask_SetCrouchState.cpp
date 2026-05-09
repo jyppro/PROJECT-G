@@ -2,6 +2,7 @@
 #include "AIController.h"
 #include "../Enemy/EnemyCharacter.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "../NPC/ShopNPC.h"
 
 UBTTask_SetCrouchState::UBTTask_SetCrouchState()
 {

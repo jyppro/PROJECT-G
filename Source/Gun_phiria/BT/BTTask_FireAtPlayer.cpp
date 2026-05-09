@@ -1,6 +1,7 @@
 #include "BTTask_FireAtPlayer.h"
 #include "AIController.h"
 #include "../Enemy/EnemyCharacter.h" 
+#include "../NPC/ShopNPC.h"
 
 UBTTask_FireAtPlayer::UBTTask_FireAtPlayer()
 {

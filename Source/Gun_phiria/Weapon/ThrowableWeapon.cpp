@@ -41,48 +41,6 @@ void AThrowableWeapon::Fire(FVector TargetLocation)
 	}
 }
 
-//void AThrowableWeapon::ReleaseThrow(FVector StartLocation, FVector ThrowDirection)
-//{
-//	if (!bIsCooking || CurrentAmmo <= 0) return;
-//
-//	bIsCooking = false;
-//
-//	float ElapsedTime = GetWorld()->GetTimeSeconds() - CookStartTime;
-//	float RemainingTime = FMath::Max(0.1f, MaxCookTime - ElapsedTime);
-//
-//	if (AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner()))
-//	{
-//		Player->CancelCasting();
-//
-//		if (ThrowMontage)
-//		{
-//			Player->PlayAnimMontage(ThrowMontage, 1.0f, FName("Throw"));
-//		}
-//	}
-//
-//	if (ProjectileClass)
-//	{
-//		FActorSpawnParameters SpawnParams;
-//		SpawnParams.Owner = GetOwner();
-//		SpawnParams.Instigator = Cast<APawn>(GetOwner());
-//		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-//
-//		FVector SpawnLocation = StartLocation + (ThrowDirection * 150.0f);
-//		if (AGrenadeProjectile* Projectile = GetWorld()->SpawnActor<AGrenadeProjectile>(ProjectileClass, SpawnLocation, ThrowDirection.Rotation(), SpawnParams))
-//		{
-//			Projectile->InitializeThrow(ThrowDirection * ThrowSpeed, RemainingTime);
-//		}
-//	}
-//
-//	CurrentAmmo--;
-//
-//	if (CurrentAmmo <= 0)
-//	{
-//		if (WeaponMesh) WeaponMesh->SetVisibility(false);
-//		GetWorldTimerManager().SetTimer(SwapTimerHandle, this, &AThrowableWeapon::ExecutePostThrowSwap, 1.0f, false);
-//	}
-//}
-
 void AThrowableWeapon::ReleaseThrow(FVector StartLocation, FVector ThrowDirection)
 {
 	if (!bIsCooking || CurrentAmmo <= 0) return;
