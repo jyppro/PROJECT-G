@@ -61,6 +61,23 @@ void AEnemyCharacter::BeginPlay()
 		{
 			FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 			CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
+
+			// 일반 적 블랙보드에 쿨다운 전달
+			if (AAIController* AICon = Cast<AAIController>(GetController()))
+			{
+				if (UBlackboardComponent* BB = AICon->GetBlackboardComponent())
+				{
+					if (CurrentWeapon->FireRate > 0.0f)
+					{
+						float FireDelay = 60.0f / CurrentWeapon->FireRate;
+						BB->SetValueAsFloat(FName("AttackCooldown"), FireDelay);
+					}
+					else
+					{
+						BB->SetValueAsFloat(FName("AttackCooldown"), 1.5f); // 기본 딜레이
+					}
+				}
+			}
 		}
 	}
 
@@ -75,21 +92,42 @@ void AEnemyCharacter::Tick(float DeltaTime)
 
 	if (bIsDead) return;
 
-	if (TObjectPtr<ACharacter> PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0))
+	// ====================================================================
+	// [1] 상태에 따른 시선 및 이동 회전 처리
+	// ====================================================================
+	if (bIsAiming)
 	{
-		const FVector StartLoc = GetActorLocation();
-		const FVector TargetLoc = PlayerCharacter->GetActorLocation();
-		const FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(StartLoc, TargetLoc);
+		// 전투 중에는 이동 방향이 아닌, 플레이어 방향으로 상체를 고정합니다.
+		if (GetCharacterMovement())
+		{
+			GetCharacterMovement()->bOrientRotationToMovement = false;
+		}
 
-		// 1. Aim Pitch Calculation (Offset)
-		const FRotator DeltaRot = UKismetMathLibrary::NormalizedDeltaRotator(LookAtRot, GetActorRotation());
-		AimPitch = FMath::FInterpTo(AimPitch, DeltaRot.Pitch, DeltaTime, 15.0f);
-		AimPitch = FMath::Clamp(AimPitch, -90.0f, 90.0f);
+		if (TObjectPtr<ACharacter> PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0))
+		{
+			const FVector StartLoc = GetActorLocation();
+			const FVector TargetLoc = PlayerCharacter->GetActorLocation();
+			const FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(StartLoc, TargetLoc);
 
-		// 2. Body Rotation (Yaw Interp)
-		const FRotator TargetRotation = FRotator(GetActorRotation().Pitch, LookAtRot.Yaw, GetActorRotation().Roll);
-		const FRotator SmoothRotation = FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, 5.0f);
-		SetActorRotation(SmoothRotation);
+			const FRotator DeltaRot = UKismetMathLibrary::NormalizedDeltaRotator(LookAtRot, GetActorRotation());
+			AimPitch = FMath::FInterpTo(AimPitch, DeltaRot.Pitch, DeltaTime, 15.0f);
+			AimPitch = FMath::Clamp(AimPitch, -90.0f, 90.0f);
+
+			const FRotator TargetRotation = FRotator(GetActorRotation().Pitch, LookAtRot.Yaw, GetActorRotation().Roll);
+			const FRotator SmoothRotation = FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, 5.0f);
+			SetActorRotation(SmoothRotation);
+		}
+	}
+	else
+	{
+		// 평화 상태(순찰 중)일 때는 걸어가는 방향을 바라봅니다.
+		if (GetCharacterMovement())
+		{
+			GetCharacterMovement()->bOrientRotationToMovement = true;
+		}
+
+		// 조준 각도는 정면(0)으로 부드럽게 되돌립니다.
+		AimPitch = FMath::FInterpTo(AimPitch, 0.0f, DeltaTime, 5.0f);
 	}
 }
 
@@ -119,7 +157,7 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 	float ActualDamage = DamageAmount;
 
-	// Headshot Detection
+	// 헤드샷 판정 (대미지 2.5배)
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent* PointDamageEvent = static_cast<const FPointDamageEvent*>(&DamageEvent);
@@ -131,29 +169,48 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
 
-	// Hit Reaction
-	if (CurrentHealth > ActualDamage && HitMontages.Num() > 0)
-	{
-		const int32 RandomIndex = FMath::RandRange(0, HitMontages.Num() - 1);
-		PlayAnimMontage(HitMontages[RandomIndex]);
-	}
-
-	// Update Health State
+	// ====================================================================
+	// [버그 수정] 실제로 체력을 차감하는 핵심 로직 복구!
+	// ====================================================================
 	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
 
-	// Blackboard Update for Low Health
-	if (CurrentHealth <= MaxHealth * 0.5f)
+	// 아직 살아있다면 피격 반응 및 반격 개시
+	if (CurrentHealth > 0.0f)
 	{
+		// 피격 몽타주 재생
+		if (HitMontages.Num() > 0)
+		{
+			const int32 RandomIndex = FMath::RandRange(0, HitMontages.Num() - 1);
+			PlayAnimMontage(HitMontages[RandomIndex]);
+		}
+
+		// 공격받으면 즉시 전투 상태(조준)로 전환
+		bIsAiming = true;
+
+		// 블랙보드에 플레이어를 타겟으로 지정하여 추적 시작
 		if (AAIController* AICon = Cast<AAIController>(GetController()))
 		{
 			if (UBlackboardComponent* BB = AICon->GetBlackboardComponent())
 			{
-				BB->SetValueAsBool(FName("IsLowHealth"), true);
+				ACharacter* PlayerChar = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
+				BB->SetValueAsObject(FName("TargetActor"), PlayerChar);
+			}
+		}
+
+		// 체력이 절반 이하일 때의 추가 패턴용 블랙보드 업데이트
+		if (CurrentHealth <= MaxHealth * 0.5f)
+		{
+			if (AAIController* AICon = Cast<AAIController>(GetController()))
+			{
+				if (UBlackboardComponent* BB = AICon->GetBlackboardComponent())
+				{
+					BB->SetValueAsBool(FName("IsLowHealth"), true);
+				}
 			}
 		}
 	}
-
-	if (CurrentHealth <= 0.0f)
+	// 체력이 0 이하라면 사망 처리
+	else
 	{
 		Die(EventInstigator);
 	}

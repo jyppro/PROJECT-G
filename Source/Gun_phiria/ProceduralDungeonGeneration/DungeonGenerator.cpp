@@ -37,13 +37,13 @@ void ADungeonGenerator::BeginPlay()
 		PlayerChar->ForceBlackScreen();
 	}
 
-	// 화면이 까맣게 렌더링될 아주 짧은 시간(0.2초)을 벌어준 뒤에 진짜 생성 시작
+	// 화면이 까맣게 렌더링될 아주 짧은 시간(0.1초)을 벌어준 뒤에 진짜 생성 시작
 	FTimerHandle GenerationTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(
 		GenerationTimerHandle,
 		this,
 		&ADungeonGenerator::ExecuteGeneration,
-		0.2f,
+		0.1f,
 		false
 	);
 }
@@ -620,6 +620,11 @@ void ADungeonGenerator::SpawnShopNPC()
 
 	// 1. NPC 스폰
 	AShopNPC* SpawnedNPC = GetWorld()->SpawnActor<AShopNPC>(ShopNPCPrefab, NPCSpawnLoc, NPCRotation, SpawnParams);
+
+	if (SpawnedNPC)
+	{
+		SpawnedNPC->SpawnDefaultController();
+	}
 
 	// 2. 가판대(상점 데스크) 스폰 및 자동 연결 로직 추가!
 	if (SpawnedNPC && ShopStallPrefab)

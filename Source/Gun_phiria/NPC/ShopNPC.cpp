@@ -11,51 +11,80 @@
 
 AShopNPC::AShopNPC()
 {
-	// 충돌이나 기타 기본 세팅은 부모(AEnemyCharacter)가 알아서 해줍니다!
+	PrimaryActorTick.bCanEverTick = true;
 
-	// 상점 주인의 압도적인 스피드 설정
+	// 상점 주인의 이동 속도를 일반 적보다 훨씬 빠르게 설정
 	if (GetCharacterMovement())
 	{
-		GetCharacterMovement()->MaxWalkSpeed = 1000.0f;
+		GetCharacterMovement()->MaxWalkSpeed = BossWalkSpeed;
+
+		GetCharacterMovement()->MaxStepHeight = 100.0f;
+
+		// 2. AI가 난간이나 단상 끝에서 바닥으로 떨어지는(뛰어내리는) 길찾기를 허용합니다.
+		GetCharacterMovement()->bCanWalkOffLedges = true;
+		GetCharacterMovement()->bCanWalkOffLedgesWhenCrouching = true;
 	}
 
-	// [핵심] 부모 클래스(AEnemyCharacter)가 시작하자마자 무기를 쥐여주는 것을 방지합니다.
 	DefaultWeaponClass = nullptr;
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+
+	// 떨어뜨리는 골드도 보스급으로 설정 (부모 클래스의 변수 덮어쓰기)
+	MinGoldDrop = 300;
+	MaxGoldDrop = 500;
 }
 
 void AShopNPC::BeginPlay()
 {
-	Super::BeginPlay(); // 부모의 BeginPlay 실행 (체력 초기화 등)
+	Super::BeginPlay(); // 부모의 BeginPlay 실행 (여기서 MaxHealth 등이 세팅됨)
+
+	// ====================================================================
+	// [핵심 수정 2] 상점 주인은 적대화 전까지 완벽한 Idle 애니메이션 고정
+	// ====================================================================
+	MaxHealth *= BossHealthMultiplier;
+	CurrentHealth = MaxHealth;
+
+	bIsAiming = false; // 절대로 먼저 조준 자세를 잡지 않도록 끔
+	bIsHostile = false;
+
 	GenerateRandomShopItems();
 
-	// [수정] 게임 시작 직후 0.1초 대기 후 뇌를 정지시킵니다.
-	// (AI 컨트롤러가 완전히 생성되기도 전에 끄는 것을 방지)
-	FTimerHandle PauseTimerHandle;
-	GetWorldTimerManager().SetTimer(PauseTimerHandle, FTimerDelegate::CreateLambda([this]()
+	// 뇌(AI) 정지 로직은 그대로 유지하여 움직이지 않게 만듦
+	if (AAIController* AICon = Cast<AAIController>(GetController()))
+	{
+		if (BehaviorTreeAsset)
 		{
-			if (AAIController* AICon = Cast<AAIController>(GetController()))
+			AICon->RunBehaviorTree(BehaviorTreeAsset);
+			if (AICon->GetBrainComponent())
 			{
-				if (AICon->GetBrainComponent())
-				{
-					AICon->GetBrainComponent()->PauseLogic("PeacefulShopkeeper");
-				}
+				AICon->GetBrainComponent()->PauseLogic("PeacefulShopkeeper");
 			}
-		}), 0.1f, false);
+		}
+	}
 }
+
+// [핵심 추가] 상점 주인의 조준 애니메이션을 자연스럽게 만들기 위해 Tick을 오버라이드 합니다.
+//void AShopNPC::Tick(float DeltaTime)
+//{
+//	Super::Tick(DeltaTime); // 부모(AEnemyCharacter)의 Tick을 반드시 호출해야 AimPitch와 회전이 계산됩니다!
+//
+//	// 적대 상태가 아닐 때는 플레이어를 강제로 노려보지 않도록 AimPitch를 0으로 서서히 돌려줍니다.
+//	if (!bIsHostile && !bIsDead)
+//	{
+//		AimPitch = FMath::FInterpTo(AimPitch, 0.0f, DeltaTime, 5.0f);
+//	}
+//}
 
 float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	if (bIsDead) return 0.f;
 
-	// 1. 처음 맞았을 때 적대 상태로 전환
 	if (!bIsHostile && DamageAmount > 0.f)
 	{
 		bIsHostile = true;
-		bIsAiming = true; // 부모 클래스의 변수 (애니메이션용)
+		bIsAiming = true;
 
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("You shouldn't have done that..."));
 
-		// [핵심 수정 1] 무기를 정중앙(0,0,0)이 아닌 NPC의 현재 위치에 무조건(AlwaysSpawn) 스폰합니다!
 		if (HiddenWeaponClass)
 		{
 			FActorSpawnParameters SpawnParams;
@@ -68,18 +97,16 @@ float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, 
 			{
 				FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
 				CurrentWeapon->AttachToComponent(GetMesh(), AttachmentRules, FName("WeaponSocket"));
+
+				CurrentWeapon->MinWeaponDamage *= BossDamageMultiplier;
+				CurrentWeapon->MaxWeaponDamage *= BossDamageMultiplier;
+				// 상점 주인의 연사력 폭발!
+				CurrentWeapon->FireRate *= 5.0f;
 			}
 		}
 
-		// [핵심 수정 2] 일시정지 해두었던 뇌를 깨우고, 총알이 아닌 '플레이어'를 확실하게 타겟으로 지정합니다!
 		if (AAIController* AICon = Cast<AAIController>(GetController()))
 		{
-			// 트리가 멈춰있거나 꼬였을 수 있으니 아예 확실하게 처음부터 다시 켜줍니다.
-			if (BehaviorTreeAsset)
-			{
-				AICon->RunBehaviorTree(BehaviorTreeAsset);
-			}
-
 			if (AICon->GetBrainComponent())
 			{
 				AICon->GetBrainComponent()->ResumeLogic("PeacefulShopkeeper");
@@ -87,27 +114,36 @@ float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, 
 
 			if (UBlackboardComponent* BlackboardComp = AICon->GetBlackboardComponent())
 			{
-				// DamageCauser(총알) 대신 확실하게 PlayerCharacter를 가져와 타겟으로 설정합니다.
 				ACharacter* PlayerChar = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 				BlackboardComp->SetValueAsObject(FName("TargetActor"), PlayerChar);
+
+				// [핵심 추가] 쿨다운 계산 및 블랙보드 전달
+				if (CurrentWeapon && CurrentWeapon->FireRate > 0.0f)
+				{
+					// FireRate(분당 발사수)를 초당 발사 간격으로 변환
+					float FireDelay = 60.0f / CurrentWeapon->FireRate;
+					BlackboardComp->SetValueAsFloat(FName("AttackCooldown"), FireDelay);
+				}
+				else
+				{
+					// 무기가 없거나 계산 불가 시 기본 딜레이 (안전 장치)
+					BlackboardComp->SetValueAsFloat(FName("AttackCooldown"), 0.5f);
+				}
+
+				BlackboardComp->SetValueAsBool(FName("UseBurst"), true);
 			}
 		}
 	}
 
-	// 2. 체력 차감 로직은 부모(AEnemyCharacter)에게 온전히 맡깁니다.
-	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
-
-	return ActualDamage;
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 }
 
 void AShopNPC::Die(AController* Killer)
 {
-	// 1. 부모의 죽음 처리 (무기 파괴, 래그돌 물리엔진, 골드 드랍 등)를 그대로 실행합니다.
-	Super::Die(Killer);
+	Super::Die(Killer); // 골드 드랍 및 래그돌 처리
 
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, TEXT("Shop owner defeated!"));
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, TEXT("Shopkeeper Defeated!"));
 
-	// 2. 상점 주인만의 특별한 죽음 처리 (다음 게임부터 상점 출현 금지)
 	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
 	{
 		GameInst->bIsShopKeeperKilled = true;
@@ -116,7 +152,6 @@ void AShopNPC::Die(AController* Killer)
 
 void AShopNPC::GenerateRandomShopItems()
 {
-	// (이전 코드와 완전히 동일하므로 그대로 두시면 됩니다!)
 	if (!ItemDataTable) return;
 
 	TArray<FName> AllRowNames = ItemDataTable->GetRowNames();
