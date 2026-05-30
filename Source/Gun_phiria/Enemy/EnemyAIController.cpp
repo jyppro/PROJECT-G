@@ -47,30 +47,6 @@ void AEnemyAIController::BeginPlay()
 	}
 }
 
-//void AEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus const Stimulus)
-//{
-//	TObjectPtr<ACharacter> PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
-//
-//	if (Actor == PlayerCharacter)
-//	{
-//		TObjectPtr<AEnemyCharacter> Enemy = Cast<AEnemyCharacter>(GetPawn());
-//		TObjectPtr<UBlackboardComponent> BB = GetBlackboardComponent();
-//
-//		if (Stimulus.WasSuccessfullySensed())
-//		{
-//			// Target Acquired
-//			if (BB) BB->SetValueAsObject(FName("TargetActor"), PlayerCharacter);
-//			if (Enemy) Enemy->bIsAiming = true;
-//		}
-//		else
-//		{
-//			// Target Lost
-//			if (BB) BB->ClearValue(FName("TargetActor"));
-//			if (Enemy) Enemy->bIsAiming = false;
-//		}
-//	}
-//}
-
 void AEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus const Stimulus)
 {
 	TObjectPtr<ACharacter> PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
@@ -82,9 +58,7 @@ void AEnemyAIController::OnTargetDetected(AActor* Actor, FAIStimulus const Stimu
 
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			// ====================================================================
-			// [핵심 수정] 시야에 플레이어가 들어왔을 때의 예외 처리
-			// ====================================================================
+			// 시야에 플레이어가 들어왔을 때의 예외 처리
 			if (Enemy)
 			{
 				// 1. 만약 이 적이 '상점 주인(ShopNPC)'이라면 캐스팅해 봅니다.

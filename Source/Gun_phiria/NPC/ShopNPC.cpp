@@ -37,9 +37,7 @@ void AShopNPC::BeginPlay()
 {
 	Super::BeginPlay(); // 부모의 BeginPlay 실행 (여기서 MaxHealth 등이 세팅됨)
 
-	// ====================================================================
-	// [핵심 수정 2] 상점 주인은 적대화 전까지 완벽한 Idle 애니메이션 고정
-	// ====================================================================
+	// 상점 주인은 적대화 전까지 완벽한 Idle 애니메이션 고정
 	MaxHealth *= BossHealthMultiplier;
 	CurrentHealth = MaxHealth;
 
@@ -61,18 +59,6 @@ void AShopNPC::BeginPlay()
 		}
 	}
 }
-
-// [핵심 추가] 상점 주인의 조준 애니메이션을 자연스럽게 만들기 위해 Tick을 오버라이드 합니다.
-//void AShopNPC::Tick(float DeltaTime)
-//{
-//	Super::Tick(DeltaTime); // 부모(AEnemyCharacter)의 Tick을 반드시 호출해야 AimPitch와 회전이 계산됩니다!
-//
-//	// 적대 상태가 아닐 때는 플레이어를 강제로 노려보지 않도록 AimPitch를 0으로 서서히 돌려줍니다.
-//	if (!bIsHostile && !bIsDead)
-//	{
-//		AimPitch = FMath::FInterpTo(AimPitch, 0.0f, DeltaTime, 5.0f);
-//	}
-//}
 
 float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
@@ -100,7 +86,6 @@ float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, 
 
 				CurrentWeapon->MinWeaponDamage *= BossDamageMultiplier;
 				CurrentWeapon->MaxWeaponDamage *= BossDamageMultiplier;
-				// 상점 주인의 연사력 폭발!
 				CurrentWeapon->FireRate *= 5.0f;
 			}
 		}
@@ -117,7 +102,7 @@ float AShopNPC::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, 
 				ACharacter* PlayerChar = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 				BlackboardComp->SetValueAsObject(FName("TargetActor"), PlayerChar);
 
-				// [핵심 추가] 쿨다운 계산 및 블랙보드 전달
+				// 쿨다운 계산 및 블랙보드 전달
 				if (CurrentWeapon && CurrentWeapon->FireRate > 0.0f)
 				{
 					// FireRate(분당 발사수)를 초당 발사 간격으로 변환

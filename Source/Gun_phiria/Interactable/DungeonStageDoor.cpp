@@ -1,10 +1,11 @@
 #include "DungeonStageDoor.h"
-#include "../Gun_phiriaCharacter.h" // 캐릭터 헤더 포함 (경로 주의)
+#include "../Gun_phiriaCharacter.h" 
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "TimerManager.h"
 #include "../Gun_phiriaGameInstance.h"
+#include "Blueprint/UserWidget.h" // [추가] 위젯 생성을 위한 헤더
 
 ADungeonStageDoor::ADungeonStageDoor()
 {
@@ -29,37 +30,79 @@ void ADungeonStageDoor::Interact_Implementation(AActor* Interactor)
 	if (bIsTransitioning) return;
 
 	InteractingPlayer = Cast<AGun_phiriaCharacter>(Interactor);
-	if (InteractingPlayer)
+	if (!InteractingPlayer) return;
+
+	APlayerController* PC = Cast<APlayerController>(InteractingPlayer->GetController());
+	if (!PC) return;
+
+	bIsTransitioning = true;
+	InteractingPlayer->DisableInput(PC);
+
+	// ==========================================
+	// 1. 공통: 플레이어 데이터 저장
+	// ==========================================
+	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
+	if (GameInst)
 	{
-		if (APlayerController* PC = Cast<APlayerController>(InteractingPlayer->GetController()))
+		bool bOnlySapphire = (DoorType == EDungeonDoorType::Door_ReturnVillage);
+		GameInst->SavePlayerData(InteractingPlayer, bOnlySapphire);
+	}
+
+	// ==========================================
+	// 2. 분기: 다음 스테이지(NextStage)일 경우 -> 맵 UI 띄우기
+	// ==========================================
+	if (DoorType == EDungeonDoorType::Door_NextStage)
+	{
+		if (StageMapWidgetClass)
 		{
-			bIsTransitioning = true;
-			InteractingPlayer->DisableInput(PC);
-
-			// ==========================================
-			// [데이터 저장 실행!]
-			// ==========================================
-			UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
-			if (GameInst)
+			// 맵 데이터가 비어있다면 생성
+			if (GameInst && GameInst->CurrentRunMap.IsEmpty())
 			{
-				// 문 타입이 ReturnVillage라면 true를 넘겨 사파이어만 저장
-				bool bOnlySapphire = (DoorType == EDungeonDoorType::Door_ReturnVillage);
-				GameInst->SavePlayerData(InteractingPlayer, bOnlySapphire);
+				GameInst->GenerateRunMap();
 			}
 
-			if (PC->PlayerCameraManager)
+			if (UUserWidget* MapUI = CreateWidget<UUserWidget>(PC, StageMapWidgetClass))
 			{
-				PC->PlayerCameraManager->StartCameraFade(0.0f, 1.0f, FadeOutDuration, FLinearColor::Black, false, true);
-			}
+				MapUI->AddToViewport();
 
-			GetWorld()->GetTimerManager().SetTimer(LevelTransitionTimerHandle, this, &ADungeonStageDoor::OpenNextLevel, FadeOutDuration, false);
+				// [수정됨] 마우스 활성화 및 UI 전용 입력 모드로 변경
+				PC->SetShowMouseCursor(true);
+
+				// 포커스를 UI로 맞추고 게임 조작(이동, 공격 등)을 차단
+				FInputModeUIOnly InputMode;
+				InputMode.SetWidgetToFocus(MapUI->TakeWidget());
+				PC->SetInputMode(InputMode);
+
+				// 주의: UGameplayStatics::SetGamePaused(GetWorld(), true); 삭제됨!
+
+				return;
+			}
+		}
+		else
+		{
+			// [안전장치] 만약 블루프린트에서 위젯을 할당하지 않았다면 화면에 빨간 경고 띄우기
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[Error] StageMapWidgetClass is NULL! Please assign it in the Blueprint!"));
+
+			// 에러가 났으므로 갇히지 않게 조작을 다시 풀어줌
+			InteractingPlayer->EnableInput(PC);
+			bIsTransitioning = false;
+			return;
 		}
 	}
+
+	// ==========================================
+	// 3. 분기: 마을 귀환(ReturnVillage)이거나 위젯이 없을 경우 -> 페이드아웃 후 즉시 이동
+	// ==========================================
+	if (PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->StartCameraFade(0.0f, 1.0f, FadeOutDuration, FLinearColor::Black, false, true);
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(LevelTransitionTimerHandle, this, &ADungeonStageDoor::OpenNextLevel, FadeOutDuration, false);
 }
 
 FString ADungeonStageDoor::GetInteractText_Implementation()
 {
-	// 에디터에서 설정한 문의 타입에 따라 텍스트를 다르게 띄워줍니다.
 	switch (DoorType)
 	{
 	case EDungeonDoorType::Door_NextStage:
@@ -75,8 +118,6 @@ void ADungeonStageDoor::OpenNextLevel()
 {
 	FName LevelToLoad = NextLevelName;
 
-	// 만약 에디터에서 이동할 레벨 이름을 비워두었다면?
-	// -> "현재 맵"의 이름을 가져와서 다시 로드합니다! (새로운 랜덤 던전 생성됨)
 	if (LevelToLoad.IsNone())
 	{
 		LevelToLoad = FName(*GetWorld()->GetName());

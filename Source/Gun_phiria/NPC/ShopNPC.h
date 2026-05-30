@@ -15,7 +15,7 @@ public:
 	// virtual void Tick(float DeltaTime) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
-	// [추가] 부모의 죽음 로직을 덮어써서 상점만의 특별한 죽음 처리를 합니다.
+	// 부모의 죽음 로직을 덮어써서 상점만의 특별한 죽음 처리를 합니다.
 	virtual void Die(AController* Killer) override;
 
 	// 상점 고유 기능 유지

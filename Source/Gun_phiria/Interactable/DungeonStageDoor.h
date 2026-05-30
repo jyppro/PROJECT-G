@@ -36,6 +36,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon Transition")
 	float FadeOutDuration;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon Transition|UI")
+	TSubclassOf<class UUserWidget> StageMapWidgetClass;
+
 	void OpenNextLevel();
 
 	// 기준점이 되어줄 빈 루트 컴포넌트

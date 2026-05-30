@@ -92,9 +92,7 @@ void AEnemyCharacter::Tick(float DeltaTime)
 
 	if (bIsDead) return;
 
-	// ====================================================================
-	// [1] 상태에 따른 시선 및 이동 회전 처리
-	// ====================================================================
+	// 상태에 따른 시선 및 이동 회전 처리
 	if (bIsAiming)
 	{
 		// 전투 중에는 이동 방향이 아닌, 플레이어 방향으로 상체를 고정합니다.
@@ -169,9 +167,7 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 
 	ActualDamage = Super::TakeDamage(ActualDamage, DamageEvent, EventInstigator, DamageCauser);
 
-	// ====================================================================
-	// [버그 수정] 실제로 체력을 차감하는 핵심 로직 복구!
-	// ====================================================================
+	// 실제로 체력을 차감하는 핵심 로직 복구!
 	CurrentHealth = FMath::Clamp(CurrentHealth - ActualDamage, 0.0f, MaxHealth);
 
 	// 아직 살아있다면 피격 반응 및 반격 개시
@@ -218,15 +214,12 @@ float AEnemyCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damage
 	return ActualDamage;
 }
 
-// --- 수정된 부분: 매개변수 AController* Killer 추가 ---
 void AEnemyCharacter::Die(AController* Killer)
 {
 	if (bIsDead) return;
 	bIsDead = true;
 
-	// ==========================================
 	// 1. 플레이어에게 골드 보상 지급
-	// ==========================================
 	int32 DroppedGold = FMath::RandRange(MinGoldDrop, MaxGoldDrop);
 
 	// 나를 죽인 킬러가 있다면
@@ -246,7 +239,6 @@ void AEnemyCharacter::Die(AController* Killer)
 			PlayerChar->AddGold(DroppedGold);
 		}
 	}
-	// ==========================================
 
 	// 2. 무기 파괴 및 물리(랙돌) 처리
 	if (CurrentWeapon)
