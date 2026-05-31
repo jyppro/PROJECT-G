@@ -102,12 +102,9 @@ FString ADungeonStageDoor::GetInteractText_Implementation()
 {
 	switch (DoorType)
 	{
-	case EDungeonDoorType::Door_NextStage:
-		return TEXT("Next Stage");
-	case EDungeonDoorType::Door_ReturnVillage:
-		return TEXT("Dungeon Clear!");
-	default:
-		return TEXT("Open Door");
+	case EDungeonDoorType::Door_NextStage: return TEXT("Next Stage");
+	case EDungeonDoorType::Door_ReturnVillage: return TEXT("Dungeon Clear!");
+	default: return TEXT("Open Door");
 	}
 }
 

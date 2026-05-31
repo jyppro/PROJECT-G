@@ -8,18 +8,17 @@ void UGun_phiriaGameInstance::GenerateRunMap()
 	CurrentNodeID = 0;
 	int32 GlobalNodeID = 0;
 
-	// 예시: 총 6층 (0: 모루, 1~2: 일반파밍, 3: 미니보스, 4: 일반파밍, 5: 보스)
+	// 총 6층 (0: 모루, 1~2: 일반파밍, 3: 미니보스, 4: 일반파밍, 5: 보스)
 	const int32 TotalFloors = 6;
 	TArray<TArray<int32>> FloorNodeIDs;
 	FloorNodeIDs.SetNum(TotalFloors);
 
-	// 9가지 타입 풀 정의 (실제로는 헤더에 TArray나 Enum으로 빼두는 것이 좋습니다)
-	TArray<FName> RewardTypes = { TEXT("Artifact"), TEXT("EXP"), TEXT("Enchant"), TEXT("Dice"), TEXT("Gold"), TEXT("Sapphire"), TEXT("Shop") };
+	// [수정됨] 현재 구현된 일반 방은 골드와 상점뿐이므로 두 가지만 풀에 넣습니다.
+	TArray<FName> RewardTypes = { TEXT("Gold"), TEXT("Shop") };
 
 	// 1. 층별 노드 생성
 	for (int32 Floor = 0; Floor < TotalFloors; Floor++)
 	{
-		// 시작(모루)과 끝(보스)은 1개, 나머지는 무조건 3개
 		int32 NodesInThisFloor = (Floor == 0 || Floor == TotalFloors - 1) ? 1 : 3;
 
 		for (int32 i = 0; i < NodesInThisFloor; i++)
@@ -27,32 +26,46 @@ void UGun_phiriaGameInstance::GenerateRunMap()
 			FStageNode NewNode;
 			NewNode.NodeID = GlobalNodeID;
 			NewNode.bIsCleared = false;
-
 			NewNode.FloorLevel = Floor;
 			NewNode.ColumnIndex = i;
 
-			// 층별 고정 노드 할당
+			// 층별 고정 노드 할당 및 실제 StageData 연결
 			if (Floor == 0)
 			{
 				NewNode.RoomIconType = TEXT("Anvil");
-				// NewNode.StageData = AnvilStageData; // (에셋 풀 연결 필요)
+				NewNode.StageData = AnvilStageData; // [수정됨] 모루 데이터 할당
 			}
 			else if (Floor == TotalFloors - 1)
 			{
 				NewNode.RoomIconType = TEXT("Boss");
-				// NewNode.StageData = BossStageData; 
+				NewNode.StageData = BossStageData;  // [수정됨] 보스 데이터 할당
 			}
-			else if (Floor == 3) // 4층(인덱스 3) 미니보스 고정
+			else if (Floor == 3)
 			{
 				NewNode.RoomIconType = TEXT("MiniBoss");
-				// NewNode.StageData = MiniBossStagePool[...]; 
+				// [수정됨] 미니보스 풀에서 무작위 하나 선택
+				if (EliteStagePool.Num() > 0)
+				{
+					NewNode.StageData = EliteStagePool[FMath::RandRange(0, EliteStagePool.Num() - 1)];
+				}
 			}
 			else
 			{
-				// 나머지 일반 층은 9가지 중 무작위 보상 방 배정
+				// 나머지 일반 층은 골드(NormalPool)와 상점(ShopData) 중 무작위 배정
 				FName SelectedReward = RewardTypes[FMath::RandRange(0, RewardTypes.Num() - 1)];
 				NewNode.RoomIconType = SelectedReward;
-				// NewNode.StageData = (타입에 맞는 데이터 배정);
+
+				if (SelectedReward == TEXT("Gold"))
+				{
+					if (NormalStagePool.Num() > 0)
+					{
+						NewNode.StageData = NormalStagePool[FMath::RandRange(0, NormalStagePool.Num() - 1)];
+					}
+				}
+				else if (SelectedReward == TEXT("Shop"))
+				{
+					NewNode.StageData = ShopStageData;
+				}
 			}
 
 			CurrentRunMap.Add(GlobalNodeID, NewNode);
@@ -61,7 +74,7 @@ void UGun_phiriaGameInstance::GenerateRunMap()
 		}
 	}
 
-	// 2. 노드 연결 (무조건 3개의 선택지가 나오도록 각 노드를 다음 층의 모든 노드와 연결)
+	// 2. 노드 연결 (기존 코드와 동일하게 무조건 3갈래 연결)
 	for (int32 Floor = 0; Floor < TotalFloors - 1; Floor++)
 	{
 		TArray<int32>& CurrentLayer = FloorNodeIDs[Floor];

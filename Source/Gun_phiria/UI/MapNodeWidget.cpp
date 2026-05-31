@@ -22,7 +22,7 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	NodeID = InNodeID;
 	RoomIconType = InIconType;
 
-	// [1] 플레이어 위치 아이콘 보이기/숨기기
+	// [1] 플레이어 위치 아이콘 보이기/숨기기 (UMG에서 PlayerIcon이 변수로 잘 등록되어 있어야 보입니다!)
 	if (PlayerIcon)
 	{
 		PlayerIcon->SetVisibility(bIsCurrentNode ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
@@ -31,10 +31,12 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	// [2] 상태에 따른 마우스 반응 및 UMG 스타일 적용 처리
 	if (bIsCurrentNode)
 	{
-		// [현재 노드] UMG의 Disabled 스타일 발동 방지 (원본 유지) + 마우스 클릭만 무시
+		// [현재 노드] 마우스 클릭 무시 + 색상을 까맣게(RGB 0.15) 변경하여 시각적으로 막혔음을 표시!
 		NodeButton->SetIsEnabled(true);
 		NodeButton->SetVisibility(ESlateVisibility::HitTestInvisible);
-		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+
+		// 여기가 문제였습니다! 흰색(1.0f) 대신 까맣게(0.15f) 칠해줍니다.
+		NodeButton->SetColorAndOpacity(FLinearColor(0.15f, 0.15f, 0.15f, 1.0f));
 	}
 	else if (bIsSelectable)
 	{
@@ -47,10 +49,8 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	{
 		// [아직 갈 수 없는 미래의 노드] 버튼을 비활성화하여 블루프린트의 Disabled 설정을 그대로 사용
 		NodeButton->SetIsEnabled(false);
-		NodeButton->SetVisibility(ESlateVisibility::Visible); // 가시성은 정상 유지
+		NodeButton->SetVisibility(ESlateVisibility::Visible);
 
-		// Disabled 상태일 때 색상이 겹치지 않도록 기본 흰색으로 둡니다.
-		// (블루프린트의 Disabled > Tint 색상이나 이미지가 이를 덮어쓰게 됩니다.)
 		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 	}
 }
@@ -60,28 +60,28 @@ void UMapNodeWidget::OnNodeButtonClicked()
 	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	if (!GameInst) return;
 
+	// 1. 선택한 노드가 맵 데이터에 존재하는지 확인
 	if (GameInst->CurrentRunMap.Contains(NodeID))
 	{
+		// 2. GameInstance에 다음 맵 데이터 및 현재 위치 업데이트
 		FStageNode SelectedNode = GameInst->CurrentRunMap[NodeID];
 		GameInst->NextStageData = SelectedNode.StageData;
 		GameInst->CurrentNodeID = NodeID;
 
+		// 3. 마우스 커서 숨기기 및 입력 모드 원래대로 복구
 		if (APlayerController* PC = GetOwningPlayer())
 		{
-			// [수정됨] 마우스 숨기고 다시 게임 입력 모드로 복구
 			PC->SetShowMouseCursor(false);
 			PC->SetInputMode(FInputModeGameOnly());
 
-			// 캐릭터 조작 다시 활성화 (새 레벨로 가지만 안전을 위해)
+			// (선택) 캐릭터 조작 다시 활성화
 			if (APawn* PlayerPawn = PC->GetPawn())
 			{
 				PlayerPawn->EnableInput(PC);
 			}
 		}
 
-		// 주의: UGameplayStatics::SetGamePaused(GetWorld(), false); 삭제됨!
-
-		// 다음 맵으로 이동
+		// 4. 다음 던전 레벨 열기 (맵 이름이 다르면 알맞게 수정해주세요!)
 		UGameplayStatics::OpenLevel(GetWorld(), TEXT("DungeonLevel_Procedural"));
 	}
 }

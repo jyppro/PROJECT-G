@@ -112,6 +112,9 @@ public:
 	// [추가] 맵 생성용 스테이지 데이터 풀 (블루프린트에서 할당)
 	// =================================================
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run Data|Pools")
+	UDungeonStageData* BasicStartStageData;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run Data|Pools")
 	TArray<UDungeonStageData*> NormalStagePool; // 일반 방 후보군
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run Data|Pools")
@@ -122,4 +125,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run Data|Pools")
 	UDungeonStageData* ShopStageData;           // 상점 방 고정 데이터 (세피리아식)
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run Data|Pools")
+	UDungeonStageData* AnvilStageData;
 };

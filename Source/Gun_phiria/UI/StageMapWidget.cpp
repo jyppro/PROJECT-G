@@ -39,17 +39,17 @@ void UStageMapWidget::BuildMapUI()
 		UMapNodeWidget* NewNodeWidget = CreateWidget<UMapNodeWidget>(this, MapNodeWidgetClass);
 		if (NewNodeWidget)
 		{
-			// [수정] 현재 노드인지, 다음으로 갈 수 있는 노드인지 판별
 			bool bIsCurrentNode = (NodeData.NodeID == GameInst->CurrentNodeID);
-
-			// 현재 플레이어가 있는 노드의 'ConnectedNextNodes'에 포함되어 있다면 선택 가능!
 			bool bIsSelectable = false;
+
+			// [수정] 현재 노드(0번)와 선으로 연결된 다음 층의 노드들만 선택 가능하게 만듭니다.
 			if (GameInst->CurrentRunMap.Contains(GameInst->CurrentNodeID))
 			{
 				bIsSelectable = GameInst->CurrentRunMap[GameInst->CurrentNodeID].ConnectedNextNodes.Contains(NodeData.NodeID);
 			}
 
-			// 파라미터를 추가하여 셋업 함수 호출
+			// 완성된 상태(Current, Selectable)를 위젯에 넘겨줍니다. 
+			// (작성하신 SetupNode 코드가 여기서 완벽하게 받아 처리합니다!)
 			NewNodeWidget->SetupNode(NodeData.NodeID, NodeData.RoomIconType, bIsCurrentNode, bIsSelectable);
 
 			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MapCanvas->AddChild(NewNodeWidget));
@@ -87,48 +87,47 @@ TArray<FMapLineData> UStageMapWidget::GetLineDataToDraw()
 	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	if (!GameInst || !MapCanvas) return LineDataArray;
 
-	// [복구됨] 전체 노드를 순회하는 바깥쪽 루프
-	for (const auto& Pair : GameInst->CurrentRunMap)
+	// [수정 핵심] 전체 맵을 순회하지 않고, 오직 '현재 노드(CurrentNodeID)'만 검사합니다.
+	int32 CurrentNodeID = GameInst->CurrentNodeID;
+
+	// 현재 맵 데이터에 CurrentNodeID가 존재하는지 확인
+	if (!GameInst->CurrentRunMap.Contains(CurrentNodeID) || !SpawnedNodeWidgets.Contains(CurrentNodeID))
 	{
-		int32 CurrentNodeID = Pair.Key;
-		const FStageNode& NodeInfo = Pair.Value;
+		return LineDataArray;
+	}
 
-		if (!SpawnedNodeWidgets.Contains(CurrentNodeID)) continue;
+	// 현재 노드의 데이터와 위젯 정보 가져오기
+	const FStageNode& CurrentNodeInfo = GameInst->CurrentRunMap[CurrentNodeID];
+	UMapNodeWidget* StartWidget = SpawnedNodeWidgets[CurrentNodeID];
+	UCanvasPanelSlot* StartSlot = Cast<UCanvasPanelSlot>(StartWidget->Slot);
 
-		UMapNodeWidget* StartWidget = SpawnedNodeWidgets[CurrentNodeID];
-		UCanvasPanelSlot* StartSlot = Cast<UCanvasPanelSlot>(StartWidget->Slot);
-		if (!StartSlot) continue;
+	if (!StartSlot) return LineDataArray;
 
-		// 여기서 StartPos가 정의됩니다!
-		FVector2D StartPos = StartSlot->GetPosition();
+	// 선이 시작될 현재 노드의 좌표
+	FVector2D StartPos = StartSlot->GetPosition();
 
-		// 이 노드와 연결된 '다음 노드'들의 좌표를 찾아서 선 데이터 생성
-		for (int32 NextNodeID : NodeInfo.ConnectedNextNodes)
+	// 오직 현재 노드와 연결된 '다음 노드'들로만 선을 생성합니다.
+	for (int32 NextNodeID : CurrentNodeInfo.ConnectedNextNodes)
+	{
+		if (SpawnedNodeWidgets.Contains(NextNodeID))
 		{
-			if (SpawnedNodeWidgets.Contains(NextNodeID))
-			{
-				UMapNodeWidget* EndWidget = SpawnedNodeWidgets[NextNodeID];
-				UCanvasPanelSlot* EndSlot = Cast<UCanvasPanelSlot>(EndWidget->Slot);
-				if (EndSlot)
-				{
-					FMapLineData NewLine;
-					NewLine.StartPos = StartPos;
-					NewLine.EndPos = EndSlot->GetPosition();
+			UMapNodeWidget* EndWidget = SpawnedNodeWidgets[NextNodeID];
+			UCanvasPanelSlot* EndSlot = Cast<UCanvasPanelSlot>(EndWidget->Slot);
 
-					// [추가됨] 플레이어 위치에 따른 선 색상 분기
-					if (CurrentNodeID == GameInst->CurrentNodeID)
-					{
-						NewLine.LineColor = FLinearColor::White;
-					}
-					else
-					{
-						NewLine.LineColor = FLinearColor(0.1f, 0.1f, 0.1f, 0.3f);
-					}
-					LineDataArray.Add(NewLine);
-				}
+			if (EndSlot)
+			{
+				FMapLineData NewLine;
+				NewLine.StartPos = StartPos;
+				NewLine.EndPos = EndSlot->GetPosition();
+
+				// 이 선들은 무조건 현재 노드에서 뻗어나가므로 항상 하얀색으로 칠합니다.
+				NewLine.LineColor = FLinearColor::White;
+
+				LineDataArray.Add(NewLine);
 			}
 		}
 	}
 
+	// 완성된 선 데이터 배열을 반환합니다.
 	return LineDataArray;
 }

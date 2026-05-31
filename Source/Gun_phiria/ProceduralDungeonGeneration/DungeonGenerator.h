@@ -115,6 +115,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Dungeon|Generation")
 	void TeleportPlayerToRandomRoom();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dungeon")
+	void OnGenerationFinished();
+
 protected:
 	// --- Lifecycle ---
 	virtual void BeginPlay() override;
@@ -191,8 +194,15 @@ protected:
 	void ExecuteGeneration();
 
 	// 상점 NPC 프리팹
-	UPROPERTY(EditAnywhere, Category = "NPC|Prefabs")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
 	TSubclassOf<class AShopNPC> ShopNPCPrefab;
+
+	// [추가] 특수 방에 스폰할 액터 프리팹들
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
+	TSubclassOf<AActor> AnvilPrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
+	TSubclassOf<AActor> GoldRewardPrefab;
 
 	// 상점 방을 고르고 NPC를 스폰하는 함수
 	void SpawnShopNPC();

@@ -50,6 +50,34 @@ void ADungeonGenerator::BeginPlay()
 
 void ADungeonGenerator::ExecuteGeneration()
 {
+	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+
+	// 1. 디버그: 게임 인스턴스를 아예 못 찾은 경우
+	if (!GameInst)
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[Error] GameInstance is NULL!"));
+		return;
+	}
+
+	// 2. 디버그: NextStageData가 비어있는 경우 (문에서 안 넘겨줬거나 에셋 할당이 안 됨)
+	if (!GameInst->NextStageData)
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[Error] NextStageData is NULL! (Check BP_Gun_phiriaGameInstance)"));
+		return;
+	}
+
+	// 3. 디버그: 데이터 읽기 성공!
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Green, FString::Printf(TEXT("[Success] Loaded Data: %s"), *GameInst->NextStageData->GetName()));
+
+	// --- 데이터 덮어쓰기 로직 ---
+	UDungeonStageData* StageData = GameInst->NextStageData;
+	NumberOfRoomsToGenerate = StageData->NumberOfRoomsToGenerate;
+
+	if (StageData->MainRoomPrefabs.Num() > 0) MainRoomPrefabs = StageData->MainRoomPrefabs;
+	if (StageData->DefaultEnemyPrefab) EnemyPrefab = StageData->DefaultEnemyPrefab;
+	if (StageData->StageItemDataTable) ItemDataTable = StageData->StageItemDataTable;
+	if (StageData->StageDoorPrefab) StageDoorPrefab = StageData->StageDoorPrefab;
+
 	GenerateRandomRooms();
 	SeparateRooms();
 	SelectMainRooms();
@@ -66,6 +94,8 @@ void ADungeonGenerator::ExecuteGeneration()
 	SpawnItemsInRooms();
 
 	if (bShowDebugBoxes) DrawDebugRooms();
+
+	OnGenerationFinished();
 
 	// 모든 생성이 끝나고 화면 서서히 밝히기
 	if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
@@ -270,7 +300,9 @@ void ADungeonGenerator::SpawnDungeonActors()
 {
 	if (MainRoomPrefabs.IsEmpty()) return;
 
-	// 방 스폰
+	// ========================================================
+	// [원상복구] 1. 메인 방 스폰 (기존 로직 그대로)
+	// ========================================================
 	for (const auto& Room : RoomList)
 	{
 		if (Room.bIsMainRoom && Room.SelectedPrefabIndex >= 0)
@@ -279,7 +311,12 @@ void ADungeonGenerator::SpawnDungeonActors()
 		}
 	}
 
-	// 복도 바닥 스폰
+	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
+	if (!GameInst || !GameInst->NextStageData) return;
+
+	// ========================================================
+	// [원상복구] 2. 복도 바닥 스폰 (기존 로직 그대로)
+	// ========================================================
 	for (const FVector& Tile : CorridorTiles)
 	{
 		if (TObjectPtr<AActor> Corridor = GetWorld()->SpawnActor<AActor>(CorridorPrefab, Tile, FRotator::ZeroRotator))
@@ -288,7 +325,11 @@ void ADungeonGenerator::SpawnDungeonActors()
 		}
 	}
 
-	// 복도 벽 스폰
+	UDungeonStageData* CurrentStage = GameInst->NextStageData;
+
+	// ========================================================
+	// [원상복구] 3. 복도 벽(Wall) 계산 및 스폰 (날아갔던 정교한 알고리즘 복구!)
+	// ========================================================
 	auto HasAdjacentCorridor = [&](FVector CheckPos) -> bool
 		{
 			for (const FVector& Tile : CorridorTiles)
@@ -323,7 +364,7 @@ void ADungeonGenerator::SpawnDungeonActors()
 
 				if (TObjectPtr<AActor> Wall = GetWorld()->SpawnActor<AActor>(CorridorPrefab, WallPos, FRotator::ZeroRotator))
 				{
-					// 방향에 따른 스케일 조절 (i < 2는 남북 방향, i >= 2는 동서 방향)
+					// 방향에 따른 스케일 적용 (i < 2는 남북, i >= 2는 동서)
 					FVector WallScale = (i < 2) ?
 						FVector(CorridorWidth / 100.f, WallThickness / 100.f, WallHeight / 100.f) :
 						FVector(WallThickness / 100.f, CorridorWidth / 100.f, WallHeight / 100.f);
@@ -334,7 +375,9 @@ void ADungeonGenerator::SpawnDungeonActors()
 		}
 	}
 
-	// 문 생성
+	// ========================================================
+	// [원상복구] 4. 문(Door) 생성 및 FakeWall 교체 (날아갔던 문 뚫기 로직 복구!)
+	// ========================================================
 	FCollisionObjectQueryParams ObjectParams = FCollisionObjectQueryParams::AllObjects;
 	for (const FVector& Tile : CorridorTiles)
 	{
@@ -348,17 +391,41 @@ void ADungeonGenerator::SpawnDungeonActors()
 					FTransform DoorTr = Result.GetComponent()->GetComponentTransform();
 					if (TObjectPtr<AActor> Door = GetWorld()->SpawnActor<AActor>(DoorPrefab, DoorTr))
 					{
-						// 문의 크기를 원래 FakeWall의 크기로 설정
+						// 기존 FakeWall의 크기를 그대로 문에 적용
 						Door->SetActorScale3D(DoorTr.GetScale3D());
-
 						Door->SetActorHiddenInGame(true);
 						Door->SetActorEnableCollision(false);
 						SpawnedDoors.Add(Door);
 					}
-					Result.GetComponent()->DestroyComponent();
+					Result.GetComponent()->DestroyComponent(); // FakeWall 파괴 (문 뚫기!)
 				}
 			}
 		}
+	}
+
+	// ========================================================
+	// [새로운 기능] 5. 특수 액터(모루, 골드) 스폰
+	// ========================================================
+	TArray<FDungeonRoom> MainRooms;
+	for (const FDungeonRoom& Room : RoomList)
+	{
+		if (Room.bIsMainRoom) MainRooms.Add(Room);
+	}
+
+	if (MainRooms.IsEmpty()) return;
+
+	if (CurrentStage->bForceSpawnAnvil && AnvilPrefab)
+	{
+		FVector SpawnLoc = MainRooms[0].CenterLocation;
+		SpawnLoc.Z += 50.0f;
+		GetWorld()->SpawnActor<AActor>(AnvilPrefab, SpawnLoc, FRotator::ZeroRotator);
+	}
+
+	if (CurrentStage->bForceSpawnGold && GoldRewardPrefab)
+	{
+		FVector SpawnLoc = MainRooms.Last().CenterLocation;
+		SpawnLoc.Z += 50.0f;
+		GetWorld()->SpawnActor<AActor>(GoldRewardPrefab, SpawnLoc, FRotator::ZeroRotator);
 	}
 }
 
@@ -529,6 +596,11 @@ void ADungeonGenerator::SpawnShopNPC()
 
 	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
 	{
+		if (GameInst->NextStageData && !GameInst->NextStageData->bForceSpawnShop)
+		{
+			return;
+		}
+
 		// 만약 이전 스테이지에서 상점 주인을 죽였다면?
 		if (GameInst->bIsShopKeeperKilled)
 		{
