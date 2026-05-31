@@ -20,6 +20,9 @@ struct FMapLineData
 
 	UPROPERTY(BlueprintReadOnly, Category = "Map UI")
 	FVector2D EndPos;
+
+	UPROPERTY(BlueprintReadOnly)
+	FLinearColor LineColor = FLinearColor::White;
 };
 
 UCLASS()

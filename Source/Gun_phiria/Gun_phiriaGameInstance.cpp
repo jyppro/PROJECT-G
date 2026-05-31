@@ -28,6 +28,9 @@ void UGun_phiriaGameInstance::GenerateRunMap()
 			NewNode.NodeID = GlobalNodeID;
 			NewNode.bIsCleared = false;
 
+			NewNode.FloorLevel = Floor;
+			NewNode.ColumnIndex = i;
+
 			// 층별 고정 노드 할당
 			if (Floor == 0)
 			{

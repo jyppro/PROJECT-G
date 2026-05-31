@@ -17,13 +17,42 @@ void UMapNodeWidget::NativeConstruct()
 	}
 }
 
-void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType)
+void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrentNode, bool bIsSelectable)
 {
 	NodeID = InNodeID;
 	RoomIconType = InIconType;
 
-	// TODO: RoomIconType(예: "Artifact", "Shop")에 따라 RoomIcon 이미지 텍스처 변경 로직
-	// 예: DataAsset이나 DataTable에서 아이콘 텍스처를 찾아와 RoomIcon->SetBrushFromTexture() 호출
+	// [1] 플레이어 위치 아이콘 보이기/숨기기
+	if (PlayerIcon)
+	{
+		PlayerIcon->SetVisibility(bIsCurrentNode ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+	}
+
+	// [2] 상태에 따른 마우스 반응 및 UMG 스타일 적용 처리
+	if (bIsCurrentNode)
+	{
+		// [현재 노드] UMG의 Disabled 스타일 발동 방지 (원본 유지) + 마우스 클릭만 무시
+		NodeButton->SetIsEnabled(true);
+		NodeButton->SetVisibility(ESlateVisibility::HitTestInvisible);
+		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+	}
+	else if (bIsSelectable)
+	{
+		// [다음 이동 가능한 노드] 완전한 활성화 상태 (원본 유지 + 클릭 가능)
+		NodeButton->SetIsEnabled(true);
+		NodeButton->SetVisibility(ESlateVisibility::Visible);
+		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+	}
+	else
+	{
+		// [아직 갈 수 없는 미래의 노드] 버튼을 비활성화하여 블루프린트의 Disabled 설정을 그대로 사용
+		NodeButton->SetIsEnabled(false);
+		NodeButton->SetVisibility(ESlateVisibility::Visible); // 가시성은 정상 유지
+
+		// Disabled 상태일 때 색상이 겹치지 않도록 기본 흰색으로 둡니다.
+		// (블루프린트의 Disabled > Tint 색상이나 이미지가 이를 덮어쓰게 됩니다.)
+		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+	}
 }
 
 void UMapNodeWidget::OnNodeButtonClicked()

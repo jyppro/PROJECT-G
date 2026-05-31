@@ -14,7 +14,7 @@ class GUN_PHIRIA_API UMapNodeWidget : public UUserWidget
 
 public:
 	// 위젯 생성 시 호출하여 노드 정보를 주입하는 함수
-	void SetupNode(int32 InNodeID, FName InIconType);
+	void SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrentNode, bool bIsSelectable);
 
 	// 현재 노드의 ID를 외부에서 참조할 수 있도록 Getter 제공
 	int32 GetNodeID() const { return NodeID; }
@@ -34,6 +34,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	UImage* RoomIcon;
+
+	UPROPERTY(meta = (BindWidget))
+	UImage* PlayerIcon;
 
 private:
 	int32 NodeID;

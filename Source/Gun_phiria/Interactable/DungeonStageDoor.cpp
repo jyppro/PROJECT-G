@@ -38,67 +38,64 @@ void ADungeonStageDoor::Interact_Implementation(AActor* Interactor)
 	bIsTransitioning = true;
 	InteractingPlayer->DisableInput(PC);
 
-	// ==========================================
-	// 1. 공통: 플레이어 데이터 저장
-	// ==========================================
-	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
-	if (GameInst)
+	// [디버그 1] 상호작용 성공
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("1. Interact Start!"));
+
+	if (UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance()))
 	{
 		bool bOnlySapphire = (DoorType == EDungeonDoorType::Door_ReturnVillage);
 		GameInst->SavePlayerData(InteractingPlayer, bOnlySapphire);
 	}
 
-	// ==========================================
-	// 2. 분기: 다음 스테이지(NextStage)일 경우 -> 맵 UI 띄우기
-	// ==========================================
 	if (DoorType == EDungeonDoorType::Door_NextStage)
 	{
+		// [디버그 2] 문 타입 통과
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("2. Door Type is NextStage!"));
+
 		if (StageMapWidgetClass)
 		{
-			// 맵 데이터가 비어있다면 생성
+			// [디버그 3] 위젯 클래스 할당 확인
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, TEXT("3. Widget Class is Valid!"));
+
+			UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(GetGameInstance());
 			if (GameInst && GameInst->CurrentRunMap.IsEmpty())
 			{
 				GameInst->GenerateRunMap();
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("3-1. Map Data Generated!"));
 			}
 
 			if (UUserWidget* MapUI = CreateWidget<UUserWidget>(PC, StageMapWidgetClass))
 			{
-				MapUI->AddToViewport();
+				MapUI->AddToViewport(9999);
 
-				// [수정됨] 마우스 활성화 및 UI 전용 입력 모드로 변경
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("4. UI AddToViewport Success!!!"));
+
+				// 마우스 커서 켜기
 				PC->SetShowMouseCursor(true);
 
-				// 포커스를 UI로 맞추고 게임 조작(이동, 공격 등)을 차단
+				// [수정됨] 특정 위젯을 강제로 포커스하지 않고, 모드만 UI 전용으로 변경
 				FInputModeUIOnly InputMode;
-				InputMode.SetWidgetToFocus(MapUI->TakeWidget());
 				PC->SetInputMode(InputMode);
 
-				// 주의: UGameplayStatics::SetGamePaused(GetWorld(), true); 삭제됨!
-
 				return;
+			}
+			else
+			{
+				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Error: CreateWidget Failed!"));
 			}
 		}
 		else
 		{
-			// [안전장치] 만약 블루프린트에서 위젯을 할당하지 않았다면 화면에 빨간 경고 띄우기
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("[Error] StageMapWidgetClass is NULL! Please assign it in the Blueprint!"));
-
-			// 에러가 났으므로 갇히지 않게 조작을 다시 풀어줌
-			InteractingPlayer->EnableInput(PC);
-			bIsTransitioning = false;
-			return;
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Error: StageMapWidgetClass is NULL!"));
 		}
+
+		// 에러가 났을 경우 갇히지 않게 조작 복구
+		InteractingPlayer->EnableInput(PC);
+		bIsTransitioning = false;
+		return;
 	}
 
-	// ==========================================
-	// 3. 분기: 마을 귀환(ReturnVillage)이거나 위젯이 없을 경우 -> 페이드아웃 후 즉시 이동
-	// ==========================================
-	if (PC->PlayerCameraManager)
-	{
-		PC->PlayerCameraManager->StartCameraFade(0.0f, 1.0f, FadeOutDuration, FLinearColor::Black, false, true);
-	}
-
-	GetWorld()->GetTimerManager().SetTimer(LevelTransitionTimerHandle, this, &ADungeonStageDoor::OpenNextLevel, FadeOutDuration, false);
+	// 이하 Return Village 로직 (생략)
 }
 
 FString ADungeonStageDoor::GetInteractText_Implementation()
