@@ -5,6 +5,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "../Gun_phiriaGameInstance.h"
 #include "Kismet/GameplayStatics.h"
+#include "../Gun_phiriaCharacter.h"
 
 void UMapNodeWidget::NativeConstruct()
 {
@@ -22,36 +23,59 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	NodeID = InNodeID;
 	RoomIconType = InIconType;
 
-	// [1] 플레이어 위치 아이콘 보이기/숨기기 (UMG에서 PlayerIcon이 변수로 잘 등록되어 있어야 보입니다!)
-	if (PlayerIcon)
-	{
-		PlayerIcon->SetVisibility(bIsCurrentNode ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
-	}
-
-	// [2] 상태에 따른 마우스 반응 및 UMG 스타일 적용 처리
+	// 1. 상태에 따른 버튼 색상 및 클릭 제어
 	if (bIsCurrentNode)
 	{
-		// [현재 노드] 마우스 클릭 무시 + 색상을 까맣게(RGB 0.15) 변경하여 시각적으로 막혔음을 표시!
-		NodeButton->SetIsEnabled(true);
-		NodeButton->SetVisibility(ESlateVisibility::HitTestInvisible);
-
-		// 여기가 문제였습니다! 흰색(1.0f) 대신 까맣게(0.15f) 칠해줍니다.
+		NodeButton->SetIsEnabled(false);
+		// 현재 위치한 노드는 버튼을 까맣게 칠합니다.
 		NodeButton->SetColorAndOpacity(FLinearColor(0.15f, 0.15f, 0.15f, 1.0f));
 	}
 	else if (bIsSelectable)
 	{
-		// [다음 이동 가능한 노드] 완전한 활성화 상태 (원본 유지 + 클릭 가능)
 		NodeButton->SetIsEnabled(true);
-		NodeButton->SetVisibility(ESlateVisibility::Visible);
 		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 	}
 	else
 	{
-		// [아직 갈 수 없는 미래의 노드] 버튼을 비활성화하여 블루프린트의 Disabled 설정을 그대로 사용
 		NodeButton->SetIsEnabled(false);
-		NodeButton->SetVisibility(ESlateVisibility::Visible);
+		// 갈 수 없는 노드는 안개에 가려진 것처럼 적당히 어둡고 반투명하게 처리
+		NodeButton->SetColorAndOpacity(FLinearColor(0.4f, 0.4f, 0.4f, 0.8f));
+	}
 
-		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+	// 2. RoomIcon 설정 및 0번 노드 아이콘 숨기기
+	if (RoomIcon)
+	{
+		if (InNodeID == 0) // 첫 번째 시작 스테이지 (0층)
+		{
+			// 시작 노드는 아이콘을 숨깁니다.
+			RoomIcon->SetVisibility(ESlateVisibility::Hidden);
+		}
+		else
+		{
+			// 나머지 노드는 아이콘을 보여줍니다.
+			RoomIcon->SetVisibility(ESlateVisibility::Visible);
+
+			if (IconDictionary.Contains(InIconType))
+			{
+				RoomIcon->SetBrushFromTexture(IconDictionary[InIconType]);
+				RoomIcon->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+			}
+		}
+	}
+
+	// 3. 플레이어 위치 아이콘 표시 (가장 나중에 그려져서 위를 덮음)
+	if (PlayerIcon)
+	{
+		if (bIsCurrentNode)
+		{
+			PlayerIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
+			// 플레이어 아이콘은 항상 선명한 100% 불투명도를 유지하도록 강제 설정
+			PlayerIcon->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+		}
+		else
+		{
+			PlayerIcon->SetVisibility(ESlateVisibility::Hidden);
+		}
 	}
 }
 
@@ -60,28 +84,33 @@ void UMapNodeWidget::OnNodeButtonClicked()
 	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	if (!GameInst) return;
 
-	// 1. 선택한 노드가 맵 데이터에 존재하는지 확인
+	// 1. 선택한 노드의 데이터를 GameInstance에 업데이트
 	if (GameInst->CurrentRunMap.Contains(NodeID))
 	{
-		// 2. GameInstance에 다음 맵 데이터 및 현재 위치 업데이트
 		FStageNode SelectedNode = GameInst->CurrentRunMap[NodeID];
+
+		// 방금 선택한 노드의 데이터를 '다음 생성할 맵 데이터'로 확정!
 		GameInst->NextStageData = SelectedNode.StageData;
 		GameInst->CurrentNodeID = NodeID;
 
-		// 3. 마우스 커서 숨기기 및 입력 모드 원래대로 복구
+		// 2. UI 조작 종료 및 플레이어 권한/정보 저장
 		if (APlayerController* PC = GetOwningPlayer())
 		{
 			PC->SetShowMouseCursor(false);
 			PC->SetInputMode(FInputModeGameOnly());
 
-			// (선택) 캐릭터 조작 다시 활성화
-			if (APawn* PlayerPawn = PC->GetPawn())
+			if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(PC->GetPawn()))
 			{
-				PlayerPawn->EnableInput(PC);
+				PlayerChar->EnableInput(PC);
+				// 무기, 탄약, 체력 등 현재 상태를 저장 (다음 맵에서 그대로 로드됨)
+				GameInst->SavePlayerData(PlayerChar, false);
 			}
 		}
 
-		// 4. 다음 던전 레벨 열기 (맵 이름이 다르면 알맞게 수정해주세요!)
-		UGameplayStatics::OpenLevel(GetWorld(), TEXT("DungeonLevel_Procedural"));
+		// 3. [핵심] 다른 레벨로 가는 것이 아니라, '현재 레벨'을 재시작(Reload) 합니다.
+		// 레벨이 다시 열리면서 기존의 방들은 깔끔하게 메모리에서 날아가고, 
+		// ADungeonGenerator가 방금 넣은 새로운 NextStageData를 읽어 맵을 처음부터 다시 생성합니다!
+		FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(GetWorld());
+		UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
 	}
 }

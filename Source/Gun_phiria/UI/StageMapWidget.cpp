@@ -64,7 +64,7 @@ void UStageMapWidget::BuildMapUI()
 
 				// X좌표 계산 (기존과 동일)
 				float TargetX = CenterX;
-				if (NodeData.FloorLevel != 0 && NodeData.FloorLevel != 5)
+				if (NodeData.FloorLevel != 0 && NodeData.FloorLevel != 4)
 				{
 					TargetX = CenterX + ((NodeData.ColumnIndex - 1) * ColumnWidth);
 				}

@@ -19,6 +19,9 @@ public:
 	// 현재 노드의 ID를 외부에서 참조할 수 있도록 Getter 제공
 	int32 GetNodeID() const { return NodeID; }
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Node Setup")
+	TMap<FName, class UTexture2D*> IconDictionary;
+
 protected:
 	virtual void NativeConstruct() override;
 
