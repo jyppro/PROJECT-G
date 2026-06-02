@@ -107,6 +107,8 @@ void UMapNodeWidget::OnNodeButtonClicked()
 			}
 		}
 
+		UGameplayStatics::SetGamePaused(GetWorld(), false);
+
 		// 3. [핵심] 다른 레벨로 가는 것이 아니라, '현재 레벨'을 재시작(Reload) 합니다.
 		// 레벨이 다시 열리면서 기존의 방들은 깔끔하게 메모리에서 날아가고, 
 		// ADungeonGenerator가 방금 넣은 새로운 NextStageData를 읽어 맵을 처음부터 다시 생성합니다!

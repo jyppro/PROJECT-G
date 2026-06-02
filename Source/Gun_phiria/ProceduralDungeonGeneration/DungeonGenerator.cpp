@@ -404,7 +404,7 @@ void ADungeonGenerator::SpawnDungeonActors()
 	}
 
 	// ========================================================
-	// [새로운 기능] 5. 특수 액터(모루, 골드) 스폰
+	// [새로운 기능] 5. 특수 액터(모루, 골드) 스폰 (바닥 밀착형)
 	// ========================================================
 	TArray<FDungeonRoom> MainRooms;
 	for (const FDungeonRoom& Room : RoomList)
@@ -414,18 +414,43 @@ void ADungeonGenerator::SpawnDungeonActors()
 
 	if (MainRooms.IsEmpty()) return;
 
+	// 바닥의 Z 좌표를 찾아주는 도우미 함수 (LineTrace 활용)
+	auto GetGroundZ = [&](FVector StartLocation) -> float
+		{
+			FHitResult HitResult;
+			FCollisionQueryParams TraceParams;
+			TraceParams.AddIgnoredActor(this); // 제네레이터 자신은 무시
+
+			// 방 중앙에서 한참 위(1000)에서 아래(-1000)로 레이저를 쏩니다.
+			FVector TraceStart = StartLocation + FVector(0.0f, 0.0f, 1000.0f);
+			FVector TraceEnd = StartLocation - FVector(0.0f, 0.0f, 1000.0f);
+
+			if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+			{
+				// 바닥에 맞았다면 그곳의 Z 좌표 반환
+				return HitResult.ImpactPoint.Z;
+			}
+			return StartLocation.Z; // 실패 시 원래 Z값 유지
+		};
+
+	// 액터가 겹쳐도 엔진이 알아서 위로 살짝 올려 바닥에 맞춰주도록 세팅
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
 	if (CurrentStage->bForceSpawnAnvil && AnvilPrefab)
 	{
 		FVector SpawnLoc = MainRooms[0].CenterLocation;
-		SpawnLoc.Z += 50.0f;
-		GetWorld()->SpawnActor<AActor>(AnvilPrefab, SpawnLoc, FRotator::ZeroRotator);
+		SpawnLoc.Z = GetGroundZ(SpawnLoc); // 정확한 바닥 높이 적용!
+
+		GetWorld()->SpawnActor<AActor>(AnvilPrefab, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
 	}
 
 	if (CurrentStage->bForceSpawnGold && GoldRewardPrefab)
 	{
 		FVector SpawnLoc = MainRooms.Last().CenterLocation;
-		SpawnLoc.Z += 50.0f;
-		GetWorld()->SpawnActor<AActor>(GoldRewardPrefab, SpawnLoc, FRotator::ZeroRotator);
+		SpawnLoc.Z = GetGroundZ(SpawnLoc); // 정확한 바닥 높이 적용!
+
+		GetWorld()->SpawnActor<AActor>(GoldRewardPrefab, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
 	}
 }
 
@@ -684,9 +709,11 @@ void ADungeonGenerator::SpawnShopNPC()
 	StallSpawnLoc.Z = GroundZ;
 
 	FVector NPCSpawnLoc = RoomCenter - (TargetDirVector * HalfOffset);
-	NPCSpawnLoc.Z = GroundZ + 96.0f;
 
-	// 스폰 실행
+	// [수정 핵심] 기존에 강제로 더해주던 +96.0f 하드코딩 제거!
+	NPCSpawnLoc.Z = GroundZ;
+
+	// 스폰 실행 (충돌 시 엔진이 캐릭터 캡슐 높이에 맞게 알아서 위로 올려서 바닥에 붙여줌)
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
@@ -698,17 +725,14 @@ void ADungeonGenerator::SpawnShopNPC()
 		SpawnedNPC->SpawnDefaultController();
 	}
 
-	// 2. 가판대(상점 데스크) 스폰 및 자동 연결 로직 추가!
+	// 2. 가판대(상점 데스크) 스폰 및 자동 연결
 	if (SpawnedNPC && ShopStallPrefab)
 	{
-		// 단순 AActor가 아닌 AShopDesk로 스폰합니다.
 		AShopDesk* SpawnedDesk = GetWorld()->SpawnActor<AShopDesk>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
 
 		if (SpawnedDesk)
 		{
-			// [핵심] 스폰된 데스크에 방금 스폰된 NPC를 짝지어줍니다!
 			SpawnedDesk->LinkedNPC = SpawnedNPC;
-
 			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("Shop Desk and NPC perfectly linked in Dungeon!"));
 		}
 	}

@@ -73,9 +73,14 @@ void ADungeonStageDoor::Interact_Implementation(AActor* Interactor)
 				// 마우스 커서 켜기
 				PC->SetShowMouseCursor(true);
 
-				// [수정됨] 특정 위젯을 강제로 포커스하지 않고, 모드만 UI 전용으로 변경
+				// 특정 위젯을 강제로 포커스하지 않고, 모드만 UI 전용으로 변경
 				FInputModeUIOnly InputMode;
 				PC->SetInputMode(InputMode);
+
+				// ==========================================================
+				// [추가] 몬스터의 움직임을 멈추기 위해 게임 전체를 일시정지!
+				// ==========================================================
+				UGameplayStatics::SetGamePaused(GetWorld(), true);
 
 				return;
 			}
@@ -94,8 +99,6 @@ void ADungeonStageDoor::Interact_Implementation(AActor* Interactor)
 		bIsTransitioning = false;
 		return;
 	}
-
-	// 이하 Return Village 로직 (생략)
 }
 
 FString ADungeonStageDoor::GetInteractText_Implementation()
