@@ -197,12 +197,27 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
 	TSubclassOf<class AShopNPC> ShopNPCPrefab;
 
-	// [추가] 특수 방에 스폰할 액터 프리팹들
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
+	// [추가] 특수 방에 스폰할 보상 및 상호작용 액터 프리팹들 (총 7종)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
 	TSubclassOf<AActor> AnvilPrefab;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
+	TSubclassOf<AActor> ArtifactPrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
+	TSubclassOf<AActor> EXPPrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
+	TSubclassOf<AActor> EnchantPrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
+	TSubclassOf<AActor> DicePrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
 	TSubclassOf<AActor> GoldRewardPrefab;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dungeon|Prefabs|Rewards")
+	TSubclassOf<AActor> SapphirePrefab;
 
 	// 상점 방을 고르고 NPC를 스폰하는 함수
 	void SpawnShopNPC();

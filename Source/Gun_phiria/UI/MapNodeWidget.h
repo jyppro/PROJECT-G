@@ -44,4 +44,6 @@ protected:
 private:
 	int32 NodeID;
 	FName RoomIconType;
+
+	bool bIsNodeClickable;
 };

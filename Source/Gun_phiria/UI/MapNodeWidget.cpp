@@ -13,7 +13,6 @@ void UMapNodeWidget::NativeConstruct()
 
 	if (NodeButton)
 	{
-		// 버튼 클릭 시 OnNodeButtonClicked 함수가 실행되도록 연결
 		NodeButton->OnClicked.AddDynamic(this, &UMapNodeWidget::OnNodeButtonClicked);
 	}
 }
@@ -23,23 +22,30 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	NodeID = InNodeID;
 	RoomIconType = InIconType;
 
-	// 1. 상태에 따른 버튼 색상 및 클릭 제어
+	// [추가] 이 노드가 선택 가능한지 여부를 클래스 변수에 저장해둡니다.
+	bIsNodeClickable = bIsSelectable;
+
+	// 1. 상태에 따른 버튼 색상 및 호버/클릭 제어
 	if (bIsCurrentNode)
 	{
 		NodeButton->SetIsEnabled(false);
-		// 현재 위치한 노드는 버튼을 까맣게 칠합니다.
 		NodeButton->SetColorAndOpacity(FLinearColor(0.15f, 0.15f, 0.15f, 1.0f));
+		// 기본 상태 유지
+		NodeButton->SetVisibility(ESlateVisibility::Visible);
 	}
 	else if (bIsSelectable)
 	{
 		NodeButton->SetIsEnabled(true);
 		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+		// [추가] 선택 가능한 노드는 마우스 반응(호버, 클릭)을 정상적으로 켭니다.
+		NodeButton->SetVisibility(ESlateVisibility::Visible);
 	}
 	else
 	{
-		NodeButton->SetIsEnabled(false);
-		// 갈 수 없는 노드는 안개에 가려진 것처럼 적당히 어둡고 반투명하게 처리
-		NodeButton->SetColorAndOpacity(FLinearColor(0.4f, 0.4f, 0.4f, 0.8f));
+		NodeButton->SetIsEnabled(true);
+		NodeButton->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
+		// [핵심 수정] 마우스 포인터가 닿아도 완전히 무시합니다 (호버 이펙트 X, 클릭 X)
+		NodeButton->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
 	// 2. RoomIcon 설정 및 0번 노드 아이콘 숨기기
@@ -47,12 +53,10 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 	{
 		if (InNodeID == 0) // 첫 번째 시작 스테이지 (0층)
 		{
-			// 시작 노드는 아이콘을 숨깁니다.
 			RoomIcon->SetVisibility(ESlateVisibility::Hidden);
 		}
 		else
 		{
-			// 나머지 노드는 아이콘을 보여줍니다.
 			RoomIcon->SetVisibility(ESlateVisibility::Visible);
 
 			if (IconDictionary.Contains(InIconType))
@@ -69,7 +73,6 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 		if (bIsCurrentNode)
 		{
 			PlayerIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
-			// 플레이어 아이콘은 항상 선명한 100% 불투명도를 유지하도록 강제 설정
 			PlayerIcon->SetColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 		}
 		else
@@ -81,6 +84,9 @@ void UMapNodeWidget::SetupNode(int32 InNodeID, FName InIconType, bool bIsCurrent
 
 void UMapNodeWidget::OnNodeButtonClicked()
 {
+	// [핵심 추가] 갈 수 없는 노드(선택 불가능)를 클릭했다면 아무 일도 일어나지 않고 즉시 반환!
+	if (!bIsNodeClickable) return;
+
 	UGun_phiriaGameInstance* GameInst = Cast<UGun_phiriaGameInstance>(UGameplayStatics::GetGameInstance(GetWorld()));
 	if (!GameInst) return;
 
@@ -89,7 +95,6 @@ void UMapNodeWidget::OnNodeButtonClicked()
 	{
 		FStageNode SelectedNode = GameInst->CurrentRunMap[NodeID];
 
-		// 방금 선택한 노드의 데이터를 '다음 생성할 맵 데이터'로 확정!
 		GameInst->NextStageData = SelectedNode.StageData;
 		GameInst->CurrentNodeID = NodeID;
 
@@ -102,16 +107,13 @@ void UMapNodeWidget::OnNodeButtonClicked()
 			if (AGun_phiriaCharacter* PlayerChar = Cast<AGun_phiriaCharacter>(PC->GetPawn()))
 			{
 				PlayerChar->EnableInput(PC);
-				// 무기, 탄약, 체력 등 현재 상태를 저장 (다음 맵에서 그대로 로드됨)
 				GameInst->SavePlayerData(PlayerChar, false);
 			}
 		}
 
 		UGameplayStatics::SetGamePaused(GetWorld(), false);
 
-		// 3. [핵심] 다른 레벨로 가는 것이 아니라, '현재 레벨'을 재시작(Reload) 합니다.
-		// 레벨이 다시 열리면서 기존의 방들은 깔끔하게 메모리에서 날아가고, 
-		// ADungeonGenerator가 방금 넣은 새로운 NextStageData를 읽어 맵을 처음부터 다시 생성합니다!
+		// 3. 현재 레벨 리로드 (절차적 맵 재생성)
 		FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(GetWorld());
 		UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
 	}

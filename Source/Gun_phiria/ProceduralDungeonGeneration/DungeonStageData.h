@@ -78,4 +78,19 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
 	bool bForceSpawnBoss;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
+	bool bForceSpawnArtifact;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
+	bool bForceSpawnEXP;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
+	bool bForceSpawnEnchant;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
+	bool bForceSpawnDice;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards|Mandatory Spawns")
+	bool bForceSpawnSapphire;
 };

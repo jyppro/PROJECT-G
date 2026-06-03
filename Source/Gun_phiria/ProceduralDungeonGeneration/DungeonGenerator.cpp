@@ -404,7 +404,7 @@ void ADungeonGenerator::SpawnDungeonActors()
 	}
 
 	// ========================================================
-	// [새로운 기능] 5. 특수 액터(모루, 골드) 스폰 (바닥 밀착형)
+	// [기능 확장] 5. 10종 스테이지 특수 액터 스폰 (바닥 밀착형, 무작위 방 스폰)
 	// ========================================================
 	TArray<FDungeonRoom> MainRooms;
 	for (const FDungeonRoom& Room : RoomList)
@@ -421,36 +421,53 @@ void ADungeonGenerator::SpawnDungeonActors()
 			FCollisionQueryParams TraceParams;
 			TraceParams.AddIgnoredActor(this); // 제네레이터 자신은 무시
 
-			// 방 중앙에서 한참 위(1000)에서 아래(-1000)로 레이저를 쏩니다.
 			FVector TraceStart = StartLocation + FVector(0.0f, 0.0f, 1000.0f);
 			FVector TraceEnd = StartLocation - FVector(0.0f, 0.0f, 1000.0f);
 
 			if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
 			{
-				// 바닥에 맞았다면 그곳의 Z 좌표 반환
 				return HitResult.ImpactPoint.Z;
 			}
-			return StartLocation.Z; // 실패 시 원래 Z값 유지
+			return StartLocation.Z;
 		};
 
 	// 액터가 겹쳐도 엔진이 알아서 위로 살짝 올려 바닥에 맞춰주도록 세팅
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+	// [수정됨] 메인 방들 중 무작위로 하나를 선택하여 스폰 좌표로 삼습니다.
+	int32 RandomRoomIndex = FMath::RandRange(0, MainRooms.Num() - 1);
+	FVector RewardSpawnLoc = MainRooms[RandomRoomIndex].CenterLocation;
+	RewardSpawnLoc.Z = GetGroundZ(RewardSpawnLoc);
+
+	// 데이터 에셋의 플래그를 검사하여 알맞은 액터를 딱 1개만 스폰 (else if로 중복 스폰 방지)
 	if (CurrentStage->bForceSpawnAnvil && AnvilPrefab)
 	{
-		FVector SpawnLoc = MainRooms[0].CenterLocation;
-		SpawnLoc.Z = GetGroundZ(SpawnLoc); // 정확한 바닥 높이 적용!
-
-		GetWorld()->SpawnActor<AActor>(AnvilPrefab, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+		GetWorld()->SpawnActor<AActor>(AnvilPrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
 	}
-
-	if (CurrentStage->bForceSpawnGold && GoldRewardPrefab)
+	else if (CurrentStage->bForceSpawnArtifact && ArtifactPrefab)
 	{
-		FVector SpawnLoc = MainRooms.Last().CenterLocation;
-		SpawnLoc.Z = GetGroundZ(SpawnLoc); // 정확한 바닥 높이 적용!
-
-		GetWorld()->SpawnActor<AActor>(GoldRewardPrefab, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+		GetWorld()->SpawnActor<AActor>(ArtifactPrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
+	}
+	else if (CurrentStage->bForceSpawnEXP && EXPPrefab)
+	{
+		GetWorld()->SpawnActor<AActor>(EXPPrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
+	}
+	else if (CurrentStage->bForceSpawnEnchant && EnchantPrefab)
+	{
+		GetWorld()->SpawnActor<AActor>(EnchantPrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
+	}
+	else if (CurrentStage->bForceSpawnDice && DicePrefab)
+	{
+		GetWorld()->SpawnActor<AActor>(DicePrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
+	}
+	else if (CurrentStage->bForceSpawnGold && GoldRewardPrefab)
+	{
+		GetWorld()->SpawnActor<AActor>(GoldRewardPrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
+	}
+	else if (CurrentStage->bForceSpawnSapphire && SapphirePrefab)
+	{
+		GetWorld()->SpawnActor<AActor>(SapphirePrefab, RewardSpawnLoc, FRotator::ZeroRotator, SpawnParams);
 	}
 }
 
@@ -705,19 +722,19 @@ void ADungeonGenerator::SpawnShopNPC()
 	const float TotalOffset = 55.0f;
 	const float HalfOffset = TotalOffset * 0.5f;
 
+	// 1. 가판대 위치: 일반 메시는 피벗이 바닥이므로 GroundZ 유지
 	FVector StallSpawnLoc = RoomCenter + (TargetDirVector * HalfOffset);
 	StallSpawnLoc.Z = GroundZ;
 
+	// 2. NPC 위치: 캐릭터는 피벗이 중앙이므로 캡슐 절반 높이(96.0f)만큼 다시 올려주기!
 	FVector NPCSpawnLoc = RoomCenter - (TargetDirVector * HalfOffset);
+	NPCSpawnLoc.Z = GroundZ + 96.0f;
 
-	// [수정 핵심] 기존에 강제로 더해주던 +96.0f 하드코딩 제거!
-	NPCSpawnLoc.Z = GroundZ;
-
-	// 스폰 실행 (충돌 시 엔진이 캐릭터 캡슐 높이에 맞게 알아서 위로 올려서 바닥에 붙여줌)
+	// 스폰 실행
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	// 1. NPC 스폰
+	// NPC 스폰
 	AShopNPC* SpawnedNPC = GetWorld()->SpawnActor<AShopNPC>(ShopNPCPrefab, NPCSpawnLoc, NPCRotation, SpawnParams);
 
 	if (SpawnedNPC)
@@ -725,7 +742,7 @@ void ADungeonGenerator::SpawnShopNPC()
 		SpawnedNPC->SpawnDefaultController();
 	}
 
-	// 2. 가판대(상점 데스크) 스폰 및 자동 연결
+	// 가판대 스폰 및 연결
 	if (SpawnedNPC && ShopStallPrefab)
 	{
 		AShopDesk* SpawnedDesk = GetWorld()->SpawnActor<AShopDesk>(ShopStallPrefab, StallSpawnLoc, NPCRotation, SpawnParams);
@@ -733,7 +750,6 @@ void ADungeonGenerator::SpawnShopNPC()
 		if (SpawnedDesk)
 		{
 			SpawnedDesk->LinkedNPC = SpawnedNPC;
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("Shop Desk and NPC perfectly linked in Dungeon!"));
 		}
 	}
 }
