@@ -22,69 +22,75 @@ void AAnvilInteractable::BeginPlay()
 FString AAnvilInteractable::GetInteractText_Implementation()
 {
 	// 이미 사용했다면 텍스트를 다르게 띄워줍니다.
-	return bIsUsed ? TEXT("이미 사용한 모루입니다.") : TEXT("모루 사용하기 (F)");
+	return bIsUsed ? TEXT("Already used") : TEXT("Use Anvil (F)");
 }
 
 void AAnvilInteractable::Interact_Implementation(AActor* Interactor)
 {
 	if (bIsUsed || !AnvilRewardTable || !AnvilUIClass) return;
 
-	// 1. 플레이어 인벤토리 검사 (현재 들고 있는 무기 파악)
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(Interactor);
 	if (!Player || !Player->PlayerInventory) return;
 
+	// 1. 플레이어 보유 무기 검사
 	TArray<FName> EquippedWeapons;
 	if (!Player->PlayerInventory->EquippedWeapon1ID.IsNone()) EquippedWeapons.Add(Player->PlayerInventory->EquippedWeapon1ID);
 	if (!Player->PlayerInventory->EquippedWeapon2ID.IsNone()) EquippedWeapons.Add(Player->PlayerInventory->EquippedWeapon2ID);
 
 	int32 WeaponCount = EquippedWeapons.Num();
 
-	// 2. 조건에 맞는 보상만 임시 풀(Pool)에 담기
-	TArray<FAnvilRewardData*> ValidRewards;
-	TArray<FName> AllRowNames = AnvilRewardTable->GetRowNames();
+	// 2. 무기 선택지와 업그레이드 선택지를 각각 담을 배열 준비
+	TArray<FAnvilRewardData*> WeaponPool;
+	TArray<FAnvilRewardData*> UpgradePool;
 
+	TArray<FName> AllRowNames = AnvilRewardTable->GetRowNames();
 	for (FName RowName : AllRowNames)
 	{
 		FAnvilRewardData* Data = AnvilRewardTable->FindRow<FAnvilRewardData>(RowName, TEXT(""));
 		if (!Data) continue;
 
-		if (Data->RewardType == EAnvilRewardType::GiveNewWeapon)
+		if (Data->RewardType == EAnvilRewardType::GiveNewWeapon && WeaponCount < 2)
 		{
-			// 무기가 2개 미만일 때만 신규 무기 선택지를 제공
-			if (WeaponCount < 2) ValidRewards.Add(Data);
+			WeaponPool.Add(Data);
 		}
-		else if (Data->RewardType == EAnvilRewardType::WeaponUpgrade)
+		else if (Data->RewardType == EAnvilRewardType::WeaponUpgrade && EquippedWeapons.Contains(Data->RequiredWeaponID))
 		{
-			// 플레이어가 '요구 무기'를 장착하고 있을 때만 해당 진화 선택지 제공
-			if (EquippedWeapons.Contains(Data->RequiredWeaponID)) ValidRewards.Add(Data);
+			UpgradePool.Add(Data);
 		}
 	}
 
-	// 3. 필터링된 배열에서 무작위 3개 셔플 및 추출 (기존 로직 응용)
-	if (ValidRewards.Num() > 0)
-	{
-		for (int32 i = ValidRewards.Num() - 1; i > 0; i--)
+	// 3. 섞고 3개 뽑는 공통 람다 함수
+	auto ShuffleAndPick = [](TArray<FAnvilRewardData*>& Pool) -> TArray<FAnvilRewardData*>
 		{
-			int32 RandomIndex = FMath::RandRange(0, i);
-			ValidRewards.Swap(i, RandomIndex);
-		}
-	}
+			if (Pool.Num() > 0)
+			{
+				for (int32 i = Pool.Num() - 1; i > 0; i--)
+				{
+					int32 RandomIndex = FMath::RandRange(0, i);
+					Pool.Swap(i, RandomIndex);
+				}
+			}
+			TArray<FAnvilRewardData*> Result;
+			int32 MaxChoices = FMath::Min(3, Pool.Num());
+			for (int32 i = 0; i < MaxChoices; i++) Result.Add(Pool[i]);
+			return Result;
+		};
 
-	TArray<FAnvilRewardData*> SelectedRewards;
-	int32 MaxChoices = FMath::Min(3, ValidRewards.Num());
-	for (int32 i = 0; i < MaxChoices; i++)
-	{
-		SelectedRewards.Add(ValidRewards[i]);
-	}
+	// 4. 최종적으로 UI에 넘겨줄 3개짜리 배열 생성
+	TArray<FAnvilRewardData*> FinalWeaponRewards = ShuffleAndPick(WeaponPool);
+	TArray<FAnvilRewardData*> FinalUpgradeRewards = ShuffleAndPick(UpgradePool);
 
-	// 4. 모루 UI 화면에 띄우기 (이전과 동일)
-	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-	if (PC)
+	// 5. 처음에 띄워줄 탭 결정 (무기가 2개 꽉 찼으면 무조건 업그레이드 탭부터)
+	EAnvilRewardType StartMode = (WeaponCount == 2) ? EAnvilRewardType::WeaponUpgrade : EAnvilRewardType::GiveNewWeapon;
+
+	// 6. UI 띄우기 및 3개의 인자 전달!
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
 	{
 		UAnvilScreenWidget* AnvilWidget = CreateWidget<UAnvilScreenWidget>(PC, AnvilUIClass);
 		if (AnvilWidget)
 		{
-			AnvilWidget->SetupAnvilUI(SelectedRewards);
+			// [핵심 수정] 이제 에러가 나지 않도록 3개의 인자를 모두 넣어줍니다.
+			AnvilWidget->SetupAnvilUI(FinalWeaponRewards, FinalUpgradeRewards, StartMode);
 			AnvilWidget->AddToViewport();
 
 			UGameplayStatics::SetGamePaused(GetWorld(), true);

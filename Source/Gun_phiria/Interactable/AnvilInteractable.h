@@ -2,7 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "../Interface/InteractInterface.h" // 경로 주의: 유저님의 실제 폴더 구조에 맞추세요
+#include "../Interface/InteractInterface.h"
+#include "../Reward/RewardData.h"
 #include "AnvilInteractable.generated.h"
 
 UCLASS()
