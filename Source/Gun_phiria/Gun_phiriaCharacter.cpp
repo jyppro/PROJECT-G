@@ -1202,24 +1202,28 @@ void AGun_phiriaCharacter::FinishReload()
 
 void AGun_phiriaCharacter::AttachToHolster(int32 SlotIndex)
 {
-	// 예외 처리
 	if (!WeaponSlots.IsValidIndex(SlotIndex) || !WeaponSlots[SlotIndex]) return;
 	AWeaponBase* WeaponToHolster = WeaponSlots[SlotIndex];
 
-	// 슬롯 번호에 맞는 정확한 보관 소켓 이름 지정
+	// [수정] 무기 타입에 따라 소켓을 결정합니다.
 	FName HolsterSocketName;
-	if (SlotIndex == 0) HolsterSocketName = FName("PistolHolsterSocket");
-	else if (SlotIndex == 1) HolsterSocketName = FName("BackpackWeapon1Socket");
-	else if (SlotIndex == 2) HolsterSocketName = FName("BackpackWeapon2Socket");
-	else return; // 투척물 등은 제외
 
-	// 부착 룰 (스케일 유지)
+	// 권총류는 무조건 PistolHolsterSocket으로, 나머지는 슬롯에 따라 등에 부착
+	if (WeaponToHolster->WeaponType == EWeaponType::Pistol)
+	{
+		HolsterSocketName = FName("PistolHolsterSocket");
+	}
+	else
+	{
+		// 권총이 아닌 경우(AR, SMG, Shotgun 등)는 기존처럼 등 슬롯 사용
+		if (SlotIndex == 1) HolsterSocketName = FName("BackpackWeapon1Socket");
+		else if (SlotIndex == 2) HolsterSocketName = FName("BackpackWeapon2Socket");
+		else HolsterSocketName = FName("PistolHolsterSocket"); // 기본값
+	}
+
 	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepRelative, true);
-
-	// 무기 액터를 해당 소켓에 부착
 	WeaponToHolster->AttachToComponent(GetMesh(), AttachRules, HolsterSocketName);
 
-	// 데이터 테이블의 회전값 적용 및 스케일 1.0 강제 고정
 	WeaponToHolster->SetActorRelativeRotation(WeaponToHolster->HolsterRotationOffset);
 	WeaponToHolster->SetActorRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
 
