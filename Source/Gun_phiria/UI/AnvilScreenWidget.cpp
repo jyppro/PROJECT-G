@@ -27,8 +27,8 @@ void UAnvilScreenWidget::SetupAnvilUI(const TArray<FAnvilRewardData*>& Rewards)
 				if (UVerticalBoxSlot* VertSlot = Cast<UVerticalBoxSlot>(PanelSlot))
 				{
 					// 3. 패딩 설정: FMargin(Left, Top, Right, Bottom) 순서입니다.
-					// 아래쪽(Bottom)에만 20의 여백을 줍니다.
-					VertSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 20.f));
+					// 아래쪽(Bottom)에만 30의 여백을 줍니다.
+					VertSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 30.f));
 				}
 			}
 		}

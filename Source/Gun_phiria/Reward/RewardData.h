@@ -34,34 +34,27 @@ public:
 UENUM(BlueprintType)
 enum class EAnvilRewardType : uint8
 {
-	GiveNewWeapon		UMETA(DisplayName = "Give New Weapon"),
-	UpgradeWeapon		UMETA(DisplayName = "Upgrade Current Weapon")
+	GiveNewWeapon		UMETA(DisplayName = "Acquire new weapons"),
+	WeaponUpgrade		UMETA(DisplayName = "Upgrade existing weapons")
 };
 
-// FRewardDataBase를 상속받음 (Name, Description, Icon을 기본으로 가짐)
+// FRewardDataBase를 상속받음
 USTRUCT(BlueprintType)
 struct FAnvilRewardData : public FRewardDataBase
 {
 	GENERATED_BODY()
 
 public:
-	// 모루 로직 1: 어떤 방식의 강화인가?
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic")
-	EAnvilRewardType RewardType = EAnvilRewardType::UpgradeWeapon;
+	EAnvilRewardType RewardType = EAnvilRewardType::GiveNewWeapon;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic", meta = (EditCondition = "RewardType==EAnvilRewardType::WeaponStatBoost"))
-	FName RequiredWeaponID;
-
-	// 모루 로직 2: 새로운 무기를 줄 경우의 ItemID (기존 InventoryComponent 연동용)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic|New Weapon", meta = (EditCondition = "RewardType==EAnvilRewardType::GiveNewWeapon"))
+	// [결과] 플레이어에게 실제로 지급할 무기의 Item ID
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic")
 	FName TargetWeaponItemID;
 
-	// 모루 로직 3: 스탯 강화일 경우의 배율 (예: 1.15 = 15% 증가)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic|Stat Boost", meta = (EditCondition = "RewardType==EAnvilRewardType::WeaponStatBoost"))
-	float FireRateMultiplier = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic|Stat Boost", meta = (EditCondition = "RewardType==EAnvilRewardType::WeaponStatBoost"))
-	float DamageMultiplier = 1.0f;
+	// [조건] 업그레이드 노드일 경우, 플레이어가 가지고 있어야만 이 선택지가 뜨는 '기존 무기'의 Item ID
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anvil Logic|Upgrade", meta = (EditCondition = "RewardType==EAnvilRewardType::WeaponUpgrade"))
+	FName RequiredWeaponID;
 };
 
 // ==============================================================================

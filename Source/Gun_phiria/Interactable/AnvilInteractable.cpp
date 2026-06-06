@@ -2,7 +2,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/UserWidget.h"
 #include "../UI/AnvilScreenWidget.h"
-#include "../Reward/RewardData.h" // 1단계에서 만든 데이터 구조체 포함
+#include "../Reward/RewardData.h"
+#include "../Gun_phiriaCharacter.h"
+#include "../Component/InventoryComponent.h"
 
 AAnvilInteractable::AAnvilInteractable()
 {
@@ -25,56 +27,71 @@ FString AAnvilInteractable::GetInteractText_Implementation()
 
 void AAnvilInteractable::Interact_Implementation(AActor* Interactor)
 {
-	// 이미 사용했거나, 데이터 테이블이나 UI 클래스가 없으면 조기 종료
 	if (bIsUsed || !AnvilRewardTable || !AnvilUIClass) return;
 
-	// 1. 데이터 테이블의 모든 행(Row) 이름 가져오기
-	TArray<FName> RowNames = AnvilRewardTable->GetRowNames();
-	if (RowNames.Num() < 3)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("모루 보상 데이터 테이블에 데이터가 3개 미만입니다!"));
-		return;
-	}
+	// 1. 플레이어 인벤토리 검사 (현재 들고 있는 무기 파악)
+	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(Interactor);
+	if (!Player || !Player->PlayerInventory) return;
 
-	// 2. 피셔-예이츠 셔플(Fisher-Yates Shuffle)로 배열 무작위 섞기
-	for (int32 i = RowNames.Num() - 1; i > 0; i--)
-	{
-		int32 RandomIndex = FMath::RandRange(0, i);
-		RowNames.Swap(i, RandomIndex);
-	}
+	TArray<FName> EquippedWeapons;
+	if (!Player->PlayerInventory->EquippedWeapon1ID.IsNone()) EquippedWeapons.Add(Player->PlayerInventory->EquippedWeapon1ID);
+	if (!Player->PlayerInventory->EquippedWeapon2ID.IsNone()) EquippedWeapons.Add(Player->PlayerInventory->EquippedWeapon2ID);
 
-	// 3. 앞에서부터 딱 3개만 추출하여 데이터 담기
-	TArray<FAnvilRewardData*> SelectedRewards;
-	for (int32 i = 0; i < 3; i++)
+	int32 WeaponCount = EquippedWeapons.Num();
+
+	// 2. 조건에 맞는 보상만 임시 풀(Pool)에 담기
+	TArray<FAnvilRewardData*> ValidRewards;
+	TArray<FName> AllRowNames = AnvilRewardTable->GetRowNames();
+
+	for (FName RowName : AllRowNames)
 	{
-		FAnvilRewardData* RowData = AnvilRewardTable->FindRow<FAnvilRewardData>(RowNames[i], TEXT("AnvilRewardExtraction"));
-		if (RowData)
+		FAnvilRewardData* Data = AnvilRewardTable->FindRow<FAnvilRewardData>(RowName, TEXT(""));
+		if (!Data) continue;
+
+		if (Data->RewardType == EAnvilRewardType::GiveNewWeapon)
 		{
-			SelectedRewards.Add(RowData);
+			// 무기가 2개 미만일 때만 신규 무기 선택지를 제공
+			if (WeaponCount < 2) ValidRewards.Add(Data);
+		}
+		else if (Data->RewardType == EAnvilRewardType::WeaponUpgrade)
+		{
+			// 플레이어가 '요구 무기'를 장착하고 있을 때만 해당 진화 선택지 제공
+			if (EquippedWeapons.Contains(Data->RequiredWeaponID)) ValidRewards.Add(Data);
 		}
 	}
 
-	// 4. 모루 UI 화면에 띄우기 및 조작 권한 뺏기
+	// 3. 필터링된 배열에서 무작위 3개 셔플 및 추출 (기존 로직 응용)
+	if (ValidRewards.Num() > 0)
+	{
+		for (int32 i = ValidRewards.Num() - 1; i > 0; i--)
+		{
+			int32 RandomIndex = FMath::RandRange(0, i);
+			ValidRewards.Swap(i, RandomIndex);
+		}
+	}
+
+	TArray<FAnvilRewardData*> SelectedRewards;
+	int32 MaxChoices = FMath::Min(3, ValidRewards.Num());
+	for (int32 i = 0; i < MaxChoices; i++)
+	{
+		SelectedRewards.Add(ValidRewards[i]);
+	}
+
+	// 4. 모루 UI 화면에 띄우기 (이전과 동일)
 	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 	if (PC)
 	{
-		UAnvilScreenWidget* AnvilWidget = CreateWidget<UAnvilScreenWidget>(PC, AnvilUIClass); // [수정] 캐스팅을 위해 클래스 명시
+		UAnvilScreenWidget* AnvilWidget = CreateWidget<UAnvilScreenWidget>(PC, AnvilUIClass);
 		if (AnvilWidget)
 		{
-			// [해결] 1단계: 추출한 3개의 데이터를 UI로 전달
 			AnvilWidget->SetupAnvilUI(SelectedRewards);
-
 			AnvilWidget->AddToViewport();
 
-			// 게임을 일시정지시키고 입력 모드를 UI 전용으로 변경
 			UGameplayStatics::SetGamePaused(GetWorld(), true);
-
-			// [해결] 2단계: TakeWidget() 삭제 (UI 증발 버그 방지)
 			FInputModeUIOnly InputMode;
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(true);
 
-			// 사용 완료 처리
 			bIsUsed = true;
 		}
 	}

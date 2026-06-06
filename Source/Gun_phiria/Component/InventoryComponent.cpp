@@ -241,38 +241,33 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 	}
 	case EItemType::Weapon:
 	{
-		FName OldEquipID = NAME_None;
 		int32 TargetWeaponSlotIndex = 1;
 
-		if (EquippedWeapon1ID.IsNone()) { TargetWeaponSlotIndex = 1; EquippedWeapon1ID = UseItemID; }
-		else if (EquippedWeapon2ID.IsNone()) { TargetWeaponSlotIndex = 2; EquippedWeapon2ID = UseItemID; }
-		else { TargetWeaponSlotIndex = 1; OldEquipID = EquippedWeapon1ID; EquippedWeapon1ID = UseItemID; }
-
-		// 인벤토리 교체
-		if (OldEquipID.IsNone())
+		// 1. 순차적 고정 장착 로직 (교체/덮어쓰기 없음)
+		if (EquippedWeapon1ID.IsNone())
 		{
-			InventorySlots[TargetIndex].Quantity--;
-			if (InventorySlots[TargetIndex].Quantity <= 0) InventorySlots[TargetIndex].ItemID = NAME_None;
-			CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
+			TargetWeaponSlotIndex = 1;
+			EquippedWeapon1ID = UseItemID;
+		}
+		else if (EquippedWeapon2ID.IsNone())
+		{
+			TargetWeaponSlotIndex = 2;
+			EquippedWeapon2ID = UseItemID;
 		}
 		else
 		{
-			InventorySlots[TargetIndex].ItemID = OldEquipID;
-			InventorySlots[TargetIndex].Quantity = 1;
-			if (FItemData* OldItemInfo = ItemDataTable->FindRow<FItemData>(OldEquipID, TEXT("SwapWeight")))
-			{
-				CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight + OldItemInfo->ItemWeight);
-			}
+			// 기획상 무기 2개를 가지면 모루에서 신규 무기가 나오지 않으므로 여기까지 도달할 일은 없지만, 안전장치로 둡니다.
+			return;
 		}
 
+		// 2. 인벤토리에서 차감 (획득한 무기는 손에 쥐어지므로 인벤토리 칸을 비웁니다)
+		InventorySlots[TargetIndex].Quantity--;
+		if (InventorySlots[TargetIndex].Quantity <= 0) InventorySlots[TargetIndex].ItemID = NAME_None;
+		CurrentWeight = FMath::Max(0.0f, CurrentWeight - ItemInfo->ItemWeight);
+
+		// 3. 실제 무기 스폰 및 즉시 장착
 		if (ItemInfo->WeaponClass)
 		{
-			if (Player->WeaponSlots.IsValidIndex(TargetWeaponSlotIndex) && Player->WeaponSlots[TargetWeaponSlotIndex])
-			{
-				Player->WeaponSlots[TargetWeaponSlotIndex]->Destroy();
-				Player->WeaponSlots[TargetWeaponSlotIndex] = nullptr;
-			}
-
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = Player;
 			AWeaponBase* NewWeapon = GetWorld()->SpawnActor<AWeaponBase>(ItemInfo->WeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
@@ -284,7 +279,10 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 				NewWeapon->HolsterRotationOffset = ItemInfo->HolsterRotationOffset;
 
 				Player->WeaponSlots[TargetWeaponSlotIndex] = NewWeapon;
-				Player->AttachToHolster(TargetWeaponSlotIndex);
+
+				// [적용] 모루에서 무기 획득 시 즉시 손에 쥐고, 탄창을 가득 채웁니다.
+				Player->EquipWeaponSlot(TargetWeaponSlotIndex);
+				NewWeapon->CurrentAmmo = NewWeapon->MagazineCapacity;
 			}
 		}
 		bUseSuccess = true;
@@ -316,6 +314,12 @@ void UInventoryComponent::UseItemByID(FName UseItemID)
 void UInventoryComponent::UnequipItemByID(FName ItemID)
 {
 	if (ItemID.IsNone() || !ItemDataTable) return;
+
+	if (EquippedWeapon1ID == ItemID || EquippedWeapon2ID == ItemID)
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, TEXT("메인 무기는 장착 해제할 수 없습니다!"));
+		return; // 해제 로직을 즉시 종료합니다.
+	}
 
 	AGun_phiriaCharacter* Player = Cast<AGun_phiriaCharacter>(GetOwner());
 	FItemData* ItemData = ItemDataTable->FindRow<FItemData>(ItemID, TEXT("Unequip"));

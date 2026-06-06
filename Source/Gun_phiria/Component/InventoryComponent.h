@@ -24,8 +24,6 @@ enum class EEquipType : uint8
 	Helmet			UMETA(DisplayName = "Helmet"),
 	Vest			UMETA(DisplayName = "Vest"),
 	Backpack		UMETA(DisplayName = "Backpack"),
-	Weapon1			UMETA(DisplayName = "Primary Weapon"),
-	Weapon2			UMETA(DisplayName = "Secondary Weapon"),
 	Pistol			UMETA(DisplayName = "Pistol"),
 	Throwable		UMETA(DisplayName = "Throwable")
 };
@@ -36,67 +34,69 @@ struct FItemData : public FTableRowBase
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	// --- 공통 기본 정보 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base")
 	FName ItemID;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base")
 	FText ItemName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base")
 	FText ItemDescription;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base")
 	TObjectPtr<class UTexture2D> ItemIcon;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base")
 	EItemType ItemType = EItemType::Misc;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Stats")
+	// 무기가 아닐 때만 스폰 가중치, 무게, 스택, 드랍 클래스 표시 (무기는 모루에서만 획득하므로 숨김)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
 	float ItemWeight = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
 	int32 MaxStackSize = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Economy")
-	int32 BuyPrice = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Economy")
-	int32 SellPrice = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ItemData")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
 	float SpawnWeight = 10.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
-	TSubclassOf<class UItemEffectBase> ItemEffectClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data")
-	int32 DefaultSpawnQuantity = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
-	TSubclassOf<class AWeaponBase> WeaponClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Weapon")
-	FRotator HolsterRotationOffset = FRotator::ZeroRotator;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Drop")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
 	TSubclassOf<class APickupItemBase> ItemClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
-	TObjectPtr<class UStaticMesh> EquipmentMesh;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
+	int32 DefaultSpawnQuantity = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Stats")
-	float StatBonus = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
+	int32 BuyPrice = 0;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Base", meta = (EditCondition = "ItemType != EItemType::Weapon"))
+	int32 SellPrice = 0;
+
+	// --- 소비/아티팩트 전용 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Consumable", meta = (EditCondition = "ItemType == EItemType::Consumable || ItemType == EItemType::Artifact"))
+	TSubclassOf<class UItemEffectBase> ItemEffectClass;
+
+	// --- 무기 전용 (ItemType이 Weapon일 때만 활성화) ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Weapon", meta = (EditCondition = "ItemType == EItemType::Weapon"))
+	TSubclassOf<class AWeaponBase> WeaponClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Weapon", meta = (EditCondition = "ItemType == EItemType::Weapon"))
+	FRotator HolsterRotationOffset = FRotator::ZeroRotator;
+
+	// --- 장비(방어구/가방) 전용 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "ItemType == EItemType::Equipment"))
 	EEquipType EquipType = EEquipType::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
-	int32 ItemLevel = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "ItemType == EItemType::Equipment"))
+	TObjectPtr<class UStaticMesh> EquipmentMesh;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "ItemType == EItemType::Equipment"))
+	float StatBonus = 0.0f; // 가방의 무게 증가량 등
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "ItemType == EItemType::Equipment"))
 	float MaxDurability = 100.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Data|Equipment")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "ItemType == EItemType::Equipment"))
 	float DefensePower = 0.0f;
 };
 
