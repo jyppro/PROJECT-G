@@ -25,6 +25,15 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+	FName DebugTargetWeaponID = FName("Weapon_M416");
+
+
+	// 무기 테스트용 디버그 함수
+	UFUNCTION(BlueprintCallable, Category = "Debug")
+	void DebugEquipWeapon();
+
 	// Getters
 	FORCEINLINE TObjectPtr<USpringArmComponent> GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE TObjectPtr<UCameraComponent> GetFollowCamera() const { return FollowCamera; }
@@ -183,6 +192,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon3Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> EquipWeapon4Action;
 	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> ReloadAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input") TObjectPtr<UInputAction> DebugEquipWeaponAction;
 
 	// Combat & Animation Settings
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Weapon") TSubclassOf<AWeaponBase> DefaultWeaponClass;

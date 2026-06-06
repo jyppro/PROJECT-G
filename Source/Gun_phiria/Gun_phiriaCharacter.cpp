@@ -412,6 +412,7 @@ void AGun_phiriaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EIC->BindAction(ProneAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleProne);
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::Interact);
 		EIC->BindAction(InventoryAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::ToggleInventory);
+		EIC->BindAction(DebugEquipWeaponAction, ETriggerEvent::Started, this, &AGun_phiriaCharacter::DebugEquipWeapon);
 
 		if (EquipWeapon1Action) EIC->BindAction(EquipWeapon1Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon1);
 		if (EquipWeapon2Action) EIC->BindAction(EquipWeapon2Action, ETriggerEvent::Started, this, &AGun_phiriaCharacter::EquipWeapon2);
@@ -1321,5 +1322,17 @@ void AGun_phiriaCharacter::TriggerThrowableLaunch()
 			// 3. (이전에 무기 클래스에 추가했던) 실제 수류탄 생성 및 투척 함수를 호출합니다!
 			Throwable->SpawnAndLaunchProjectile();
 		}
+	}
+}
+
+void AGun_phiriaCharacter::DebugEquipWeapon()
+{
+	if (PlayerInventory)
+	{
+		// 하드코딩된 이름 대신, 변수에 저장된 값을 사용합니다.
+		PlayerInventory->AddItem(DebugTargetWeaponID, 1);
+		PlayerInventory->UseItemByID(DebugTargetWeaponID);
+
+		UE_LOG(LogTemp, Warning, TEXT("Debug: Equipped weapon %s"), *DebugTargetWeaponID.ToString());
 	}
 }
